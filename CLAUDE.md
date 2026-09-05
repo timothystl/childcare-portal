@@ -5622,6 +5622,68 @@ explanation to `restricted`.
 
 Current version: v2.13.1
 
+## Admin users — the list showed nobody, and a parent was given a role (2026-09-05)
+
+Reported from Settings → Access & oversight: **"No admin users found"** while
+all four admins were signing in daily. Two unrelated bugs behind one symptom.
+
+### ⚠️ `listUsers()` WITH NO ARGUMENTS IS PAGE 1 OF 50, NEWEST FIRST
+
+`admin-users`' `list` action called it bare. There are **224** Auth accounts —
+since `parent_portal_option_b_accounts` nearly all of them are parents — and
+the four real admins are the four **OLDEST** rows, at positions 220–224. Not
+one was ever in the only page fetched, so the screen's intersection against
+`admin_roles` was correctly empty. The symptom proves the sort order: under an
+oldest-first list all four would have shown.
+
+It pages now, **and filters to `admin_roles` server-side** — the 220+ family
+logins never reach the browser, so the page cannot render a family's email
+beside a role `<select>` and a Delete button wired to their real account.
+
+⚠️ **Paging stops on "no NEW ids", never on a short page.** GoTrue may cap
+`per_page` below what is asked for; a short first page would read as "that's
+everyone" and truncate the list — the same defect its own fix would
+reintroduce. That rule also catches a server ignoring `page`.
+
+The browser's own filter is **kept**: it is what stands between a stale
+deployment of that function and a table full of parents' accounts.
+
+### ⚠️ A SESSION WITH NO `admin_roles` ENTRY IS NOT AN ADMIN — DO NOT PUT THE `staff` FALLBACK BACK
+
+`applySessionRole()` fell through to `'staff'` — a real admin-portal role — so a
+parent opening `admin.html` got the admin shell with the Classrooms tab.
+Verified live (with a positive control, since a probe that refuses everyone
+proves nothing): a real parent gets `is_admin()` false / `admin_role()` null, a
+full admin gets true/`full`. No family data was ever reachable — but a panel
+that renders for a parent is not "not an admin", and an empty one reads as
+broken rather than closed. `ensureAdminSession()` turns it away **before** the
+dashboard is revealed or a query fires.
+
+- **The role comes from `admin_role()`**, the same definer function every RLS
+  policy calls — not a second lookup in the browser, so the screen and the
+  policies cannot disagree. It takes no argument, so it cannot enumerate.
+- ⚠️ **"Could not ask" ≠ "you are nobody."** `fetchMyAdminRole()` returns
+  `{ok:false}` for an unreadable answer and fails closed; conflating them
+  either locks out a real admin or waves through someone who is not one.
+- ⚠️ **The map fallback matches case-insensitively**, as `admin_role()` does. A
+  key saved as `Dinger@…` matches every policy while `roles[email]` misses it —
+  once a silent demotion, now it would be a lockout.
+
+`admin-users` deployed **v17** (`verify_jwt: true` preserved), deployed bytes
+diffed against the file afterward. `npm test` — 319, 7 new guards, each verified
+against the bug it guards. ⚠️ Three first failed on already-fixed code because
+the negative assertions matched the **comments naming the bug** — they strip
+comments first now.
+
+⚠️ **Cloudflare posted "Deployment failed" on the branch commit.** Production is
+unaffected and was verified directly, not assumed: the live site serves v2.13.2,
+`dist/admin.min.js` contains `ensureAdminSession`, `dist/supabase.min.js`
+contains `fetchMyAdminRole`, and `/` returns `x-ssr-rooms: 5`. The Git
+integration is newly connected (PRs 317–319 have no such comment), so expect it
+on every `claude/**` PR until the build settings are looked at.
+
+Current version: v2.13.3
+
 
 ## Finance summary API (for the church ChMS finance integration)
 
