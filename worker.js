@@ -231,7 +231,13 @@ async function ssrFetchSettings(env, ctx) {
   const anonKey = env.SUPABASE_ANON_KEY || PUBLIC_ANON_KEY;
   if (!anonKey) return 'nokey';
 
-  const keys = 'room_rates,room_capacity,staff_ratios,registration_fee,new_family_fee';
+  // ⚠️ Two of these are switches, not numbers. `hide_summer_camp` already
+  // existed as a REGISTRATION control (it hides the Summer room from the
+  // booking UI) and the public page ignored it, so the site went on
+  // advertising a program the office had already switched off. One fact, one
+  // key: the same switch now governs both. `mdo_hide_banner` is this
+  // screen's own, and governs nothing else.
+  const keys = 'room_rates,room_capacity,staff_ratios,registration_fee,new_family_fee,hide_summer_camp,mdo_hide_banner';
   let res;
   try {
     res = await Promise.race([
@@ -286,6 +292,11 @@ async function ssrRoomState(env, ctx) {
     regFee:       num(byKey.registration_fee),
     newFamilyFee: num(byKey.new_family_fee),
     summerRate:   rooms.find(r => r.id === 'summer')?.fullDayRate ?? null,
+    // ⚠️ TRUE HIDES. Absent, unreadable, or anything but a true means the
+    // block renders — so a Supabase outage leaves the page exactly as it is
+    // today rather than quietly stripping sections out of it.
+    hideSummer: byKey.hide_summer_camp === true || byKey.hide_summer_camp === 'true',
+    hideBanner: byKey.mdo_hide_banner  === true || byKey.mdo_hide_banner  === 'true',
   };
 }
 
@@ -329,6 +340,10 @@ async function ssrRenderHomePage(response, env, ctx) {
         if (state.summerRate != null) el.setInnerContent(` (<strong>$${state.summerRate}/day</strong>)`, { html: true });
       },
     })
+    // The two seasonal switches. `remove()` rather than a hidden attribute:
+    // the block should not be in the document a crawler reads either.
+    .on('#mdoSummerBlock',  { element(el) { if (state.hideSummer) el.remove(); } })
+    .on('#mdoBannerStrip',  { element(el) { if (state.hideBanner) el.remove(); } })
     .transform(response);
 
   return stamp(transformed, String(cards.length));

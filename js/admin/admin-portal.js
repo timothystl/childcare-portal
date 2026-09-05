@@ -403,7 +403,7 @@ const AP_TOOLS = [
     // database by admin_mdo_publish, not by this list — the Publish button is
     // hidden for `restricted` as a courtesy, not as the control.
     { key: 'mdoWebsite', pane: 'settings', section: 'mdoWebsiteSection', tab: 'settings', group: 'Website', tint: AP_TINT.green, icon: '🌐', name: 'MDO Website',
-      blurb: 'The wording on the public mdo.timothystl.org home page — the headline, the questions families ask, and how to reach us. Saving keeps a draft; the site changes only when you publish.' },
+      blurb: 'Switches for the seasonal blocks on the public mdo.timothystl.org home page. The wording itself is part of the site and changes through a developer.' },
     { key: 'settingsHub', pane: 'settings', section: 'settingsUnifiedSection', tab: 'settings', group: 'Settings', tint: AP_TINT.gold, icon: '⚙️', name: 'Settings',
       blurb: 'The rules the portal runs on. Every control shows who last changed it.' },
 ];

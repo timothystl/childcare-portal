@@ -5197,11 +5197,18 @@ Live at the time of writing: Jan–Mar have payments and no care days
 ### Provider tax details are on file
 
 `provider_tax_info` written 2026-08-29: Timothy Lutheran Church, 6704 Fyler
-Ave, St. Louis, MO 63139, EIN 43-6003738. ⚠️ **The phone on the statement is
-314-781-8673, the MDO office direct line — not 314-783-0523, which is the
-church** and is what the rest of the site publishes. A parent or tax preparer
-calling about childcare should reach MDO. License number is deliberately blank
+Ave, St. Louis, MO 63139, EIN 43-6003738. License number is deliberately blank
 (none supplied); its row is removed rather than blocking the document.
+
+⚠️ **CORRECTED 2026-09-05 — THIS NOTE HAD THE TWO NUMBERS BACKWARDS, AND SO
+DID THE MDO WEBSITE SECTION BELOW.** It read "314-781-8673, the MDO office
+direct line — not 314-783-0523, which is the church", and that is the wrong way
+round: **314-783-0523 is MDO** and **314-781-8673 is the church**. Confirmed by
+the director. The statement carries 314-781-8673 and **she has said to leave it
+as it is** — a tax document naming the church's own main line, for a childcare
+provider whose legal name on that same document is Timothy Lutheran Church, is
+not a mistake worth a data change. Do not "fix" that field, and do not read the
+old wording as license to swap the numbers anywhere else either.
 
 ## Staff credentials — CPR/first-aid and TB test tracking (2026-09-02)
 
@@ -5490,137 +5497,147 @@ The design source's own colors (`#01294A`, `#F5B731`, `#EAF5EF`, …) already ma
 
 Current version: v2.13.0
 
-## MDO Website content editor — the home page's copy is editable (2026-09-04)
+## MDO Website — a screen of seasonal switches, not a content editor (2026-09-04, narrowed 2026-09-05)
 
-Asked for as an "MDO content-management area on admin.timothystl.org". The
-architecture inspection that preceded it changed the shape of the answer, and
-the findings are worth keeping because they will come up again.
+Asked for as an "MDO content-management area on admin.timothystl.org", built as
+a three-section draft/publish editor (hero / FAQs / contact) the next day, and
+**narrowed to toggles the day after that, on the director's own call**:
 
-### ⚠️ THE CHURCH ADMIN AND THIS APP SHARE NOTHING — the editor lives here
+> "at this point i think to just have the whole page mostly hardcoded is
+> probably the best, a few toggles for seasonal thing. i cna just go to you to
+> make edits to the page i guess. and if i need design redo ill just go to
+> claude design"
 
-`admin.timothystl.org` (repo `timothystl/website`) is Cloudflare D1 + its own
-`users`/`sessions` tables + R2. This app is Supabase + Supabase Auth + Supabase
-Storage. The only link between them is a hyperlink. The church admin holds **no
-Supabase credential at all** except the shared-secret `payroll_*` RPC proxy, so
-putting the editor there would have meant a second cross-app credential path —
-one RPC pair per content type — before a single field could be edited.
+⚠️ **THE EDITOR IS GONE, AND NOTHING PUBLISHED THROUGH IT WAS EVER LOST.**
+Measured against production before dropping anything: all three
+`mdo_site_content` rows still carried `updated_by = '(seed)'`, `published` was
+NULL on every one, and `mdo_content_revisions` held **zero** rows. So the public
+page had been rendering its own hardcoded markup the whole time and nobody had
+ever typed a word into it. `20260905190644_retire_mdo_site_content_editor.sql`
+(**applied**) drops the seven `SECURITY DEFINER` RPCs and then both tables; the
+~250 lines of public-side rendering in `js/app.js`
+(`mdoRichText`/`renderMdoSiteContent`/`renderMdoHero`/`renderMdoFaqs`/
+`renderMdoContact`) and the six helpers in `js/supabase.js` went with them.
 
-Single sign-on was considered first and **dropped on the director's call** ("we
-tried before and it was too hard"). Two findings from that pass, kept because
-they are the reason SSO is hard here rather than merely unfinished:
+**Why it was the right call rather than a retreat.** The editor was real and
+worked, and it was answering a question nobody had: the office edits this page
+about twice a year. What it cost in exchange was a second place the page's words
+could live, a draft/published split to keep straight, a hand-rolled HTML
+sanitizer on the public path, and a rich-text surface whose two genuine bugs
+(below) were both found in review rather than by anyone using it. A page that is
+hardcoded and a developer who is one message away is a smaller system than that.
 
-- **The two identity spaces do not overlap by one identifier.** The church admin
-  has 5 accounts named `admin`, `katig`, `market`, `mthompson`, `staff`; this app
-  has 4 `admin_roles` entries, all email addresses. And `admin`/`staff` are
-  **shared role logins, not people** — SSO maps one human to one account, and
-  there is no human to map `staff` to.
+### What the screen is now
+
+`js/admin/admin-mdo-website.js`, still at **Settings → Website → MDO Website**
+(`AP_TOOLS` key `mdoWebsite`, unchanged). Three rows, one of them a real switch:
+
+| Row | Key | Owner |
+|---|---|---|
+| Announcement strip | `mdo_hide_banner` | **this screen** — the only key it writes |
+| Summer Camp block | `hide_summer_camp` | Settings → Registration |
+| At capacity for new enrollments | `enrollment_at_capacity` | Settings → Registration |
+
+- **A switch saves on the switch**, not behind a Save button, and reverts the
+  checkbox itself if `upsertSetting` throws — a toggle that looks flipped over a
+  setting that did not change is the failure worth designing against.
+- ⚠️ **THE OTHER TWO ARE SHOWN READ-ONLY AND LINK TO THE SCREEN THAT OWNS
+  THEM.** Both already have controls in Settings → Registration; a second form
+  over the same key is how two screens come to disagree about what "hidden"
+  means. A guard asserts `upsertSetting` appears exactly once in the whole
+  module and never with either of those keys as its argument.
+- **A real content bug was found while scoping this, and closing it is the
+  reason the mirrors exist.** `hide_summer_camp` was `'true'` in production —
+  the office had switched Summer Camp off for registration — while the public
+  page went on advertising Summer Camp in its own hardcoded block, because
+  nothing on the marketing side had ever read that key. `worker.js` honors it
+  now. One fact, one key, no new control.
+
+### The toggles take effect in `worker.js`, not in the browser
+
+`#mdoBannerStrip` and `#mdoSummerBlock` are new ids on the existing markup in
+`index.html`; the HTMLRewriter pass that already server-renders the classroom
+cards removes the element when its key is on. Same fail-open rule as everything
+else in that function — an unreadable setting leaves the page exactly as
+authored, which is also what "not hidden" looks like, so an absent key is
+already the correct default and nothing needed seeding.
+
+⚠️ **A cross-file guard asserts every id the worker hides really exists in
+`index.html`.** Removing an element by a selector that matches nothing is a
+silent no-op — the switch would read as saved, the setting would be right, and
+the block would still be on the page. That is the shape of half the incidents in
+this file.
+
+### Findings from the original architecture pass, still true and still worth having
+
+- **⚠️ THE CHURCH ADMIN AND THIS APP SHARE NOTHING.**
+  `admin.timothystl.org` (repo `timothystl/website`) is Cloudflare D1 + its own
+  `users`/`sessions` tables + R2. This app is Supabase + Supabase Auth + Supabase
+  Storage. The only link between them is a hyperlink. The church admin holds no
+  Supabase credential at all except the shared-secret `payroll_*` RPC proxy.
+  ⚠️ **What that pass did NOT weigh, and should have:** the church repo's own
+  block editor already has a `pages` table and a public `/api/pages`, explicitly
+  designed to be read by another worker — so "add one more page over there" was
+  a live option nobody costed. It stopped mattering once the answer became
+  "hardcode the page", but the next person asking this question should start
+  there rather than at "build an editor here".
 - **⚠️ SUPABASE AUTH IS NOT A STAFF DIRECTORY, IT IS MOSTLY PARENTS.** 219 of
   224 `auth.users` rows are families, auto-provisioned on first parent-portal
-  login; 5 carry `@timothystl.org`, two of which are leftover Stax test
-  accounts. Making it the identity provider for the church admin would give
-  every parent a verified identity at that admin's door, with a four-key JSON
-  blob as the only thing behind it. If SSO is revisited, the provider is Google
-  Workspace, not this project.
+  login. Making it the identity provider for the church admin would give every
+  parent a verified identity at that admin's door. If SSO is ever revisited, the
+  provider is Google Workspace, not this project. (SSO itself was dropped on the
+  director's call — "we tried before and it was too hard".)
+- **⚠️ HALF THE REQUESTED CONTENT WAS ALREADY EDITABLE — do not rebuild it.**
+  Classrooms, rates, capacity, ratios, the annual fees and the staff directory
+  are `settings` rows, already edited on the Settings screen, already
+  server-rendered into the home page. Rebuilding them would create a second
+  source of truth for numbers the billing path reads.
 
-### ⚠️ HALF THE REQUESTED CONTENT WAS ALREADY EDITABLE — do not rebuild it
+### The two bugs the retired editor's tests caught, kept because the class recurs
 
-Classrooms, rates, capacity, ratios, the annual fees and the **staff directory**
-are already `settings` rows, already edited on the Settings screen, and already
-server-rendered into the home page by `worker.js`'s HTMLRewriter pass (which
-also already does the fail-open, 5-minute-cache, `x-ssr-rooms`-stamped thing a
-new content system would otherwise have had to invent). Rebuilding them here
-would have created a second source of truth for numbers the billing path reads.
-`admin_mdo_save_draft` refuses any section but `hero`/`faqs`/`contact`, and a
-test asserts the editor module contains none of those setting keys in code.
-
-### What was actually built
-
-`mdo_site_content` (section PK, `draft`, `published`, stamps) +
-`mdo_content_revisions`, with seven `SECURITY DEFINER` RPCs. Applied and
-verified in production 2026-09-04.
-
-- **Draft and published are separate**, mirroring the church site's own
-  `blocks`/`published_blocks` split. Saving changes nothing a visitor sees.
-- **⚠️ SEEDED AS DRAFT ONLY — `published` is deliberately NULL on all three.**
-  A section that has never been published makes the public reader fall back to
-  `index.html`'s own hardcoded markup, so applying the migration changed nothing
-  on the live site. The office reads each draft against the live page and
-  presses Publish when they agree it matches. **Nothing is live yet.**
-- **`restricted` may draft; only `full` may publish.** That is the plan's
-  editor/publisher split using roles that already exist rather than a second
-  permission system, and it is enforced in `admin_mdo_publish`, not by hiding
-  the button — the button is hidden for `restricted` as a courtesy.
-- **Restoring a revision lands in the DRAFT, never straight onto the page.**
-- Reachable at **Settings → Website → MDO Website** (`AP_TOOLS` key
-  `mdoWebsite`). ⚠️ Not in `AP_FULL_ONLY_KEYS`, on purpose — see the role split.
-
-### ⚠️ Two real bugs the tests found before this shipped
-
-Both were in the first version of `mdoRichText()`, which is what turns a stored
-FAQ answer into `innerHTML` on a public page:
+Both were in `mdoRichText()`, the function that turned a stored FAQ answer into
+`innerHTML` on a public page. The code is deleted; the lessons are not.
 
 1. **`<a href="//evil.example">` was accepted as an internal path.** A leading
    `/` is not enough to mean "this site" — protocol-relative is somewhere else
-   entirely. This is the same hole the church repo's own review flagged as
-   SEC-15 in `safeUrl()`, reproduced independently here. The two link guards
-   (`mdoSetLink`, the banner href) had it too.
-2. **A refused opening tag left its closing tag live**, so `<a href="javascript:…">x</a>`
-   emitted a stray `</a>` that would close a real element of the page around it.
+   entirely. Independently the same hole the church repo's own review flagged as
+   SEC-15 in `safeUrl()`.
+2. **A refused opening tag left its closing tag live**, so a rejected anchor
+   emitted a stray `</a>` that closed a real element of the page around it. An
+   allowlist that filters tags one at a time, without a stack, is not a
+   sanitizer.
 
-Fixed by replacing escape-then-selectively-unescape with a **tag parser that
-keeps a stack**: an inline tag is re-opened only with no attributes at all, an
-anchor only with a same-site or `https:` href, a closing tag only when it
-matches something open, and anything still open is closed at the end. Guarded
-by a test that checks **every live tag in the output against an allowlist**
-rather than grepping for scary substrings — the first version of that assertion
-reported false positives on correctly-escaped text, which is how a check stops
-being read.
+⚠️ And the test lesson: the assertion that caught them checks **every live tag
+in the output against an allowlist**, rather than grepping for scary substrings
+— the first version reported false positives on correctly-escaped text, which is
+how a check stops being read.
 
 ### Verification
 
-`npm test` — **312 passed** (14 new). ⚠️ The new blocks are inserted **above**
-the results summary: this suite prints its totals and calls `process.exit()` at
-the end of the file, so a block appended after it runs, prints ticks and can
-never fail CI. The protocol-relative guard was verified non-vacuous by
-reintroducing the hole and watching exactly that test fail.
+`npm test` — **312 passed**; the two editor blocks were replaced by one
+"MDO website — the seasonal switches, and what they may not write" block whose
+three new guards were each verified against the bug they guard (the cross-file
+id check, the single-`upsertSetting` rule, and the absence of the retired
+tables' RPC names). ⚠️ New blocks go **above** the results summary — this suite
+prints its totals and calls `process.exit()` partway down the file, so anything
+appended after that line runs, prints ticks and can never fail CI.
 
-Live, in rolled-back-free single statements (per this file's own warning that
-`set_config` does not carry across `;`-separated statements in one MCP call):
-a **real parent account** gets `admin_role() = NULL`, zero rows from both read
-RPCs, and `false` from all four writes; a `restricted` admin drafts but cannot
-publish; a `full` admin publishes, gets a revision row and the right
-`published_by`. `mdo_public_content()` returns only published sections. Table
-grants to `anon`/`authenticated`/`PUBLIC`: **none**; RLS on both tables; all
-seven functions definer with `search_path` pinned. Every test row was removed
-afterward and the three drafts restored to the seed.
+Live: `mdo_site_content`, `mdo_content_revisions` and all seven `admin_mdo_*` /
+`mdo_public_content` functions confirmed gone from the catalog after the
+migration. In a real browser (Chromium) against the actual admin module: three
+rows render, the one live switch writes only its own key, and the state pill
+re-renders without a reload.
 
-In a real browser (Chromium) against the **actual `index.html`**: with nothing
-published the headline, questions and phone are byte-unchanged; with content
-published the hero, FAQ list, hidden-question filtering, contact cards and
-`tel:` digits all update; and a hostile answer creates no `<img>`, no
-`javascript:` anchor, and runs no handler. The editor itself renders all three
-sections, 18 hero fields, 12 questions, and shows Publish to `full` and an
-explanation to `restricted`.
+### Still hardcoded, deliberately
 
-### Still open, deliberately
+Everything a visitor reads on `mdo.timothystl.org` — the hero, the FAQs, the
+contact cards, the gallery, the pillars, how-it-works, the summer-camp copy.
+Changing any of it is a message to a developer and an edit to `index.html`; a
+design change goes through Claude Design. That is the arrangement the director
+chose, and this screen exists only for the seasonal blocks she wants to switch
+off without one.
 
-- **A draft preview.** The editor links to the live page; there is no way to see
-  a draft rendered in the MDO design yet. Doing it properly means a preview
-  route on the public page that reads the draft, which is its own piece of work.
-  The status line says plainly what is and is not live rather than implying a
-  preview exists.
-- **Gallery, program highlights, the six pillar cards, how-it-works and the
-  summer-camp copy** are still hardcoded. The table takes them by adding a
-  section key in three places (the two RPC guards and `MDO_SECTIONS`).
-- **⚠️ The home page publishes 314-783-0523 as the MDO contact number.** That is
-  the church line; `provider_tax_info` and the childcare statement both use
-  **314-781-8673**, the MDO office direct line. Seeded as-is rather than
-  silently corrected — it is now a field the office can fix in one edit.
-- **`.muted` is used by five admin modules and defined in neither stylesheet.**
-  A pre-existing dead class; scoped to `#mdoWebsiteContent` here rather than
-  defined globally, which would have restyled four other modules in this commit.
-
-Current version: v2.13.1
+Current version: v2.13.7
 
 ## Admin users — the list showed nobody, and a parent was given a role (2026-09-05)
 

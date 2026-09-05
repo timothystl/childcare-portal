@@ -6230,3 +6230,27 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
    admin-attendance, admin-incidents and admin-messages-unified in the same
    commit as an unrelated feature. Worth fixing globally on its own. */
 #mdoWebsiteContent .muted{color:var(--text-muted);font-weight:400;}
+/* MDO Website — the seasonal switches. Scoped to this screen: `.mdo-state` is
+   a status word, deliberately not `.ap-pill` (a clickable chip with a hover
+   state), and nothing here should restyle a control on another screen. */
+#mdoWebsiteContent .mdo-row{display:flex;gap:20px;align-items:flex-start;justify-content:space-between;
+  padding:16px 0;border-bottom:1px solid var(--linen);}
+#mdoWebsiteContent .mdo-row:last-of-type{border-bottom:0;}
+#mdoWebsiteContent .mdo-row-main{flex:1 1 auto;min-width:0;}
+#mdoWebsiteContent .mdo-row-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:4px;}
+#mdoWebsiteContent .mdo-row-main p{margin:0;font-size:.92em;line-height:1.55;}
+#mdoWebsiteContent .mdo-quote{margin-top:8px !important;padding:8px 12px;background:var(--linen);
+  border-radius:8px;font-style:italic;color:var(--text-muted);}
+#mdoWebsiteContent .mdo-state{display:inline-block;padding:2px 10px;border-radius:999px;
+  font-size:.78em;font-weight:700;letter-spacing:.02em;white-space:nowrap;}
+#mdoWebsiteContent .mdo-state.is-on{background:var(--green-pale);color:var(--green-text);}
+#mdoWebsiteContent .mdo-state.is-off{background:var(--linen);color:var(--text-muted);}
+#mdoWebsiteContent .mdo-switch{display:flex;gap:8px;align-items:center;flex:0 0 auto;
+  font-size:.9em;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap;
+  padding:6px 4px 6px 12px;}
+#mdoWebsiteContent .mdo-switch input{width:18px;height:18px;cursor:pointer;}
+#mdoWebsiteContent .mdo-row-where{flex:0 0 auto;text-align:right;font-size:.85em;}
+@media (max-width:640px){
+  #mdoWebsiteContent .mdo-row{flex-direction:column;gap:10px;}
+  #mdoWebsiteContent .mdo-row-where{text-align:left;}
+}

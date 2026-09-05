@@ -2839,175 +2839,88 @@ describe('payment import duplicate guard and coverage', () => {
 // ⚠️ This block must stay ABOVE the results summary below — the suite prints
 // its totals and calls process.exit() at the end of the file, so anything
 // appended after it runs, prints ticks, and can never fail CI.
-describe('mdoRichText — the FAQ answers reach a public page as innerHTML', () => {
+describe('MDO website — the seasonal switches, and what they may not write', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    // Lifted out of js/app.js by brace-matching rather than re-typed, so the
-    // thing under test is the code that actually ships. Same approach the
-    // drift guards elsewhere in this suite use for browser globals.
-    const appSrc = read('js/app.js');
-    const grab = (name) => {
-        const i = appSrc.indexOf('function ' + name + '(');
-        if (i < 0) throw new Error('mdoRichText not found in js/app.js');
-        let depth = 0;
-        for (let k = appSrc.indexOf('{', i); k < appSrc.length; k++) {
-            if (appSrc[k] === '{') depth++;
-            else if (appSrc[k] === '}' && --depth === 0) return appSrc.slice(i, k + 1);
-        }
-        throw new Error('unbalanced braces reading ' + name);
-    };
-    const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    // eslint-disable-next-line no-eval
-    const mdoRichText = eval('(' + grab('mdoRichText') + ')');
-
-    // The real question is not "does the word onclick appear" — an escaped
-    // tag legitimately contains its own text. It is "what tags does a browser
-    // actually see", so every live tag in the output is checked against the
-    // allowlist.
-    const liveTags = (html) => (html.match(/<[^>]+>/g) || []);
-    const ALLOWED = /^<\/?(?:strong|em|b|i)>$|^<a href="(?:\/(?!\/)|https:\/\/)[^"]*">$|^<\/a>$/;
-
-    test('keeps the emphasis and links the live FAQ copy already uses', () => {
-        expect(mdoRichText('a <strong>b</strong> c')).toBe('a <strong>b</strong> c');
-        expect(mdoRichText('a <em>b</em> c')).toBe('a <em>b</em> c');
-        expect(mdoRichText('see <a href="/waitlist-status">status</a>'))
-            .toBe('see <a href="/waitlist-status">status</a>');
-        expect(mdoRichText('<a href="https://x.org/p">x</a>')).toBe('<a href="https://x.org/p">x</a>');
-    });
-
-    test('emits no tag outside the allowlist, whatever is stored', () => {
-        const hostile = [
-            '<script>alert(1)</script>',
-            '<img src=x onerror=alert(1)>',
-            '<svg onload=alert(1)>',
-            '<iframe src="https://evil.example"></iframe>',
-            '<strong onclick="x">b</strong>',
-            '<a href="/x" onmouseover="y">z</a>',
-            '<a href="javascript:alert(1)">x</a>',
-            '<a href="data:text/html,<script>x</script>">y</a>',
-            '<A HREF="JAVASCRIPT:alert(1)">x</A>',
-            '<a href=/x>no quotes</a>',
-        ];
-        hostile.forEach((input) => {
-            liveTags(mdoRichText(input)).forEach((tag) => {
-                expect(ALLOWED.test(tag)).toBe(true);
-            });
-        });
-    });
-
-    // ⚠️ A leading "/" is not enough to mean "this site" — this is the same
-    // protocol-relative hole this org's own review flagged in safeUrl, and it
-    // was live in the first version of this function.
-    test('a protocol-relative href is refused, not read as an internal path', () => {
-        const out = mdoRichText('<a href="//evil.example">x</a>');
-        expect(out.includes('<a href')).toBe(false);
-        expect(out.includes('//evil.example')).toBe(true); // shown as text
-    });
-
-    test('http is refused; only https and same-site paths are links', () => {
-        expect(mdoRichText('<a href="http://evil.example">x</a>').includes('<a href')).toBe(false);
-    });
-
-    test('output is balanced, so a stray tag cannot close the page around it', () => {
-        expect(mdoRichText('a </strong> b')).toBe('a &lt;/strong&gt; b');
-        expect(mdoRichText('<strong>b')).toBe('<strong>b</strong>');
-        // A refused opening tag must not leave its closing tag live.
-        expect(mdoRichText('<a href="javascript:x">y</a>'))
-            .toBe('&lt;a href=&quot;javascript:x&quot;&gt;y&lt;/a&gt;');
-    });
-
-    test('empty and non-string inputs are empty, never "undefined"', () => {
-        expect(mdoRichText('')).toBe('');
-        expect(mdoRichText(null)).toBe('');
-        expect(mdoRichText(undefined)).toBe('');
-        expect(mdoRichText(42)).toBe('');
-    });
-});
-
-describe('MDO website content — the boundaries that keep the care system out of it', () => {
-    const repoRoot = path.resolve(__dirname, '..', '..');
-    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260904195342_add_mdo_site_content.sql');
-    const appSrc = read('js/app.js');
     const editor = read('js/admin/admin-mdo-website.js');
+    const worker = read('worker.js');
+    const indexHtml = read('index.html');
 
-    // ⚠️ Supabase default-grants ALL on a new public table straight to anon,
-    // and RLS never applies to TRUNCATE. This repo has had that exact hole
-    // reopened by a new table twice.
-    test('the new tables revoke the default anon grants explicitly', () => {
-        expect(/REVOKE ALL ON mdo_site_content\s+FROM anon, authenticated, PUBLIC/.test(migration)).toBe(true);
-        expect(/REVOKE ALL ON mdo_content_revisions FROM anon, authenticated, PUBLIC/.test(migration)).toBe(true);
-        expect(migration.includes('ALTER TABLE mdo_site_content      ENABLE ROW LEVEL SECURITY')).toBe(true);
-    });
+    // Comments are stripped before every absence check below. This file's own
+    // header names the keys it deliberately does NOT write, and a naive
+    // substring search reads that warning as a violation of itself — the exact
+    // way three guards in this suite first failed against already-correct code.
+    const code = editor.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-    // ⚠️ admin_role() returns NULL for a caller with no admin_roles entry —
-    // and a parent's own Supabase session is exactly that. `IF NULL THEN`
-    // does not take the branch, so an un-coalesced guard falls straight
-    // through. Verified live once already on admin_list_staff_credentials.
-    test('every admin guard coalesces admin_role() before comparing', () => {
-        const guards = migration.match(/IF\s+.*admin_role\(\).*THEN/g) || [];
-        expect(guards.length).toBeGreaterThan(0);
-        guards.forEach((g) => expect(g.includes('coalesce(admin_role()')).toBe(true));
-    });
-
-    test('publishing is full-only while drafting is open to restricted', () => {
-        const pub = migration.slice(migration.indexOf('FUNCTION admin_mdo_publish'));
-        expect(pub.slice(0, 600).includes("coalesce(admin_role(), '') <> 'full'")).toBe(true);
-        const save = migration.slice(migration.indexOf('FUNCTION admin_mdo_save_draft'));
-        expect(save.slice(0, 600).includes("NOT IN ('full', 'restricted')")).toBe(true);
-    });
-
-    test('every definer function pins its search_path', () => {
-        const fns = migration.match(/CREATE OR REPLACE FUNCTION[\s\S]*?AS \$fn\$/g) || [];
-        expect(fns.length).toBeGreaterThan(0);
-        fns.forEach((f) => {
-            expect(f.includes('SECURITY DEFINER')).toBe(true);
-            expect(f.includes('SET search_path = public, pg_temp')).toBe(true);
-        });
-    });
-
-    // The whole reason publishing one section at a time is safe.
-    test('an unpublished or unreachable section falls back to the page markup', () => {
-        expect(appSrc.includes('function renderMdoSiteContent(content) {')).toBe(true);
-        const fn = appSrc.slice(appSrc.indexOf('function renderMdoSiteContent'));
-        expect(fn.slice(0, 400).includes("if (!content || typeof content !== 'object') return;")).toBe(true);
-        // A failed section must not take the other two down with it.
-        expect(fn.slice(0, 600).match(/catch \(e\)/g).length).toBe(3);
-    });
-
-    // ⚠️ An empty array here would silently wipe the questions off the page.
-    test('an empty question list never replaces the live FAQ', () => {
-        const fn = appSrc.slice(appSrc.indexOf('function renderMdoFaqs'));
-        expect(fn.slice(0, 2000).includes('if (main.length) {')).toBe(true);
-    });
-
-    // ⚠️ These are shared with billing and scheduling. A second editor for
-    // them would be a second source of truth for numbers the invoice path
-    // reads. The editor must point at Settings, not rebuild them.
-    test('the editor never writes rates, capacity, ratios or the staff directory', () => {
-        // Comments are stripped first: this file's own header names those keys
-        // precisely to say they are edited on the Settings screen instead, and
-        // a naive substring check reads that warning as a violation of itself.
-        const code = editor.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    // ⚠️ Shared with billing and scheduling. A second editor for any of these
+    // is a second source of truth for numbers the invoice path reads.
+    test('the screen never writes rates, capacity, ratios or the staff directory', () => {
         ['room_rates', 'room_capacity', 'staff_ratios', 'staff_directory',
          'registration_fee', 'new_family_fee'].forEach((key) => {
             expect(code.includes(key)).toBe(false);
         });
-        // No write path to the shared settings table at all.
-        expect(/upsertSetting|from\(['\"]settings['\"]\)/.test(code)).toBe(false);
     });
 
-    test('the editor can only name the three sections the database accepts', () => {
-        expect(migration.includes("NOT IN ('hero', 'faqs', 'contact')")).toBe(true);
-        const keys = (editor.match(/key: '(hero|faqs|contact)'/g) || []).length;
-        expect(keys).toBe(3);
+    // ⚠️ THE POINT OF THE MIRROR LIST. These two switches already have a
+    // control on the Settings screen. This screen shows their live state and
+    // links there; the moment it also WRITES one, the two forms can disagree
+    // about the same key, which is how a switch starts lying.
+    test('a key owned by another screen is read, never written', () => {
+        ['hide_summer_camp', 'enrollment_at_capacity'].forEach((key) => {
+            expect(code.includes(key)).toBe(true);              // shown
+            expect(new RegExp(`upsertSetting\\(\\s*['"]${key}`).test(code)).toBe(false);
+        });
+        // Only a key from MDO_SITE_TOGGLES ever reaches a write, and that
+        // write reads its key off the checkbox rather than naming one.
+        const saves = code.match(/upsertSetting\([^)]*\)/g) || [];
+        expect(saves.length).toBe(1);
+        expect(saves[0]).toBe('upsertSetting(key, want)');
+    });
+
+    test('the mirrored switches carry no checkbox of their own', () => {
+        const mirrors = code.slice(code.indexOf('MDO_SITE_MIRRORS'), code.indexOf('function _mdoIsOn'));
+        expect(mirrors.includes('data-mdo-toggle')).toBe(false);
+    });
+
+    // ⚠️ THE CROSS-FILE PAIR THAT ACTUALLY BREAKS SILENTLY. The worker targets
+    // these two elements by id; rename one in index.html and the switch stops
+    // working with nothing to see — the page just keeps showing the block.
+    test('every id the worker hides really exists on the public page', () => {
+        const targeted = [...worker.matchAll(/\.on\('#(mdo[A-Za-z]+)'/g)].map(m => m[1]);
+        expect(targeted.sort().join(',')).toBe('mdoBannerStrip,mdoSummerBlock');
+        targeted.forEach((id) => expect(indexHtml.includes(`id="${id}"`)).toBe(true));
+    });
+
+    test('the worker asks for both switch keys', () => {
+        const keys = worker.match(/const keys = '([^']+)'/)[1].split(',');
+        expect(keys.includes('hide_summer_camp')).toBe(true);
+        expect(keys.includes('mdo_hide_banner')).toBe(true);
+    });
+
+    // ⚠️ FAIL OPEN. Absent, unreadable, or anything but a true means the block
+    // renders. A Supabase outage must leave the page as it is rather than
+    // quietly stripping sections out of the church's own marketing page.
+    test('only an explicit true hides a block', () => {
+        const state = worker.slice(worker.indexOf('hideSummer:'), worker.indexOf('hideBanner:') + 200);
+        expect(state.includes("byKey.hide_summer_camp === true || byKey.hide_summer_camp === 'true'")).toBe(true);
+        expect(state.includes("byKey.mdo_hide_banner  === true || byKey.mdo_hide_banner  === 'true'")).toBe(true);
+        // The handlers act on the true, never on the absence.
+        expect(worker.includes('if (state.hideSummer) el.remove();')).toBe(true);
+        expect(worker.includes('if (state.hideBanner) el.remove();')).toBe(true);
+    });
+
+    // The three-section content editor is retired — see the migration. A
+    // leftover call would be a call to a function the database no longer has.
+    test('nothing calls the retired content RPCs any more', () => {
+        ['mdo_public_content', 'admin_mdo_content', 'admin_mdo_save_draft', 'admin_mdo_publish',
+         'admin_mdo_discard_draft', 'admin_mdo_revisions', 'admin_mdo_restore_revision'].forEach((fn) => {
+            expect(read('js/supabase.js').includes(fn)).toBe(false);
+            expect(code.includes(fn)).toBe(false);
+        });
+        expect(read('js/app.js').includes('renderMdoSiteContent')).toBe(false);
     });
 });
 
-// ⚠️ This suite prints its totals and calls process.exit() immediately below,
-// so a describe block appended after it runs, prints ticks, and can never fail
-// CI. New blocks go ABOVE this line.
 describe('Admin users — only real admins, and all of them', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
