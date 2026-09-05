@@ -1010,17 +1010,22 @@ async function _loadAdminUsersTable() {
         ]);
         window._adminRoles = roles;
         // This screen manages ADMIN accounts, not every Supabase Auth user.
-        // `callAdminUsers('list')` returns the whole Auth Admin API result —
-        // which, since parent_portal_option_b_accounts, is every family's
-        // real login too (224 rows and climbing, none of them an admin).
-        // Rendering the unfiltered list showed every parent's email with a
-        // role <select> that defaulted to "Full Access" and saved to
-        // admin_roles on change, plus a Delete button wired to their real
-        // Auth account — a click either control away from actually granting
-        // access or destroying a family's login. Scope the table to emails
-        // that are actually present in admin_roles (case-insensitively, the
-        // same match rule admin_role()/is_admin() use server-side) so an
-        // account can only appear here if it is already a real admin.
+        // `callAdminUsers('list')` now returns only accounts present in
+        // admin_roles — the edge function filters server-side, so the 220+
+        // family logins parent_portal_option_b_accounts created never reach
+        // the browser at all. It also PAGES: listUsers() with no arguments is
+        // page 1 of 50, newest first, and the real admins are the oldest
+        // accounts on the project, so every one of them fell off the end of
+        // the only page ever fetched and this table read "No admin users
+        // found" while all four were signing in daily.
+        //
+        // ⚠ The filter below is kept even so, and is not redundant. It is what
+        // stands between a stale deployment of that function — one still
+        // returning the unfiltered page — and a table that renders every
+        // parent's email beside a role <select> defaulting to "Full Access"
+        // and a Delete button wired to their real Auth account, a single click
+        // from granting access or destroying a family's login. Same
+        // case-insensitive match rule as admin_role()/is_admin() server-side.
         const roleEmails = new Set(Object.keys(roles).map(e => e.toLowerCase().trim()));
         const adminUsers = (result.users || []).filter(u =>
             roleEmails.has((u.email || '').toLowerCase().trim())

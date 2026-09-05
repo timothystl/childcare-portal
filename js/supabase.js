@@ -4231,6 +4231,35 @@ async function loadAdminRoles() {
 }
 
 /**
+ * Asks the DATABASE what admin role THIS session has.
+ *
+ * ⚠ This is the authoritative answer and the one the rest of the app is
+ * actually gated on: admin_role() is the same SECURITY DEFINER function every
+ * RLS policy calls, reading the same admin_roles map with the same
+ * case-insensitive match. Deriving the role a second time in the browser — as
+ * applySessionRole() used to, with a plain roles[email] lookup — is how the UI
+ * and the database come to disagree about who is privileged.
+ *
+ * It takes no argument, so it can only ever describe the caller; there is no
+ * way to ask it about somebody else's address and enumerate the roster.
+ *
+ * @returns {Promise<{ok: boolean, role: string|null}>} `ok` false means the
+ *   question could not be asked (offline, expired token) — which is NOT the
+ *   same fact as "asked, and you are nobody", and must not be treated as one.
+ */
+async function fetchMyAdminRole() {
+    if (!sbClient) return { ok: false, role: null };
+    try {
+        const { data, error } = await sbClient.rpc('admin_role');
+        if (error) return { ok: false, role: null };
+        const role = (typeof data === 'string' && data.trim()) ? data.trim() : null;
+        return { ok: true, role };
+    } catch (_) {
+        return { ok: false, role: null };
+    }
+}
+
+/**
  * Persists the admin roles map to the settings table.
  * @param {AdminRolesMap} rolesMap - Map of lowercase email → role string
  * @returns {Promise<void>}

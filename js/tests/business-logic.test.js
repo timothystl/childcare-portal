@@ -3005,6 +3005,99 @@ describe('MDO website content — the boundaries that keep the care system out o
     });
 });
 
+// ⚠️ This suite prints its totals and calls process.exit() immediately below,
+// so a describe block appended after it runs, prints ticks, and can never fail
+// CI. New blocks go ABOVE this line.
+describe('Admin users — only real admins, and all of them', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    // ⚠️ Strip comments before asserting anything ABSENT. Every comment here
+    // names the defect it is guarding against — "listUsers() with no
+    // arguments", "not on `batch.length < PER_PAGE`", "a plain roles[email]
+    // lookup" — so a bare grep matches the explanation and reports the bug is
+    // still present in code that is already fixed.
+    const strip = src => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const fn   = strip(read('supabase/functions/admin-users/index.ts'));
+    const core = strip(read('js/admin/admin-core.js'));
+    const sb   = strip(read('js/supabase.js'));
+    const settings = strip(read('js/admin/admin-settings.js'));
+
+    // The bug: listUsers() with no arguments is page 1 of 50, newest first.
+    // There are 224 Auth accounts (every family has had a real login since
+    // parent_portal_option_b_accounts) and the four actual admins are the
+    // OLDEST of them, at positions 220-224 — so not one of them was ever in
+    // the only page fetched, and the screen read "No admin users found" while
+    // all four were signing in daily.
+    test('the account list is paged, never a bare listUsers()', () => {
+        expect(/listUsers\(\s*\)/.test(fn)).toBe(false);
+        expect(/listUsers\(\{\s*page,\s*perPage:/.test(fn)).toBe(true);
+        expect(/for \(let page = 1; page <= MAX_PAGES; page\+\+\)/.test(fn)).toBe(true);
+    });
+
+    // ⚠️ Stopping on a short page is the trap: GoTrue may cap per_page below
+    // what we asked for, and a first page shorter than PER_PAGE would then
+    // read as "that's everyone" and truncate the list — the same defect,
+    // reintroduced by the fix for it.
+    test('paging stops on no new ids, not on a short page', () => {
+        expect(fn.includes('if (fresh === 0) break;')).toBe(true);
+        expect(/batch\.length\s*<\s*PER_PAGE/.test(fn)).toBe(false);
+    });
+
+    // The 220+ family logins must not leave the server. Rendering them gave
+    // every parent's email a role <select> defaulting to "Full Access" and a
+    // Delete button wired to their real Auth account.
+    test('only accounts present in admin_roles are returned', () => {
+        expect(/const roleEmails = new Set\(/.test(fn)).toBe(true);
+        expect(fn.includes('if (!roleEmails.has((u.email || "").toLowerCase().trim())) continue;')).toBe(true);
+        // ...and the browser filters again, so a stale deployment of this
+        // function cannot put a family's account back on the screen.
+        expect(settings.includes('roleEmails.has((u.email || \'\').toLowerCase().trim())')).toBe(true);
+    });
+
+    // ⚠️ Somebody with no entry in admin_roles is not an admin AT ALL. This
+    // used to fall through to 'staff' — a real admin-portal role — so a parent
+    // opening admin.html got the admin shell. Every query behind it was
+    // refused by RLS, but a panel that renders for a parent is not "not an
+    // admin".
+    test('a session with no admin role is turned away, not demoted to staff', () => {
+        expect(/async function ensureAdminSession\(\)/.test(core)).toBe(true);
+        expect(core.includes('if (!role) {')).toBe(true);
+        expect(/_refuseAdmin\(/.test(core)).toBe(true);
+        // The refusal really signs out and restores the login screen.
+        const refuse = core.slice(core.indexOf('async function _refuseAdmin'));
+        expect(refuse.includes('await logoutAdmin();')).toBe(true);
+        expect(refuse.includes("getElementById('dashboard').classList.add('hidden')")).toBe(true);
+    });
+
+    test('the gate runs before the dashboard is ever revealed', () => {
+        const body = core.slice(core.indexOf('async function showDashboard()'));
+        const gate = body.indexOf('ensureAdminSession()');
+        const show = body.indexOf("getElementById('dashboard').classList.remove('hidden')");
+        expect(gate).toBeGreaterThan(-1);
+        expect(show).toBeGreaterThan(-1);
+        expect(gate < show).toBe(true);
+    });
+
+    // ⚠️ "Could not ask" is not "you are nobody" — the two must stay separable,
+    // or a dropped request reads as a parent and a real admin is locked out.
+    test('an unreadable answer is distinguished from a refusal', () => {
+        expect(/return \{ ok: false, role: null \}/.test(sb)).toBe(true);
+        expect(/return \{ ok: true, role \}/.test(sb)).toBe(true);
+        expect(core.includes('if (!ok) {')).toBe(true);
+    });
+
+    // The browser asks admin_role() — the same SECURITY DEFINER function every
+    // RLS policy calls — instead of re-deriving the role from the settings map,
+    // so the screen and the policies cannot disagree about who is privileged.
+    test('the role comes from the database, and the map match is case-insensitive', () => {
+        expect(/sbClient\.rpc\('admin_role'\)/.test(sb)).toBe(true);
+        const apply = core.slice(core.indexOf('async function applySessionRole()'));
+        expect(/roles\[email\]/.test(apply)).toBe(false);
+        expect(apply.includes("k.toLowerCase().trim() === email")).toBe(true);
+        expect(apply.includes('window._dbAdminRole || mapped')).toBe(true);
+    });
+});
+
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);

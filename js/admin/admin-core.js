@@ -114,7 +114,65 @@ function stopInactivityTimer() {
     );
 }
 
+// Turn away a session that is not an admin, BEFORE the dashboard is revealed
+// or a single query is fired.
+//
+// ⚠ SOMEBODY WITH NO ENTRY IN admin_roles IS NOT AN ADMIN AT ALL. This used to
+// fall through to 'staff' — a real admin-portal role — so a parent, and every
+// family has had a genuine Supabase Auth login since
+// parent_portal_option_b_accounts, could open admin.html and get the admin
+// shell with the Classrooms tab on it. No family's data was ever reachable
+// through it: is_admin() reads the same map and every policy refused them, so
+// what rendered was an empty screen. But an admin panel rendering at all for a
+// parent is not "not an admin", and an empty one reads as a broken page rather
+// than a closed door.
+//
+// The answer comes from admin_role() in the database rather than from a second
+// lookup in the browser, so the screen and the policies cannot disagree.
+async function ensureAdminSession() {
+    const session = await getAdminSession();
+    if (!session) return false;
+    const email = (session?.user?.email || '').toLowerCase().trim();
+
+    const { ok, role } = await fetchMyAdminRole();
+    if (!ok) {
+        // ⚠ "Could not ask" is not "you are nobody". Fail closed — an admin
+        // portal whose database is unreachable can do nothing useful anyway,
+        // so refusing costs a retry, where guessing either locks out a real
+        // admin or waves through someone who is not one.
+        await _refuseAdmin('Could not verify your access. Check your connection and sign in again.');
+        return false;
+    }
+    if (!role) {
+        await _refuseAdmin(email
+            ? `${email} is not an admin account. If you are a parent, use the family portal instead.`
+            : 'This account is not an admin account.');
+        return false;
+    }
+    window._dbAdminRole = role;
+    return true;
+}
+
+// Sign out and return to the login screen carrying a reason. Same shape as
+// _signOutInactive() — the dashboard must never be left on screen behind it.
+async function _refuseAdmin(message) {
+    window._dbAdminRole = null;
+    await logoutAdmin();
+    stopInactivityTimer();
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('adminPassword').value = '';
+    const errEl = document.getElementById('loginError');
+    if (errEl) {
+        errEl.textContent = message;
+        errEl.classList.remove('hidden');
+    }
+    document.getElementById('loginScreen').classList.remove('hidden');
+}
+
 async function showDashboard() {
+    // ⚠ Gate FIRST, while the login screen is still up — so a refused session
+    // never sees the dashboard flash on screen before it is taken away.
+    if (!(await ensureAdminSession())) return;
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
     startInactivityTimer();
@@ -136,7 +194,19 @@ async function applySessionRole() {
         // admin_roles settings (e.g. "restriced") can't silently grant access.
         // Unknown/missing roles fall back to least privilege when rules exist.
         const validRoles = Object.keys(ROLE_LABELS); // ['full','restricted','staff']
-        const assigned   = roles[email];
+        // ⚠ MATCH CASE-INSENSITIVELY, the way admin_role() does in the database
+        // (lower(kv.key) = lower(email)). admin_roles is hand-edited, so a key
+        // saved as "Dinger@timothystl.org" matches every RLS policy while a
+        // plain roles[email] lookup here misses it. That used to be a silent
+        // demotion to 'staff'; now that a session with no role is turned away
+        // by ensureAdminSession(), a mismatch between the two rules would lock
+        // a real admin out of their own portal.
+        const mapped = Object.entries(roles)
+            .find(([k]) => k.toLowerCase().trim() === email)?.[1];
+        // Prefer what the database itself said this session is — the same
+        // answer the policies enforce. The map is the fallback for the
+        // bootstrap case below, where there are no rules to read.
+        const assigned = window._dbAdminRole || mapped;
         if (assigned && !validRoles.includes(assigned)) {
             console.warn('Unknown admin role for', email, '->', assigned, '— defaulting to staff');
         }
