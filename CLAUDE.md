@@ -5675,14 +5675,43 @@ against the bug it guards. ⚠️ Three first failed on already-fixed code becau
 the negative assertions matched the **comments naming the bug** — they strip
 comments first now.
 
-⚠️ **Cloudflare posted "Deployment failed" on the branch commit.** Production is
-unaffected and was verified directly, not assumed: the live site serves v2.13.2,
-`dist/admin.min.js` contains `ensureAdminSession`, `dist/supabase.min.js`
-contains `fetchMyAdminRole`, and `/` returns `x-ssr-rooms: 5`. The Git
-integration is newly connected (PRs 317–319 have no such comment), so expect it
-on every `claude/**` PR until the build settings are looked at.
+### ⚠️ THERE ARE TWO DEPLOY PATHS NOW, AND THE NEW ONE FAILS EVERY TIME
 
-Current version: v2.13.3
+A check named **`Workers Builds: childcare-portal`** goes red on every commit.
+⚠️ **It is not a preview or branch build** — the first reading of this said so
+and was wrong. Its build URL is under `…/childcare-portal/**production**/builds/`,
+so Cloudflare's newly-connected Git integration is trying to deploy
+**production** and failing at it.
+
+**Nothing is broken on the live site, and that was measured rather than
+assumed** — twice, on two different commits: the site served v2.13.2 and then
+v2.13.3, `dist/admin.min.js` carried `ensureAdminSession`, `dist/supabase.min.js`
+carried `fetchMyAdminRole`, and `/` returned `x-ssr-rooms: 5` each time.
+
+The reason it still works is that **production is deployed by GitHub Actions**,
+not by Workers Builds: `auto-merge-claude.yml` runs `npx wrangler deploy` with
+`CLOUDFLARE_API_TOKEN`. That is the path this file has always documented. The
+Git integration is a **second, redundant deployer aimed at the same Worker**,
+and it is the one failing.
+
+- **It is not any one PR's fault.** It failed identically on a JS change (#320)
+  and on a markdown-only change (#321) — two diffs with nothing in common —
+  and PRs 317–319 carry no such check at all, so it dates from when the
+  integration was connected, not from any commit.
+- **Ruled out by measurement, not by guesswork:** asset size (457 files, largest
+  ~1 MB, against limits of 20,000 files / 25 MiB each) and the `.git`-pack
+  problem `.assetsignore` already fixed. ⚠️ **The actual build log was NOT
+  read** — it is dashboard-only and no tool in these sessions can reach it, so
+  the root cause is genuinely unknown rather than diagnosed.
+- ⚠️ **The real cost is a permanently red check.** This repo has already learned
+  once (in the church repo) that a suite with one known failure stops being read
+  for the second one. A check that is always red hides the next real one.
+- **The fix is a dashboard decision and was deliberately not taken here.**
+  Disconnecting the Git integration is the likelier right call — GitHub Actions
+  already deploys, and two mechanisms racing on one Worker is exactly the class
+  of hazard the `--theirs` dist saga came from.
+
+Current version: v2.13.4
 
 
 ## Finance summary API (for the church ChMS finance integration)
