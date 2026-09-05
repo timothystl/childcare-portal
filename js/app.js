@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch the independent admin settings in parallel. Using allSettled so a
     // single failed request degrades gracefully instead of aborting the whole
     // init (e.g. a missing room_rates row shouldn't stop the form rendering).
-    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes, newFamilyFeeRes, staffRes, contentRes] = await Promise.allSettled([
+    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes, newFamilyFeeRes, staffRes] = await Promise.allSettled([
         loadRateSettings(),
         loadCapacitySettings(),
         loadRatioSettings(),
@@ -93,7 +93,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchSetting('registration_fee'),
         fetchSetting('new_family_fee'),
         fetchPublicStaffDirectory(),
-        fetchMdoPublicContent(),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
     if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
@@ -103,7 +102,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (regFeeRes.status   === 'rejected') console.error('fetchSetting(registration_fee) failed:', regFeeRes.reason);
     if (newFamilyFeeRes.status === 'rejected') console.error('fetchSetting(new_family_fee) failed:', newFamilyFeeRes.reason);
     if (staffRes.status    === 'rejected') console.error('fetchPublicStaffDirectory failed:', staffRes.reason);
-    if (contentRes.status  === 'rejected') console.error('fetchMdoPublicContent failed:', contentRes.reason);
 
     renderPublicRoomCards();
     renderFeeNotes(
@@ -111,7 +109,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         newFamilyFeeRes.status === 'fulfilled' ? newFamilyFeeRes.value : null
     );
     renderPublicStaffDirectory(staffRes.status === 'fulfilled' ? staffRes.value : null);
-    renderMdoSiteContent(contentRes.status === 'fulfilled' ? contentRes.value : null);
 
     regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
 
@@ -194,250 +191,6 @@ function buildPublicRoomCardsHtml(rooms) {
             : `<div class="room-rate-row"><span>Half Day</span><strong>$${room.halfDayRate}</strong></div>`;
         return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div>${halfDayRow}<div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
     }).join('');
-}
-
-// ============================================================
-// MDO PUBLIC WEBSITE CONTENT
-// ============================================================
-// Renders the admin-editable copy over the page's own hardcoded markup.
-//
-// ⚠️ EVERY PATH FALLS BACK TO THE MARKUP THAT IS ALREADY ON THE PAGE. A
-// section that has never been published is absent from the payload, an
-// unreachable admin returns null, and a field left blank is skipped — in all
-// three cases the hardcoded copy in index.html is what the visitor sees. That
-// is what makes publishing one section at a time safe, and it is why none of
-// this is wrapped in a "did it load" spinner: there is nothing to wait for.
-
-/**
- * The one place stored copy becomes markup.
- *
- * ⚠️ Editors are full/restricted admins, which is the same trust level as
- * everything else in this admin — but this string is written to innerHTML on
- * a public page, so it is filtered on the way OUT rather than trusted on the
- * way in. Allows exactly the emphasis and links the existing FAQ copy already
- * uses; everything else is escaped and rendered as visible text.
- */
-function mdoRichText(value) {
-    const raw = typeof value === 'string' ? value : '';
-    if (!raw) return '';
-
-    const INLINE = ['strong', 'em', 'b', 'i'];
-    // ⚠️ A leading "/" is NOT enough to mean "this site". "//evil.example" is
-    // protocol-relative and goes somewhere else entirely while reading as an
-    // internal path — the same hole this org's own review flagged in safeUrl.
-    const safeHref = (h) => /^\/(?!\/)[^\s"'<>]*$/.test(h) || /^https:\/\/[^\s"'<>]*$/.test(h);
-
-    let out = '';
-    const open = [];   // tags awaiting a close, so a stray close cannot escape
-    let i = 0;
-
-    while (i < raw.length) {
-        const lt = raw.indexOf('<', i);
-        if (lt < 0) { out += escHtml(raw.slice(i)); break; }
-        out += escHtml(raw.slice(i, lt));
-
-        const gt = raw.indexOf('>', lt);
-        if (gt < 0) { out += escHtml(raw.slice(lt)); break; }
-
-        const tag = raw.slice(lt, gt + 1);
-        const inner = tag.slice(1, -1).trim();
-        let emitted = false;
-
-        if (inner.startsWith('/')) {
-            const name = inner.slice(1).trim().toLowerCase();
-            // Only closes something actually open. An unmatched </a> would
-            // otherwise close a real element of the page around it.
-            if (open.length && open[open.length - 1] === name) {
-                open.pop(); out += '</' + name + '>'; emitted = true;
-            }
-        } else {
-            const name = inner.split(/[\s>]/)[0].toLowerCase();
-            const rest = inner.slice(name.length).trim();
-            if (INLINE.includes(name) && rest === '') {
-                // No attributes at all — an onclick= on a permitted tag is
-                // exactly as dangerous as a forbidden tag.
-                open.push(name); out += '<' + name + '>'; emitted = true;
-            } else if (name === 'a') {
-                const m = rest.match(/^href\s*=\s*"([^"]*)"$/i);
-                if (m && safeHref(m[1])) {
-                    open.push('a'); out += '<a href="' + escHtml(m[1]) + '">'; emitted = true;
-                }
-            }
-        }
-
-        if (!emitted) out += escHtml(tag);
-        i = gt + 1;
-    }
-
-    // Anything left open is closed here rather than leaking into the page.
-    while (open.length) out += '</' + open.pop() + '>';
-    return out;
-}
-
-/** Writes text into an element only when there is something to write. */
-function mdoSetText(selector, value, root = document) {
-    if (typeof value !== 'string' || !value.trim()) return;
-    const el = root.querySelector(selector);
-    if (el) el.textContent = value;
-}
-
-/** Sets a link's label and destination, each independently optional. */
-function mdoSetLink(selector, label, href, root = document) {
-    const el = root.querySelector(selector);
-    if (!el) return;
-    if (typeof label === 'string' && label.trim()) el.textContent = label;
-    // Only a same-site path or an in-page anchor. A published link is
-    // clicked by every visitor; an off-site destination typed by mistake is
-    // worse than the button simply keeping the address it shipped with.
-    if (typeof href === 'string' && /^(?:\/(?!\/)|#)[^\s"'<>]*$/.test(href)) el.setAttribute('href', href);
-}
-
-function renderMdoSiteContent(content) {
-    if (!content || typeof content !== 'object') return;
-    try { renderMdoHero(content.hero); }       catch (e) { console.error('hero content:', e); }
-    try { renderMdoFaqs(content.faqs); }       catch (e) { console.error('faq content:', e); }
-    try { renderMdoContact(content.contact); } catch (e) { console.error('contact content:', e); }
-}
-
-function renderMdoHero(hero) {
-    if (!hero || typeof hero !== 'object') return;
-
-    mdoSetText('.hero .hero-eyebrow', hero.eyebrow);
-
-    // The heading carries one italicised tail ("...to <em>grow.</em>"). It is
-    // two plain fields rather than a rich one so nobody has to type a tag to
-    // edit the main heading on the site.
-    const h1 = document.querySelector('.hero .hero-content h1');
-    if (h1 && typeof hero.heading === 'string' && hero.heading.trim()) {
-        const tail = (typeof hero.headingEmphasis === 'string' && hero.headingEmphasis.trim())
-            ? ` <em>${escHtml(hero.headingEmphasis)}</em>` : '';
-        h1.innerHTML = escHtml(hero.heading) + tail;
-    }
-
-    mdoSetText('.hero .hero-body', hero.body);
-    mdoSetLink('.hero .hero-actions a.btn-primary',   hero.primaryLabel,   hero.primaryHref);
-    mdoSetLink('.hero .hero-actions a.btn-secondary', hero.secondaryLabel, hero.secondaryHref);
-
-    const card = document.querySelector('.hero .hero-card');
-    if (card) {
-        mdoSetText('.hero-card-hours-label', hero.cardHoursLabel, card);
-        mdoSetText('.hero-card-time',        hero.cardHours,      card);
-        mdoSetText('.hero-card-day',         hero.cardDays,       card);
-        mdoSetText('.hero-card-fullday',     hero.cardFullDayUntil, card);
-        mdoSetText('.hero-card-halfday',     hero.cardHalfDayUntil, card);
-        // The address div also contains the directions link, so only its own
-        // text node is replaced — writing textContent would delete the link.
-        const addr = card.querySelector('.hero-card-addr');
-        if (addr && typeof hero.cardAddress === 'string' && hero.cardAddress.trim()) {
-            const first = addr.firstChild;
-            if (first && first.nodeType === 3) first.nodeValue = '\n        ' + hero.cardAddress + '\n        ';
-        }
-    }
-
-    const strip = document.querySelector('.banner-strip');
-    if (strip) {
-        // A banner switched off is removed, not emptied: an empty strip still
-        // paints its own background band across the page.
-        if (hero.bannerVisible === false) { strip.remove(); return; }
-        const p = strip.querySelector('p');
-        if (p && typeof hero.bannerText === 'string' && hero.bannerText.trim()) {
-            const link = p.querySelector('a');
-            const label = (typeof hero.bannerLinkLabel === 'string' && hero.bannerLinkLabel.trim())
-                ? hero.bannerLinkLabel : (link ? link.textContent : '');
-            const href = (typeof hero.bannerHref === 'string' && /^(?:\/(?!\/)|#)[^\s"'<>]*$/.test(hero.bannerHref))
-                ? hero.bannerHref : (link ? link.getAttribute('href') : '#how-it-works');
-            p.innerHTML = escHtml(hero.bannerText) +
-                (label ? ` <a href="${escHtml(href)}">${escHtml(label)}</a>` : '');
-        }
-    }
-}
-
-function renderMdoFaqs(faqs) {
-    if (!faqs || typeof faqs !== 'object') return;
-    const section = document.getElementById('faq');
-    if (!section) return;
-
-    mdoSetText('.section-label', faqs.label, section);
-    mdoSetText('.section-title', faqs.title, section);
-
-    const itemHtml = (it) => `<div class="faq-item"><div class="faq-q">${escHtml(it.q || '')}</div><div class="faq-a">${mdoRichText(it.a)}</div></div>`;
-    // A question with no wording at all is dropped rather than rendered as an
-    // empty accordion row somebody has to click to discover is empty.
-    const usable = (arr) => (Array.isArray(arr) ? arr : [])
-        .filter(it => it && it.visible !== false && typeof it.q === 'string' && it.q.trim());
-
-    const main = usable(faqs.items);
-    // ⚠️ Only replace the list when there is something to replace it WITH.
-    // An empty array here would silently wipe the questions off the page.
-    if (main.length) {
-        const list = section.querySelector('.faq-list');
-        if (list) list.innerHTML = main.map(itemHtml).join('');
-    }
-
-    const infant = document.getElementById('faq-infant');
-    if (!infant) return;
-    if (faqs.infantVisible === false) { infant.remove(); return; }
-
-    mdoSetText('.section-label', faqs.infantLabel, infant);
-    mdoSetText('h3', faqs.infantTitle, infant);
-
-    const intro = Array.isArray(faqs.infantIntro) ? faqs.infantIntro.filter(t => typeof t === 'string' && t.trim()) : [];
-    if (intro.length) {
-        const paras = infant.querySelectorAll(':scope > p');
-        // Rewrite the paragraphs that exist; the editor offers exactly the two
-        // the page has room for rather than an open-ended list.
-        intro.slice(0, paras.length).forEach((t, i) => { paras[i].textContent = t; });
-    }
-
-    const infantItems = usable(faqs.infantItems);
-    if (infantItems.length) {
-        const list = infant.querySelector('.faq-list');
-        if (list) list.innerHTML = infantItems.map(itemHtml).join('');
-    }
-}
-
-function renderMdoContact(contact) {
-    if (!contact || typeof contact !== 'object') return;
-    const section = document.getElementById('contact');
-    if (!section) return;
-
-    mdoSetText('.section-label',    contact.label,    section);
-    mdoSetText('.section-title',    contact.title,    section);
-    mdoSetText('.section-subtitle', contact.subtitle, section);
-
-    const cards = section.querySelectorAll('.contact-grid .contact-card');
-    const [emailCard, phoneCard, addrCard] = cards;
-
-    if (emailCard && typeof contact.email === 'string' && contact.email.trim()) {
-        const v = emailCard.querySelector('.contact-card-value');
-        if (v) v.textContent = contact.email;
-        emailCard.setAttribute('href', 'mailto:' + contact.email);
-    }
-    if (phoneCard && typeof contact.phone === 'string' && contact.phone.trim()) {
-        const v = phoneCard.querySelector('.contact-card-value');
-        if (v) v.textContent = contact.phone;
-        // ⚠️ A tel: href carries digits only — a number with dashes or
-        // brackets in the href is one some dialers refuse outright, and the
-        // failure is a phone that does nothing when a parent taps it.
-        const digits = contact.phone.replace(/[^0-9]/g, '');
-        if (digits) phoneCard.setAttribute('href', 'tel:+1' + digits.replace(/^1/, ''));
-    }
-    if (addrCard) {
-        const l1 = typeof contact.addressLine1 === 'string' ? contact.addressLine1.trim() : '';
-        const l2 = typeof contact.addressLine2 === 'string' ? contact.addressLine2.trim() : '';
-        if (l1 || l2) {
-            const v = addrCard.querySelector('.contact-card-value');
-            if (v) v.innerHTML = [l1, l2].filter(Boolean).map(escHtml).join('<br>');
-        }
-    }
-
-    // The map note ends with a directions link that is part of the page, not
-    // part of the copy, so only the leading sentence is replaced.
-    const note = section.querySelector('.map-note');
-    if (note && typeof contact.mapNote === 'string' && contact.mapNote.trim()) {
-        const first = note.firstChild;
-        if (first && first.nodeType === 3) first.nodeValue = '\n      ' + contact.mapNote + '\n      ';
-    }
 }
 
 // Re-renders over whatever the worker already server-rendered into this grid.
