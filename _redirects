@@ -13,3 +13,11 @@
 # this bookmarked — redirect rather than 404.
 /portal        /parent      301
 /portal.html   /parent.html 301
+
+# Short links to the user guide handbooks (docs/handbooks/) — easy to say over
+# the phone or print on a flyer, instead of the full nested path.
+/help          /docs/handbooks/            301
+/parentguide   /docs/handbooks/parent-guide    301
+/staffguide    /docs/handbooks/staff-guide     301
+/adminguide    /docs/handbooks/admin-guide     301
+/clockinguide  /docs/handbooks/clockin-guide   301
