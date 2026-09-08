@@ -1,4 +1,6 @@
 -- ============================================================
+
+BEGIN;
 -- SECURITY DEFINER CRITICAL HOTFIX
 -- Smallest fix for the three Critical findings from the 2026-09-08
 -- SECURITY DEFINER function audit. Each is additive/self-contained:
@@ -29,10 +31,10 @@ CREATE OR REPLACE FUNCTION public.log_admin_action(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = ''
 AS $$
 BEGIN
-    IF NOT is_admin() THEN
+    IF NOT public.is_admin() THEN
         RETURN;
     END IF;
 
@@ -70,13 +72,13 @@ CREATE FUNCTION public.list_my_time_off_requests(p_staff_id uuid, p_pin integer)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, extensions
+SET search_path = ''
 AS $$
 DECLARE
     v_staff_id uuid;
     v_rows     jsonb;
 BEGIN
-    v_staff_id := staff_id_for_pin(p_staff_id, p_pin);
+    v_staff_id := public.staff_id_for_pin(p_staff_id, p_pin);
     IF v_staff_id IS NULL THEN
         RETURN NULL;
     END IF;
@@ -85,7 +87,7 @@ BEGIN
     INTO v_rows
     FROM (
         SELECT id, off_dates, recurring, reason, note, status, submitted_at
-        FROM staff_time_off_requests
+        FROM public.staff_time_off_requests
         WHERE staff_id = v_staff_id
           AND status <> 'declined'
           AND (recurring = true OR off_dates[array_upper(off_dates, 1)] >= CURRENT_DATE - 7)
@@ -108,7 +110,7 @@ CREATE FUNCTION public.submit_time_off_request(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, extensions
+SET search_path = ''
 AS $$
 DECLARE
     v_staff_id uuid;
@@ -123,7 +125,7 @@ BEGIN
         RAISE EXCEPTION 'Too many days in one request.' USING ERRCODE = '22023';
     END IF;
 
-    v_staff_id := staff_id_for_pin(p_staff_id, p_pin);
+    v_staff_id := public.staff_id_for_pin(p_staff_id, p_pin);
     IF v_staff_id IS NULL THEN
         RETURN NULL;   -- caller renders the same "invalid PIN" path as the clock-in
     END IF;
@@ -133,7 +135,7 @@ BEGIN
         v_weekday := ((EXTRACT(DOW FROM p_dates[1])::int + 6) % 7)::smallint;
     END IF;
 
-    INSERT INTO staff_time_off_requests
+    INSERT INTO public.staff_time_off_requests
         (staff_id, off_dates, recurring, weekday, reason, note, status, source)
     VALUES
         (v_staff_id, p_dates, COALESCE(p_recurring, false), v_weekday,
@@ -151,22 +153,30 @@ GRANT EXECUTE ON FUNCTION public.list_my_time_off_requests(uuid, integer) TO ano
 REVOKE ALL ON FUNCTION public.submit_time_off_request(uuid, integer, date[], boolean, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.submit_time_off_request(uuid, integer, date[], boolean, text, text) TO anon, authenticated;
 
+COMMIT;
+
 -- ============================================================
 -- VERIFY (run after applying, in the SQL editor)
 -- ============================================================
 -- 1. log_admin_action denies a non-admin:
---      -- as a non-admin authenticated session (or SET LOCAL ROLE authenticated
---      -- with a JWT whose email is not in settings.admin_roles):
---      SELECT log_admin_action('probe', 'test', 'x', '{}'::jsonb);
---      SELECT count(*) FROM admin_audit_log WHERE entity_id = 'x';  -- expect 0
+--      -- Use a unique probe id. Call as the synthetic non-admin, then RESET ROLE
+--      -- before counting: RLS hides this table from non-full callers, so counting
+--      -- without resetting would return 0 even if an insert had occurred.
+--      BEGIN;
+--      SET LOCAL ROLE authenticated;
+--      SELECT set_config('request.jwt.claims',
+--        '{"role":"authenticated","email":"nonadmin-verification@example.invalid"}', true);
+--      SELECT public.log_admin_action('probe', 'test', 'authz-hotfix-probe', '{}'::jsonb);
+--      RESET ROLE;
+--      SELECT count(*) FROM public.admin_audit_log
+--        WHERE entity_id = 'authz-hotfix-probe';  -- expect 0
+--      ROLLBACK;
 --
 -- 2. Old bare-PIN signatures are gone:
 --      SELECT public.list_my_time_off_requests(1234);              -- expect: function does not exist
 --      SELECT public.submit_time_off_request(1234, ARRAY[CURRENT_DATE]::date[]);  -- expect: function does not exist
 --
--- 3. New signatures require a real (staff_id, pin) pair, same as staff_my_schedule:
---      SELECT public.list_my_time_off_requests('<a real active staff uuid>', <that staff's real PIN>);
---      -- expect: that staff's own requests (or [] if none)
---      SELECT public.list_my_time_off_requests('<that same uuid>', <a WRONG pin>);
---      -- expect: NULL, and staff.pin_failed_attempts for that id increments
+-- 3. Exercise correct/wrong-PIN behavior only in staging or inside a fully
+--    rolled-back synthetic staff fixture. Do not use a real staff PIN or alter
+--    a real staff member's lockout counter merely to verify this migration.
 -- ============================================================
