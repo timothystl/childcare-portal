@@ -109,7 +109,44 @@ async function portalSignIn() {
     }
 }
 
+// ============================================================
+// INACTIVITY TIMEOUT
+// ============================================================
+// Mirrors the 30-minute idle timeout in js/admin/admin-core.js. A parent
+// session has carried a real Supabase Auth session since Option B
+// (parentPortalLogin -> setSession), the same kind of session an admin
+// holds — a device left signed into the family portal unattended
+// shouldn't stay signed in indefinitely either.
+const PORTAL_INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+let _portalInactivityTimer = null;
+
+function _resetPortalInactivityTimer() {
+    clearTimeout(_portalInactivityTimer);
+    _portalInactivityTimer = setTimeout(_signOutPortalInactive, PORTAL_INACTIVITY_MS);
+}
+
+async function _signOutPortalInactive() {
+    stopPortalInactivityTimer();
+    await portalSignOut();
+    portalShowError('You were signed out due to inactivity.');
+}
+
+function startPortalInactivityTimer() {
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
+        document.addEventListener(evt, _resetPortalInactivityTimer, { passive: true })
+    );
+    _resetPortalInactivityTimer();
+}
+
+function stopPortalInactivityTimer() {
+    clearTimeout(_portalInactivityTimer);
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
+        document.removeEventListener(evt, _resetPortalInactivityTimer)
+    );
+}
+
 async function portalSignOut() {
+    stopPortalInactivityTimer();
     await parentPortalLogout();
     portalContext = null;
     pEl('portalSignedIn')?.classList.add('hidden');
@@ -171,6 +208,7 @@ async function portalShowSignedIn() {
     // .portal-app-open in portal.css. Without this the shell sits inside 24px
     // of padding and the page scrolls a little on iOS, tab bar and all.
     document.body.classList.add('portal-app-open');
+    startPortalInactivityTimer();
 
     const full  = portalContext?.parent_name || portalContext?.family_name || '';
     // First name only — "Good afternoon, Sarah Carter." reads like a form letter.

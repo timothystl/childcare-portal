@@ -22,6 +22,17 @@ function generateToken(): string {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+// pin_reset_tokens.token_hash stores only this digest — never the raw
+// token — so a database read can't be turned into a working reset link.
+// Must match consume_pin_reset()'s encode(digest(p_token, 'sha256'), 'hex').
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input)
+  const digestBuf = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(digestBuf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 function emailHtml(parentName: string, link: string): string {
   const safeName = parentName
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -112,11 +123,12 @@ Deno.serve(async (req) => {
       .lt('expires_at', new Date().toISOString())
 
     const token = generateToken()
+    const token_hash = await sha256Hex(token)
     const expires_at = new Date(Date.now() + TOKEN_TTL_MS).toISOString()
 
     const { error: insErr } = await supabase
       .from('pin_reset_tokens')
-      .insert({ token, family_id: familyId, is_parent2: isParent2, expires_at })
+      .insert({ token_hash, family_id: familyId, is_parent2: isParent2, expires_at })
     if (insErr) return ok()
 
     const link = `${ALLOWED_ORIGIN}/reset-pin.html?token=${encodeURIComponent(token)}`
