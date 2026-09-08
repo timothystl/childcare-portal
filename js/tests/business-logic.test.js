@@ -2580,6 +2580,49 @@ describe('staff credentials', () => {
     });
 });
 
+// ── SECURITY DEFINER critical hotfix ───────────────────────────
+describe('SECURITY DEFINER critical hotfix', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260908182913_security_definer_critical_hotfix.sql');
+    const uncommented = migration
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*--.*$/gm, '');
+
+    test('the migration is atomic and privileged functions use a fixed empty search path', () => {
+        expect(/^\s*BEGIN;/m.test(uncommented)).toBe(true);
+        expect(/COMMIT;\s*$/.test(uncommented)).toBe(true);
+        expect((uncommented.match(/SET search_path = ''/g) || []).length).toBe(3);
+        expect(uncommented.includes('public.is_admin()')).toBe(true);
+        expect((uncommented.match(/public\.staff_id_for_pin\(p_staff_id, p_pin\)/g) || []).length).toBe(2);
+    });
+
+    test('the unsafe bare-PIN overloads are removed, not left callable', () => {
+        expect(uncommented.includes('DROP FUNCTION IF EXISTS public.list_my_time_off_requests(integer);')).toBe(true);
+        expect(uncommented.includes('DROP FUNCTION IF EXISTS public.submit_time_off_request(integer, date[], boolean, text, text);')).toBe(true);
+        expect(uncommented.includes('list_my_time_off_requests(p_staff_id uuid, p_pin integer)')).toBe(true);
+        expect(uncommented.includes('p_staff_id  uuid')).toBe(true);
+        expect(/FROM\s+staff\s+s[\s\S]*crypt\(p_pin::text/.test(uncommented)).toBe(false);
+    });
+
+    test('new PIN-gated functions revoke PUBLIC and expose only the intended kiosk roles', () => {
+        expect(uncommented.includes('REVOKE ALL ON FUNCTION public.list_my_time_off_requests(uuid, integer) FROM PUBLIC;')).toBe(true);
+        expect(uncommented.includes('GRANT EXECUTE ON FUNCTION public.list_my_time_off_requests(uuid, integer) TO anon, authenticated;')).toBe(true);
+        expect(uncommented.includes('REVOKE ALL ON FUNCTION public.submit_time_off_request(uuid, integer, date[], boolean, text, text) FROM PUBLIC;')).toBe(true);
+        expect(uncommented.includes('GRANT EXECUTE ON FUNCTION public.submit_time_off_request(uuid, integer, date[], boolean, text, text) TO anon, authenticated;')).toBe(true);
+    });
+
+    test('the browser always supplies the selected staff id to the time-off RPC', () => {
+        const sb = read('js/supabase.js');
+        const staff = read('js/staff/staff-schedule.js');
+        const submit = sb.slice(sb.indexOf('async function submitTimeOffRequestByPin'), sb.indexOf('async function fetchMyStaffSchedule'));
+        const list = sb.slice(sb.indexOf('async function listMyTimeOffRequests'), sb.indexOf('// ADMIN ROLES'));
+        expect(submit.includes('p_staff_id:  staffId')).toBe(true);
+        expect(list.includes('p_staff_id: staffId')).toBe(true);
+        expect(staff.includes('staffId: slStaffId')).toBe(true);
+    });
+});
+
 // ---- Summary ----
 
 // ── Cost to add staff (Daily Staffing Requirement) ──────────────
@@ -3014,4 +3057,3 @@ describe('Admin users — only real admins, and all of them', () => {
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);
-
