@@ -405,10 +405,11 @@ async function slSubmitDayOff() {
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
         const ok = await submitTimeOffRequestByPin({
-            pin:    slPin,
+            staffId: slStaffId,
+            pin:     slPin,
             dates,
-            reason: slDayOffReason,
-            note:   slSchedEl('slDayOffNote').value.trim(),
+            reason:  slDayOffReason,
+            note:    slSchedEl('slDayOffNote').value.trim(),
         });
         if (!ok) { slToast('That request was not accepted. Check your PIN.', 'err'); return; }
         slSchedEl('slDayOffSheet').classList.add('hidden');

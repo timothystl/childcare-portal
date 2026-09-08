@@ -4026,13 +4026,21 @@ async function deleteTimeOffRequest(id) {
 
 /**
  * Kiosk: file a request as the PIN-holder. Returns null when the PIN does
- * not match an active staff member (same signal as lookup_staff_by_pin).
+ * not match the given staff id (same signal as lookup_staff_by_pin).
  *
- * @param {{pin:string|number, dates:string[], recurring?:boolean, reason?:string, note?:string}} args
+ * ⚠️ p_staff_id is required: the RPC re-verifies the PIN against THAT staff
+ * row via staff_id_for_pin(), the same lockout-and-throttle path every other
+ * staff RPC uses. A bare PIN with no staff id used to be checked against
+ * every active staff member's hash in turn — that let an unauthenticated
+ * caller identify a staff member by guessing a 4-digit PIN with no lockout
+ * at all. Never call this RPC without a resolved staff id in hand.
+ *
+ * @param {{staffId:string, pin:string|number, dates:string[], recurring?:boolean, reason?:string, note?:string}} args
  */
-async function submitTimeOffRequestByPin({ pin, dates, recurring = false, reason = '', note = '' }) {
+async function submitTimeOffRequestByPin({ staffId, pin, dates, recurring = false, reason = '', note = '' }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('submit_time_off_request', {
+        p_staff_id:  staffId,
         p_pin:       parseInt(pin, 10),
         p_dates:     dates,
         p_recurring: !!recurring,
@@ -4098,10 +4106,18 @@ async function answerShiftSwap(staffId, pin, swapId, accept) {
     return data === true;
 }
 
-/** Kiosk: the PIN-holder's own recent/standing requests. */
-async function listMyTimeOffRequests(pin) {
+/**
+ * Kiosk: the PIN-holder's own recent/standing requests.
+ *
+ * ⚠️ staffId is required — see submitTimeOffRequestByPin() above for why a
+ * bare PIN alone must never be sent to this RPC.
+ */
+async function listMyTimeOffRequests(staffId, pin) {
     if (!sbClient) return [];
-    const { data, error } = await sbClient.rpc('list_my_time_off_requests', { p_pin: parseInt(pin, 10) });
+    const { data, error } = await sbClient.rpc('list_my_time_off_requests', {
+        p_staff_id: staffId,
+        p_pin:      parseInt(pin, 10),
+    });
     if (error) throw friendlyError(error);
     return Array.isArray(data) ? data : [];
 }
