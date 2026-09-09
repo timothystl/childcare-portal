@@ -1427,6 +1427,10 @@ describe('billing invoice integrity guards', () => {
     const migration = read('supabase/migrations/20260825040000_billing_invoice_integrity.sql');
     const billingUi = read('js/admin/admin-billing.js');
     const billMonth = read('js/admin/admin-bill-month.js');
+    const boundary = read('supabase/migrations/20260909033344_harden_public_registration_billing_boundary.sql');
+    const publicApp = read('js/app.js');
+    const supabaseClient = read('js/supabase.js');
+    const adminCalendar = read('js/admin/admin-calendar.js');
 
     test('database calculator constrains care dates to the requested month', () => {
         expect(migration.includes('rd.care_date >= v_month_start')).toBe(true);
@@ -1459,11 +1463,32 @@ describe('billing invoice integrity guards', () => {
         expect(reports.includes('weeklyHalfRate')).toBe(true);
     });
 
-    test('post-registration invoice failures are durably reported', () => {
-        const app = read('js/app.js');
-        const monitor = read('js/error-monitor.js');
-        expect(app.includes('window.reportClientError?.(')).toBe(true);
-        expect(monitor.includes('window.reportClientError = reportError')).toBe(true);
+    test('registration and invoice reconciliation share one server transaction', () => {
+        const datesInsertAt = boundary.indexOf('INSERT INTO public.registration_dates');
+        const reconcileAt = boundary.indexOf('public._reconcile_billing_invoice_internal');
+        expect(datesInsertAt).toBeGreaterThan(-1);
+        expect(reconcileAt).toBeGreaterThan(datesInsertAt);
+        expect(boundary.includes("SET search_path = ''")).toBe(true);
+    });
+
+    test('anonymous billing cannot be triggered by email independently', () => {
+        expect(/DROP FUNCTION IF EXISTS public\.create_billing_invoice_by_email\(text, char\(7\), numeric\);[\s\S]*DROP FUNCTION IF EXISTS public\.create_billing_invoice_by_email\(text, char\(7\)\);/.test(boundary)).toBe(true);
+        expect(publicApp.includes('createInvoiceByEmail(')).toBe(false);
+        expect(supabaseClient.includes('async function createInvoiceByEmail')).toBe(false);
+        expect(adminCalendar.includes('reconcileBillingInvoice(family.id, monthKey)')).toBe(true);
+    });
+
+    test('anonymous registration has an expiring rate boundary and private hashed audit', () => {
+        expect(boundary.includes("r.created_at >= now() - interval '15 minutes'")).toBe(true);
+        expect(boundary.includes('CREATE TABLE IF NOT EXISTS private.registration_submission_audit')).toBe(true);
+        expect(boundary.includes("extensions.digest(v_email, 'sha256')")).toBe(true);
+        expect(/REVOKE ALL ON TABLE private\.registration_submission_audit[\s\S]*PUBLIC, anon, authenticated/.test(boundary)).toBe(true);
+        expect(/registration_submission_audit[\s\S]*?\bemail\s+text/i.test(boundary)).toBe(false);
+    });
+
+    test('submit_registration is granted explicitly, never through PUBLIC', () => {
+        expect(boundary.includes('REVOKE EXECUTE ON FUNCTION public.submit_registration(jsonb) FROM PUBLIC')).toBe(true);
+        expect(boundary.includes('GRANT EXECUTE ON FUNCTION public.submit_registration(jsonb) TO anon, authenticated')).toBe(true);
     });
 });
 

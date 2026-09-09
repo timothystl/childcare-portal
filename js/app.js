@@ -1725,18 +1725,9 @@ async function handleSubmit(e) {
                 </tr>`;
             }).join('');
 
-            // Create billing invoice — non-blocking, never delays the confirmation.
-            // FS5: no amount is sent. The RPC recomputes the family's month from
-            // the registration rows just written, so the browser cannot set what
-            // a family is billed.
-            createInvoiceByEmail(parentEmail, targetMonthKey).catch(err => {
-                console.error('Invoice draft failed after registration:', err);
-                window.reportClientError?.(
-                    `Invoice draft failed after registration: ${err?.message || err}`,
-                    err?.stack || null,
-                    { type: 'billing_reconcile', month: targetMonthKey, source: 'parent_registration' },
-                );
-            });
+            // submit_registration creates the registration, its dates, and any
+            // applicable draft invoice in one server transaction. There is no
+            // separate public billing call and no email-address billing trigger.
 
             // Day count summary for receipt (unique child-day pairs; a weekly-rate
             // week still counts as 5 individual days for this summary)
