@@ -56,6 +56,7 @@ serve(async (_req) => {
         }
 
         let sent = 0;
+        let failed = 0;
         for (const [familyId, kids] of byFamily) {
             const parts: string[] = [];
             for (const [name, types] of kids) {
@@ -89,11 +90,14 @@ serve(async (_req) => {
                 }),
             });
             if (res.ok) sent++;
-            else console.error("send-push failed for family", familyId, res.status);
+            else {
+                failed++;
+                console.error("send-push failed for family", familyId, res.status);
+            }
         }
 
         console.log(`day summary ${careDate}: ${sent}/${byFamily.size} families notified`);
-        return json({ families: byFamily.size, sent });
+        return json({ families: byFamily.size, sent, failed }, failed ? 502 : 200);
 
     } catch (err) {
         console.error("send-day-summary:", err);

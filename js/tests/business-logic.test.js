@@ -1845,6 +1845,42 @@ describe('Stax payment reconciliation job', () => {
     });
 });
 
+describe('scheduled jobs report partial delivery failures honestly', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    test('day summaries return a failing status when any family push fails', () => {
+        const source = read('supabase/functions/send-day-summary/index.ts');
+        expect(source.includes('failed++')).toBe(true);
+        expect(source.includes('failed ? 502 : 200')).toBe(true);
+    });
+
+    test('photo cleanup exposes orphaned-object deletion failures', () => {
+        const source = read('supabase/functions/sweep-child-photos/index.ts');
+        expect(source.includes('failed += chunk.length')).toBe(true);
+        expect(source.includes('status: failed ? 502 : 200')).toBe(true);
+    });
+
+    test('waitlist reminders advance state only after confirmed email delivery', () => {
+        const source = read('supabase/functions/send-waitlist-reminders/index.ts');
+        const deliveryBlock = source.slice(
+            source.indexOf('const reminderResponse'),
+            source.indexOf('// Weekly digest')
+        );
+        expect(deliveryBlock.indexOf('if (!reminderResponse?.ok)')).toBeLessThan(
+            deliveryBlock.indexOf('last_reminder_sent_at')
+        );
+        expect(source.includes('status: failed ? 502 : 200')).toBe(true);
+    });
+
+    test('clock alerts do not write their dedupe record after a failed notification', () => {
+        const source = read('supabase/functions/check-missed-clocks/index.ts');
+        expect(source.includes('if (!pushResponse.ok) throw')).toBe(true);
+        expect(source.includes('if (!emailResponse.ok) throw')).toBe(true);
+        expect(source.includes('sent === alerts.length ? 200 : 502')).toBe(true);
+    });
+});
+
 describe('Waitlist Planner — Grid drawer is reachable, weekday headers print once', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

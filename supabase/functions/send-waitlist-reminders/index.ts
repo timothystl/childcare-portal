@@ -75,6 +75,7 @@ serve(async (req) => {
         const replyTo   = Deno.env.get("RESEND_REPLY_TO")   || fromEmail;
 
         const sentTo: Array<{ childName: string; parentName: string; needsTour: boolean }> = [];
+        let failed = 0;
 
         for (const app of candidates) {
             const needsTour  = (app.tour_status || "not_scheduled") === "not_scheduled";
@@ -124,7 +125,7 @@ serve(async (req) => {
   </table>
 </body></html>`;
 
-                await fetch("https://api.resend.com/emails", {
+                const reminderResponse = await fetch("https://api.resend.com/emails", {
                     method:  "POST",
                     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -136,13 +137,27 @@ serve(async (req) => {
                             : `Quick Check-In — Timothy Lutheran MDO Waitlist`,
                         html,
                     }),
-                }).catch(() => {});
+                }).catch(() => null);
+                if (!reminderResponse?.ok) {
+                    failed++;
+                    console.error("waitlist reminder delivery failed", app.id, reminderResponse?.status || "network");
+                    continue;
+                }
+            } else {
+                failed++;
+                console.error("waitlist reminder delivery failed: email provider not configured");
+                continue;
             }
 
-            await sb.from("waitlist_applications").update({
+            const { error: updateError } = await sb.from("waitlist_applications").update({
                 last_reminder_sent_at: new Date().toISOString(),
                 reminder_count:        (app.reminder_count || 0) + 1,
             }).eq("id", app.id);
+            if (updateError) {
+                failed++;
+                console.error("waitlist reminder state update failed", app.id);
+                continue;
+            }
 
             sentTo.push({ childName: app.child_name, parentName: app.parent_name, needsTour });
         }
@@ -172,7 +187,7 @@ serve(async (req) => {
     </td></tr>
   </table>
 </body></html>`;
-            await fetch("https://api.resend.com/emails", {
+            const digestResponse = await fetch("https://api.resend.com/emails", {
                 method:  "POST",
                 headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -181,10 +196,14 @@ serve(async (req) => {
                     subject: `Waitlist Reminders Sent — ${sentTo.length} famil${sentTo.length === 1 ? "y" : "ies"}`,
                     html:    digestHtml,
                 }),
-            }).catch(() => {});
+            }).catch(() => null);
+            if (!digestResponse?.ok) {
+                failed++;
+                console.error("waitlist reminder digest failed", digestResponse?.status || "network");
+            }
         }
 
-        return new Response(JSON.stringify({ checked: apps?.length || 0, reminded: sentTo.length }), { status: 200 });
+        return new Response(JSON.stringify({ checked: apps?.length || 0, reminded: sentTo.length, failed }), { status: failed ? 502 : 200 });
 
     } catch (err) {
         return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500 });

@@ -49,22 +49,24 @@ serve(async (_req) => {
         // Storage remove caps out well below any plausible week of photos, but
         // chunk anyway so a busy week cannot silently drop the tail.
         let removed = 0;
+        let failed = 0;
         for (let i = 0; i < paths.length; i += 100) {
             const chunk = paths.slice(i, i + 100);
             const { error: rmErr } = await admin.storage.from("child-photos").remove(chunk);
             if (rmErr) {
-                // The rows are already gone, so the photos are unreachable
-                // either way. Log loudly rather than failing — a retry would
-                // find nothing to delete and report success, hiding this.
-                console.error("storage remove failed for chunk:", chunk, rmErr);
+                // The rows are already gone, so the photos are unreachable.
+                // Report a non-2xx result so cron monitoring cannot mistake
+                // partial storage cleanup for a fully successful sweep.
+                console.error("storage remove failed for expired-photo chunk", chunk.length, rmErr.message);
+                failed += chunk.length;
             } else {
                 removed += chunk.length;
             }
         }
 
         console.log(`swept ${removed}/${paths.length} expired daily photos`);
-        return new Response(JSON.stringify({ removed, rows_deleted: paths.length }), {
-            status: 200, headers: { "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ removed, failed, rows_deleted: paths.length }), {
+            status: failed ? 502 : 200, headers: { "Content-Type": "application/json" },
         });
 
     } catch (err) {

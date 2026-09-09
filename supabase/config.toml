@@ -15,6 +15,12 @@ verify_jwt = false
 [functions.request-pin-reset]
 verify_jwt = false
 
+# Administrative schedule-change notices require a valid Supabase user JWT;
+# the function repeats the user lookup before sending. Keep this explicit so
+# a bulk deploy cannot accidentally publish the checked-in function as public.
+[functions.send-schedule-change]
+verify_jwt = true
+
 # `finance-summary` is called server-to-server by the church's ChMS finance
 # integration, authenticated by a static X-Api-Key shared secret
 # (FINANCE_API_KEY) rather than a Supabase session — there's no user JWT for
