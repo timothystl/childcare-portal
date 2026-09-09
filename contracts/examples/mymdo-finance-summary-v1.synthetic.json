@@ -1,0 +1,32 @@
+{
+  "contract": "mymdo.finance-summary.v1",
+  "dataClassification": "restricted-aggregate",
+  "sourceProduct": "mymdo",
+  "consumerProduct": "finance",
+  "currency": "USD",
+  "generatedAt": "2026-09-01T00:05:00Z",
+  "sourceThrough": "2026-08-31T23:59:59Z",
+  "periods": [
+    {
+      "period": "2026-08",
+      "category": "tuition-income",
+      "measure": "actual",
+      "amountCents": 1250000,
+      "methodology": "ledger-actual"
+    },
+    {
+      "period": "2026-08",
+      "category": "payroll",
+      "measure": "actual",
+      "amountCents": 640000,
+      "methodology": "trend-estimate"
+    },
+    {
+      "period": "2026-08",
+      "category": "payroll",
+      "measure": "budget",
+      "amountCents": 675000,
+      "methodology": "annual-budget-proration"
+    }
+  ]
+}
