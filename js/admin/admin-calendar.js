@@ -723,7 +723,16 @@ function _syncCapSelect() {
 async function _recomputeInvoice(parentEmail, monthKey) {
     if (!parentEmail || !monthKey) return null;
     try {
-        const invoiceId = await createInvoiceByEmail(parentEmail, monthKey);
+        if (!allFamiliesData || !allFamiliesData.length) {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: false });
+        }
+        const normalizedEmail = parentEmail.trim().toLowerCase();
+        const family = (allFamiliesData || []).find(f =>
+            (f.parent_email || '').trim().toLowerCase() === normalizedEmail ||
+            (f.parent2_email || '').trim().toLowerCase() === normalizedEmail
+        );
+        if (!family?.id) return null;
+        const invoiceId = await reconcileBillingInvoice(family.id, monthKey);
         if (!invoiceId) return null;
         return await fetchBillingInvoiceById(invoiceId);
     } catch (err) {
@@ -2071,21 +2080,7 @@ async function _arSubmit() {
             });
         }
 
-        // Create billing invoice. FS5: the RPC recomputes the family's whole
-        // month server-side from the registration rows, so no total is passed.
-        // That also picks up the sibling discount across separate registrations,
-        // which the old per-session calculation here could not see.
-        try {
-            const monthKey = [..._arDates.keys()][0].substring(0, 7);
-            await createInvoiceByEmail(_arFamily.parent_email, monthKey);
-        } catch (err) {
-            console.error('Invoice draft failed after admin registration:', err);
-            window.reportClientError?.(
-                `Invoice draft failed after admin registration: ${err?.message || err}`,
-                err?.stack || null,
-                { type: 'billing_reconcile', source: 'admin_registration' },
-            );
-        }
+        // submit_registration reconciles the invoice in the same transaction.
 
         if (_arWaitlistAppId) {
             try { await updateWaitlistApplication(_arWaitlistAppId, { status: 'enrolled' }); } catch (_) { /* non-blocking — registration is already created */ }
