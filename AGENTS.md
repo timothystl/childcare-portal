@@ -75,8 +75,10 @@ review branch and PR. Merging to `main` is a production release and requires exp
 ## Timothy Digital overhaul checkpoint
 
 - myMDO remains one product and repository during the current preparation work.
-- Preparation 3 backup/restore and Preparation 6 documentation reset are in progress at the
-  cross-product level. No myMDO repository rename, shared-auth rollout, data move, or payroll
+- The CHMS retained-backup packet and Preparations 4–5 are closed with explicit owner decisions;
+  no complete myMDO recovery pass is claimed. Preparation 6 documentation reset is in progress and
+  its current path dispositions are recorded in the private architecture repository. No myMDO
+  repository rename, shared-auth rollout, data move, or payroll
   cutover is authorized by that status.
 - Finance may consume narrow approved summaries from myMDO; it does not own raw childcare billing,
   clocks, schedules, or family records.
