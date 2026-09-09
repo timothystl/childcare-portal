@@ -17,10 +17,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 
 const WORKER_ORIGIN = "https://mdo.timothystl.org";
 
-serve(async (_req) => {
+serve(async (req) => {
+    if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey, {
         auth: { autoRefreshToken: false, persistSession: false },

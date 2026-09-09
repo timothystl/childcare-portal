@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 
 const CONFIRM_URL = "https://mdo.timothystl.org/confirm-interest";
 const ADMIN_URL   = "https://mdo.timothystl.org/admin";
@@ -31,12 +32,8 @@ function parseSettingsValue(raw: unknown): Record<string, unknown> {
 }
 
 serve(async (req) => {
-    // Only allow service role calls (invoked by pg_cron, never by browsers).
-    const auth = req.headers.get("Authorization") || "";
+    if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    if (!auth.includes(serviceRoleKey)) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
 
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

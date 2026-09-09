@@ -1881,6 +1881,36 @@ describe('scheduled jobs report partial delivery failures honestly', () => {
     });
 });
 
+describe('scheduled jobs use a scoped cron credential', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const jobs = [
+        'check-missed-clocks', 'send-waitlist-reminders', 'sweep-child-photos',
+        'send-day-summary', 'reconcile-stax-payments',
+    ];
+
+    test('every scheduled function authenticates through the shared cron guard', () => {
+        for (const job of jobs) {
+            const source = read(`supabase/functions/${job}/index.ts`);
+            expect(source.includes('isAuthorizedCronRequest(req)')).toBe(true);
+        }
+    });
+
+    test('cron secret comparison is constant-time and never logs the secret', () => {
+        const source = read('supabase/functions/_shared/cron-auth.ts');
+        expect(source.includes('crypto.subtle.digest')).toBe(true);
+        expect(source.includes('difference |=')).toBe(true);
+        expect(source.includes('console.')).toBe(false);
+    });
+
+    test('replacement cron commands read a scoped Vault secret, not a service-role JWT', () => {
+        const migration = read('supabase/migrations/20260909030842_scope_scheduled_job_credentials.sql');
+        expect(migration.includes("name = 'mymdo_cron_secret'")).toBe(true);
+        expect(migration.includes("'X-Cron-Secret'")).toBe(true);
+        expect(migration.includes('SERVICE_ROLE')).toBe(false);
+    });
+});
+
 describe('Waitlist Planner — Grid drawer is reachable, weekday headers print once', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

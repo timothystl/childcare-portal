@@ -59,6 +59,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -195,7 +196,8 @@ async function sendAlertEmail(o: {
     }
 }
 
-serve(async (_req) => {
+serve(async (req) => {
+    if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
     try {
         const apiKey = Deno.env.get("STAX_API_KEY");
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

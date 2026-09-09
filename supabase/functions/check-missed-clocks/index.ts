@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 
 // Shift windows in 24-hr minutes
 const SHIFT_AM_START = 8 * 60 + 15;   // 08:15
@@ -22,12 +23,8 @@ function escHtml(s: string): string {
 }
 
 serve(async (req) => {
-    // Only allow service role calls
-    const auth = req.headers.get("Authorization") || "";
+    if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    if (!auth.includes(serviceRoleKey)) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
 
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
