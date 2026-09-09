@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 
 // Shift windows in 24-hr minutes
 const SHIFT_AM_START = 8 * 60 + 15;   // 08:15
@@ -22,12 +23,8 @@ function escHtml(s: string): string {
 }
 
 serve(async (req) => {
-    // Only allow service role calls
-    const auth = req.headers.get("Authorization") || "";
+    if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    if (!auth.includes(serviceRoleKey)) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
 
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -138,7 +135,7 @@ serve(async (req) => {
         const results = await Promise.allSettled(alerts.map(async alert => {
             // 1. Send push notification to staff member
             if (workerUrl) {
-                await fetch(`${workerUrl}/send-staff-push`, {
+                const pushResponse = await fetch(`${workerUrl}/send-staff-push`, {
                     method:  "POST",
                     headers: { "Authorization": `Bearer ${serviceRoleKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -148,7 +145,8 @@ serve(async (req) => {
                             ? "You're still shown as clocked in. Please clock out when you leave."
                             : `Your shift started and you haven't clocked in yet. Please clock in now.`,
                     }),
-                }).catch(() => {});
+                });
+                if (!pushResponse.ok) throw new Error(`staff push HTTP ${pushResponse.status}`);
             }
 
             // 2. Send director email if notify_email configured
@@ -182,7 +180,7 @@ serve(async (req) => {
   </table>
 </body></html>`;
 
-                await fetch("https://api.resend.com/emails", {
+                const emailResponse = await fetch("https://api.resend.com/emails", {
                     method:  "POST",
                     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -192,7 +190,8 @@ serve(async (req) => {
                         subject:  `🕐 Missed Clock — ${alert.staffName} — ${workDate}`,
                         html,
                     }),
-                }).catch(() => {});
+                });
+                if (!emailResponse.ok) throw new Error(`director email HTTP ${emailResponse.status}`);
             }
 
             // 3. Record notification to prevent duplicates. Use upsert with
@@ -200,15 +199,16 @@ serve(async (req) => {
             // a unique-violation — and so the dedupe row is always written.
             // (A plain insert with the non-existent .onConflict().ignore() chain
             // rejects and leaves no record, re-alerting every 15 minutes.)
-            await sb.from("staff_clock_notifications").upsert({
+            const { error: notificationError } = await sb.from("staff_clock_notifications").upsert({
                 staff_id:          alert.staffId,
                 work_date:         workDate,
                 notification_type: alert.type,
             }, { onConflict: "staff_id,work_date,notification_type", ignoreDuplicates: true });
+            if (notificationError) throw notificationError;
         }));
 
         const sent = results.filter(r => r.status === "fulfilled").length;
-        return new Response(JSON.stringify({ checked: true, alerts: alerts.length, sent }), { status: 200 });
+        return new Response(JSON.stringify({ checked: true, alerts: alerts.length, sent }), { status: sent === alerts.length ? 200 : 502 });
 
     } catch (err) {
         return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500 });

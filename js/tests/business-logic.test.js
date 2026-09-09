@@ -1845,6 +1845,72 @@ describe('Stax payment reconciliation job', () => {
     });
 });
 
+describe('scheduled jobs report partial delivery failures honestly', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    test('day summaries return a failing status when any family push fails', () => {
+        const source = read('supabase/functions/send-day-summary/index.ts');
+        expect(source.includes('failed++')).toBe(true);
+        expect(source.includes('failed ? 502 : 200')).toBe(true);
+    });
+
+    test('photo cleanup exposes orphaned-object deletion failures', () => {
+        const source = read('supabase/functions/sweep-child-photos/index.ts');
+        expect(source.includes('failed += chunk.length')).toBe(true);
+        expect(source.includes('status: failed ? 502 : 200')).toBe(true);
+    });
+
+    test('waitlist reminders advance state only after confirmed email delivery', () => {
+        const source = read('supabase/functions/send-waitlist-reminders/index.ts');
+        const deliveryBlock = source.slice(
+            source.indexOf('const reminderResponse'),
+            source.indexOf('// Weekly digest')
+        );
+        expect(deliveryBlock.indexOf('if (!reminderResponse?.ok)')).toBeLessThan(
+            deliveryBlock.indexOf('last_reminder_sent_at')
+        );
+        expect(source.includes('status: failed ? 502 : 200')).toBe(true);
+    });
+
+    test('clock alerts do not write their dedupe record after a failed notification', () => {
+        const source = read('supabase/functions/check-missed-clocks/index.ts');
+        expect(source.includes('if (!pushResponse.ok) throw')).toBe(true);
+        expect(source.includes('if (!emailResponse.ok) throw')).toBe(true);
+        expect(source.includes('sent === alerts.length ? 200 : 502')).toBe(true);
+    });
+});
+
+describe('scheduled jobs use a scoped cron credential', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const jobs = [
+        'check-missed-clocks', 'send-waitlist-reminders', 'sweep-child-photos',
+        'send-day-summary', 'reconcile-stax-payments',
+    ];
+
+    test('every scheduled function authenticates through the shared cron guard', () => {
+        for (const job of jobs) {
+            const source = read(`supabase/functions/${job}/index.ts`);
+            expect(source.includes('isAuthorizedCronRequest(req)')).toBe(true);
+        }
+    });
+
+    test('cron secret comparison is constant-time and never logs the secret', () => {
+        const source = read('supabase/functions/_shared/cron-auth.ts');
+        expect(source.includes('crypto.subtle.digest')).toBe(true);
+        expect(source.includes('difference |=')).toBe(true);
+        expect(source.includes('console.')).toBe(false);
+    });
+
+    test('replacement cron commands read a scoped Vault secret, not a service-role JWT', () => {
+        const migration = read('supabase/migrations/20260909030842_scope_scheduled_job_credentials.sql');
+        expect(migration.includes("name = 'mymdo_cron_secret'")).toBe(true);
+        expect(migration.includes("'X-Cron-Secret'")).toBe(true);
+        expect(migration.includes('SERVICE_ROLE')).toBe(false);
+    });
+});
+
 describe('Waitlist Planner — Grid drawer is reachable, weekday headers print once', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

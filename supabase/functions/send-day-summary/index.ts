@@ -17,10 +17,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 
 const WORKER_ORIGIN = "https://mdo.timothystl.org";
 
-serve(async (_req) => {
+serve(async (req) => {
+    if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey, {
         auth: { autoRefreshToken: false, persistSession: false },
@@ -56,6 +58,7 @@ serve(async (_req) => {
         }
 
         let sent = 0;
+        let failed = 0;
         for (const [familyId, kids] of byFamily) {
             const parts: string[] = [];
             for (const [name, types] of kids) {
@@ -89,11 +92,14 @@ serve(async (_req) => {
                 }),
             });
             if (res.ok) sent++;
-            else console.error("send-push failed for family", familyId, res.status);
+            else {
+                failed++;
+                console.error("send-push failed for family", familyId, res.status);
+            }
         }
 
         console.log(`day summary ${careDate}: ${sent}/${byFamily.size} families notified`);
-        return json({ families: byFamily.size, sent });
+        return json({ families: byFamily.size, sent, failed }, failed ? 502 : 200);
 
     } catch (err) {
         console.error("send-day-summary:", err);
