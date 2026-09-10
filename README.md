@@ -13,6 +13,14 @@ Read [`AGENTS.md`](AGENTS.md). It is the sole current implementation and safety 
 Other Markdown files are task-specific manuals, historical reviews, research, and migration
 records. They are not parallel sources of current architecture.
 
+Current references:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data ownership](docs/DATA-OWNERSHIP.md)
+- [Operations](docs/OPERATIONS.md)
+- [Security](docs/SECURITY.md)
+- [Testing](docs/TESTING.md)
+
 ## Current runtime
 
 - Cloudflare Worker and static assets: `worker.js` with `wrangler.jsonc`
