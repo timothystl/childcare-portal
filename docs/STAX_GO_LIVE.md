@@ -124,3 +124,27 @@ no payment history, no refund path and no reconciliation backlog tied to it.
       hosting Apple's domain-verification file on mdo.timothystl.org. Treat
       as a real follow-on project once the plain card flow is proven in
       pilot, not something to add before the first real charge.
+- [ ] **An admin "all payments" view.** Finance → Ledger only shows families
+      with real enrollment/attendance for the selected month
+      (`computeBillMonthExceptions`) — a payment for a family with no
+      current billing-cycle row (tonight's test family, or a real future
+      case like a registration/waitlist deposit) never appears there, even
+      though the payment and invoice both exist correctly in the database.
+      The only screen that queries `billing_payments` directly is the
+      ProCare AR Aging View (`admin-billing.js`), and that's scoped to
+      ProCare-imported rows specifically, not general purpose. Needs a real
+      design pass (date, family, amount, processor, linked invoice or
+      "unapplied"), not a quick bolt-on.
+- [ ] **Paying before a day of care is selected** (e.g. a registration or
+      waitlist fee, before any invoice exists for that family). Not
+      supported today, and not a small addition:
+      `billing_payments.invoice_id` is nullable, but a null-invoice payment
+      is currently treated as an error state — `stax_quote_balance()`
+      explicitly detects it as an "unapplied credit" and refuses to let the
+      family pay anything else online until the office resolves it by hand.
+      Registration/new-family fees already exist as settings, but they're
+      designed to be folded into a family's *first real invoice*, not
+      collected as their own standalone charge beforehand. Building this
+      means either a dedicated pre-invoice charge path, or reworking the
+      unapplied-credit guard to tell "deliberate" apart from "something
+      went wrong" — a real design conversation, not a quick fix.
