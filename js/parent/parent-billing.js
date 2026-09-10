@@ -192,6 +192,7 @@ function pbRenderHome() {
         ${banner}
         <section class="pd-card pb-summary">
             <div class="pd-card-body">
+                <button type="button" class="pb-link-btn pb-refresh-btn" id="pbRefreshBtn" title="Get your latest balance">&#8635; Refresh</button>
                 <p class="pb-total">${pbMoney(totalDue)}</p>
                 ${unpaid.length ? `<button type="button" class="pb-link-btn" id="pbBreakdownToggle">${pbShowBreakdown ? 'Hide breakdown' : 'Show breakdown'}</button>` : ''}
                 ${breakdownHtml}
@@ -218,6 +219,25 @@ function pbRenderHome() {
     `;
 
     pbEl('pbBreakdownToggle')?.addEventListener('click', () => { pbShowBreakdown = !pbShowBreakdown; pbRenderHome(); });
+    // A parent who kept the app open in the background (or foregrounded the
+    // whole time, which app-update.js's visibilitychange check never sees)
+    // has no other way to notice a bill sent since the page loaded. This
+    // re-fetches the same billing data the page loaded with, quietly — no
+    // full-page reload, so it can't discard anything the parent is doing.
+    pbEl('pbRefreshBtn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = 'Refreshing…';
+        await pbRefreshQuietly();
+        // A successful refresh re-renders this whole card (button included);
+        // only reset on the screen still showing this exact stale button,
+        // which means the refresh itself never got a fresh render to replace it.
+        if (pbEl('pbRefreshBtn') === btn) {
+            btn.disabled = false;
+            btn.innerHTML = '&#8635; Refresh';
+        }
+    });
     pbEl('pbViewAllBtn')?.addEventListener('click', pbGoInvoices);
     body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
         btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
