@@ -1123,7 +1123,11 @@ export default {
       // paths with no matching file reach this code. `_headers` remains the
       // effective policy for everything else — so the two MUST stay in sync,
       // and a change made only here will silently do nothing.
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      // secure.networkmerchants.com (style-src): Collect.js loads its own
+      // token/styles.css for the card fields it renders — a separate CSP
+      // directive from the script/connect misses above, same domain. Also
+      // caught live: "Loading the stylesheet ... violates ... style-src".
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://secure.networkmerchants.com; " +
       // apiprod/fattqueryprod/transactions.fattlabs.com: the three hosts
       // Stax.js itself calls, read directly out of its own bundled source
       // (grepped staxjs-captcha.js for fattlabs.com/fattmerchant.com/
@@ -1144,7 +1148,14 @@ export default {
       // token generate, immediately followed by this connect-src block on
       // repeat with backoff. www.google.com was already allowed in
       // script-src/frame-src for other reasons but never added here.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com https://www.google.com; " +
+      // secure.networkmerchants.com (connect-src): script-src alone (added
+      // above) only lets Collect.js's own JS load — it still has to POST the
+      // card to NMI's tokenization endpoint over fetch/XHR, which connect-src
+      // gates separately. Without this, Collect.js loads, tries to tokenize,
+      // and fails with "Giving up on retrieving token!" — caught live from a
+      // real Pay attempt on the console, same shape as every other vendor
+      // here needing both script-src and connect-src for its own domain.
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com https://www.google.com https://secure.networkmerchants.com; " +
       "img-src 'self' data:; " +
       // frame-src for the Google Maps embed on the home page contact section.
       // There is no frame-src default: without this it falls back to
