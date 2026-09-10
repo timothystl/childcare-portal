@@ -1,0 +1,34 @@
+-- APPLIED TO PRODUCTION 2026-09-10 (live hotfix — staff clock-in was down).
+-- ============================================================
+-- Fix ambiguous record_pin_attempt(text, boolean) overload
+-- ============================================================
+-- The 2026-09-08 family_pin_attempt_logging migration used CREATE OR REPLACE
+-- FUNCTION to add p_kind/p_subject_id to record_pin_attempt(text, boolean),
+-- expecting the new defaulted params to extend the existing function in
+-- place. Postgres does not work that way: changing the parameter list
+-- creates a second, distinct overload rather than replacing the original.
+-- The old 2-arg record_pin_attempt(text, boolean) kept existing alongside
+-- the new 4-arg one, so every 2-arg call (verify_staff_pin, the staff
+-- clock-in path) became ambiguous:
+--
+--   ERROR: function record_pin_attempt(text, boolean) is not unique
+--
+-- Fix: drop the stale 2-arg overload. The 4-arg version's defaults
+-- (p_kind = 'staff', p_subject_id = NULL) reproduce the old behavior
+-- exactly, so 2-arg callers resolve unambiguously to it with no other
+-- code change required.
+--
+-- ============================================================
+-- VERIFIED AFTER APPLYING
+-- ============================================================
+--   -- only the 4-arg overload remains:
+--   select pg_get_function_identity_arguments(oid) from pg_proc
+--   where proname = 'record_pin_attempt';
+--
+--   -- the exact 2-arg call verify_staff_pin makes no longer errors,
+--   -- and logs with the pre-existing staff-throttle shape:
+--   select record_pin_attempt('203.0.113.9'::text, false);
+--   select kind, subject_id from pin_attempt_log order by attempted_at desc limit 1;
+--   -- expect kind='staff', subject_id=null
+
+DROP FUNCTION public.record_pin_attempt(text, boolean);
