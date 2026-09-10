@@ -5178,6 +5178,34 @@ async function unmarkInvoiceSent(id) {
     await logAdminAction('unsend', 'billing_invoice', id);
 }
 
+/** Stax pilot rollout gate (docs/STAX_GO_LIVE.md §4) — is this family allowed
+ *  to pay online yet? Mirrors the same column create-stax-charge and
+ *  charge-stax-payment enforce server-side; this read is for the admin
+ *  drawer's toggle display only. */
+async function fetchStaxPilotEnabled(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('families')
+        .select('stax_pilot_enabled')
+        .eq('id', familyId)
+        .maybeSingle();
+    if (error) throw friendlyError(error);
+    return !!data?.stax_pilot_enabled;
+}
+
+/** Flip a family's Stax pilot access. The edge functions are what actually
+ *  enforce this — this write only changes whether the family is allowed
+ *  through, never whether a charge attempt is verified. */
+async function setStaxPilotEnabled(familyId, enabled) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('families')
+        .update({ stax_pilot_enabled: !!enabled })
+        .eq('id', familyId);
+    if (error) throw friendlyError(error);
+    await logAdminAction(enabled ? 'stax_pilot_enable' : 'stax_pilot_disable', 'family', familyId);
+}
+
 async function fetchPaymentsForFamily(familyId) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient

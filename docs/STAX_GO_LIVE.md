@@ -32,14 +32,14 @@ yet. Nothing charges anyone.
       token (Stax dashboard → Settings → Web Payments). ⚠️ This is a
       *different* value from the API key and must never be the API key — the
       browser receives it.
-- [ ] **Deploy the four Stax edge functions from `main` first.** The merchant
-      pin below lives in this repo's source but has NOT been deployed (writing
-      83 KB of live payment code back through a chat tool by hand was judged a
-      worse risk than deferring it). Deploy `charge-stax-payment`,
-      `create-stax-charge`, `admin-refund-stax-payment` and
-      `reconcile-stax-payments` with `supabase functions deploy <name>` or by
-      pasting each `index.ts` in the dashboard. Verify by grepping the deployed
-      source for `assertStaxMerchant` — the pin is worthless if only git has it.
+- [x] **Deploy the four Stax edge functions from `main`.** Confirmed deployed
+      (2026-09-10) — `charge-stax-payment`, `create-stax-charge`,
+      `admin-refund-stax-payment` and `reconcile-stax-payments` are all
+      ACTIVE, and the deployed `charge-stax-payment` source was checked
+      directly and does contain `assertStaxMerchant`. If you ever push a
+      code change to any of these four, redeploy with
+      `supabase functions deploy <name>` and re-verify the pin is still
+      there — it is worthless if only git has it.
 - [ ] Set **`STAX_MERCHANT_ID`** to the production merchant id.
       ⚠️ **This is the guard that stops the worst launch-day mistake.** Sandbox
       and production share one API host; only the key decides which merchant is
@@ -83,11 +83,20 @@ yet. Nothing charges anyone.
 
 ## 4. Rollout — a small pilot group, not everyone at once
 
-⚠️ **As built today the switch is all-or-nothing.** The moment §2's two
-environment secrets are set, every family's "Pay online" button goes to Stax.
-There is no per-family gate in the code yet. The director's plan (which worked
-for the scheduler rollout) is a handful of willing families first — that needs
-a pilot allowlist built before the flip, or the flip waits.
+A per-family pilot gate now exists (`families.stax_pilot_enabled`,
+default false). §2's environment secrets still turn the *feature* on for
+the whole app, but a family's own "Pay online" button will not actually
+work until an admin flips it on for that family from **Finance → Ledger →
+[family] → Online payments (Stax)**. Enforced in both `create-stax-charge`
+and `charge-stax-payment` server-side — never only in the UI — so there is
+no path to a real charge for a family that hasn't been enabled, even by
+calling the API directly.
+
+- [ ] Before phase 3's first real charge, enable it for your own family
+      first (the office account you'll pay with).
+- [ ] After phase 3 succeeds, enable it for a handful of willing families
+      (the director's plan, same shape as the scheduler rollout), and only
+      widen from there.
 
 Also before the flip:
 
