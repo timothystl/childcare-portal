@@ -689,14 +689,14 @@ function pbOpenStaxModal(session) {
         number: {
             id: 'pbStaxCardNumber',
             placeholder: '0000 0000 0000 0000',
-            style: 'height: 44px; width: 100%; font-size: 16px; padding: 0 12px; border: none; outline: none;',
+            style: 'height: 36px; width: 100%; font-size: 15px; padding: 0 12px; border: none; outline: none;',
             type: 'text',
             format: 'prettyFormat',
         },
         cvv: {
             id: 'pbStaxCardCvv',
             placeholder: 'CVV',
-            style: 'height: 44px; width: 100%; font-size: 16px; padding: 0 12px; border: none; outline: none;',
+            style: 'height: 36px; width: 100%; font-size: 15px; padding: 0 12px; border: none; outline: none;',
             type: 'text',
         },
     });
