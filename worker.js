@@ -1100,7 +1100,18 @@ export default {
       // captcha script that silently never finishes loading. Caught live
       // from a real Pay attempt that never completed; the console showed a
       // blocked script-src request for gstatic.com and nothing else.
-      "script-src 'self' 'sha256-7ukUEU0HbQk9LYpgmbPE9MqGzatu6rzksJn1AYYw+2Y=' 'sha256-ALMh8fut/JHHMeP2T/kM/nHWJax99rJ7egy7UofChXU=' 'sha256-aGIMO7Vlhq6Ve/meGqKde1A3T79E/OD1yrByOQjBZEs=' 'sha256-d5i+v5L8VusXhEGQOmuyU+EkXjSx6GzmGomWRzUra5E=' 'sha256-dTRmBgLLPM8GxN9hmnDU3nEMwlrkK674AC3bzP8oBwg=' 'sha256-fI8T92E60IJncE+OcbC++7XsYQdClalyTG+sT6hOqjU=' 'sha256-h/EXOjMCF9Rgr2ZXcKL04RuCl+rAmgCHPfu+j8lv+C4=' 'sha256-mvVo0ENcU3SS5xg3ePKPQAekybTJ3D42djIbf0IYr3U=' 'sha256-n6CQ/BTNYeil2JNqHWbFGXfnDHnjETuGFmwVFH3n0EE=' 'sha256-ne+dzcRgNOXDz83q9TjqqPWPaEmzzwNuQkGLyRJE+a0=' 'sha256-q38aS/Rx1qwP415vLwMVtE7TDcO32hS5FXg5lEImBkw=' 'sha256-qrg7scMqtNWjm70X6OTSMAvNP7CnjeDya3YC/hXSBEE=' 'sha256-r5ECVyxfLY+rle5ekHeP4wZC/bZ4bgxBT5+2Fsc2l+k=' 'sha256-sLrSHxNtqFHjQT/zbfGa3pxd/G5xWp/cHbuTHNVkOZA=' 'sha256-vQzgczDFy/iatRc6pEF4+sxzSIrVGotATlJfQz7EfO0=' 'sha256-xUsYOmO9r3fzMGx/xi/FR/mUY4mSa6Wb5E/IFBsSWU0=' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com https://www.google.com https://www.gstatic.com; " +
+      // secure.networkmerchants.com: this PRODUCTION merchant's actual card
+      // vault vendor, found the same way as BlockChyp/Spreedly above — a
+      // real Pay attempt against the production account, blocked, and read
+      // from the console. Confusingly, staxjs-captcha.js itself logs "Vendor
+      // lookup complete: using BlockChyp" immediately before this — the
+      // sandbox merchant really did route through BlockChyp (test.blockchyp.com,
+      // still allowed below in case sandbox testing resumes), but this
+      // production merchant's BlockChyp integration loads NMI's Collect.js
+      // (secure.networkmerchants.com/token/Collect.js) to actually collect
+      // the card. Exactly the go-live checklist's own warning that the
+      // production vault vendor can differ from sandbox's.
+      "script-src 'self' 'sha256-7ukUEU0HbQk9LYpgmbPE9MqGzatu6rzksJn1AYYw+2Y=' 'sha256-ALMh8fut/JHHMeP2T/kM/nHWJax99rJ7egy7UofChXU=' 'sha256-aGIMO7Vlhq6Ve/meGqKde1A3T79E/OD1yrByOQjBZEs=' 'sha256-d5i+v5L8VusXhEGQOmuyU+EkXjSx6GzmGomWRzUra5E=' 'sha256-dTRmBgLLPM8GxN9hmnDU3nEMwlrkK674AC3bzP8oBwg=' 'sha256-fI8T92E60IJncE+OcbC++7XsYQdClalyTG+sT6hOqjU=' 'sha256-h/EXOjMCF9Rgr2ZXcKL04RuCl+rAmgCHPfu+j8lv+C4=' 'sha256-mvVo0ENcU3SS5xg3ePKPQAekybTJ3D42djIbf0IYr3U=' 'sha256-n6CQ/BTNYeil2JNqHWbFGXfnDHnjETuGFmwVFH3n0EE=' 'sha256-ne+dzcRgNOXDz83q9TjqqPWPaEmzzwNuQkGLyRJE+a0=' 'sha256-q38aS/Rx1qwP415vLwMVtE7TDcO32hS5FXg5lEImBkw=' 'sha256-qrg7scMqtNWjm70X6OTSMAvNP7CnjeDya3YC/hXSBEE=' 'sha256-r5ECVyxfLY+rle5ekHeP4wZC/bZ4bgxBT5+2Fsc2l+k=' 'sha256-sLrSHxNtqFHjQT/zbfGa3pxd/G5xWp/cHbuTHNVkOZA=' 'sha256-vQzgczDFy/iatRc6pEF4+sxzSIrVGotATlJfQz7EfO0=' 'sha256-xUsYOmO9r3fzMGx/xi/FR/mUY4mSa6Wb5E/IFBsSWU0=' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com https://www.google.com https://www.gstatic.com https://secure.networkmerchants.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
       // every page links (Lora, Nunito, Dancing Script), and the brand
       // typography fell back to Georgia / system-ui in production.
