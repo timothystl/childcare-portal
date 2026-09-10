@@ -74,12 +74,16 @@ review branch and PR. Merging to `main` is a production release and requires exp
 
 ## Timothy Digital overhaul checkpoint
 
-- myMDO remains one product and repository during the current preparation work.
-- Preparation 3 backup/restore and Preparation 6 documentation reset are in progress at the
-  cross-product level. No myMDO repository rename, shared-auth rollout, data move, or payroll
-  cutover is authorized by that status.
-- Finance may consume narrow approved summaries from myMDO; it does not own raw childcare billing,
-  clocks, schedules, or family records.
+Andrew retired the old preparation-gate/implementation-phase ceremony on September 9, 2026. The
+current plan is a plain task list in the private `digital-architecture` repository's
+`architecture/11-overhaul-readiness-and-execution-plan.md` — read it before starting overhaul work
+here. In short: Finance becomes its own application; shared staff login across products (myMDO
+included); code normalized; real developer documentation; and better observability. myMDO's own
+rename (`childcare-portal` → `mymdo`) is a planned future non-functional change, not active work —
+nothing is happening to the repository name right now. myMDO does not yet have backup/restore
+tooling for its Supabase project (database, Auth, Storage, Edge Functions) comparable to what CHMS
+has — build one before any real data move. Finance may consume narrow approved summaries from
+myMDO; it does not own raw childcare billing, clocks, schedules, or family records.
 
 ## Documentation discipline
 
