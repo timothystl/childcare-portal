@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:timothy:mymdo:finance-summary:v1",
+  "title": "myMDO restricted aggregate Finance summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "dataClassification",
+    "sourceProduct",
+    "consumerProduct",
+    "currency",
+    "generatedAt",
+    "sourceThrough",
+    "periods"
+  ],
+  "properties": {
+    "contract": { "const": "mymdo.finance-summary.v1" },
+    "dataClassification": { "const": "restricted-aggregate" },
+    "sourceProduct": { "const": "mymdo" },
+    "consumerProduct": { "const": "finance" },
+    "currency": { "const": "USD" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceThrough": { "type": "string", "format": "date-time" },
+    "periods": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/period" }
+    }
+  },
+  "$defs": {
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period", "category", "measure", "amountCents", "methodology"],
+      "properties": {
+        "period": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$" },
+        "category": {
+          "enum": [
+            "tuition-income",
+            "payroll",
+            "payroll-taxes",
+            "workers-comp",
+            "other-payroll-expenses",
+            "other-expenses"
+          ]
+        },
+        "measure": { "enum": ["actual", "budget"] },
+        "amountCents": { "type": "integer" },
+        "methodology": { "enum": ["ledger-actual", "trend-estimate", "annual-budget-proration"] }
+      }
+    }
+  }
+}

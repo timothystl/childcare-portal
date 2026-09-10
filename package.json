@@ -7,9 +7,11 @@
     "bump": "node scripts/bump-patch.js",
     "build": "node scripts/build.js",
     "build:watch": "node scripts/build.js --watch",
-    "test": "node js/tests/business-logic.test.js"
+    "test": "node js/tests/business-logic.test.js && node --test test/contracts/*.test.js"
   },
   "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "esbuild": "^0.24.2"
   }
 }
