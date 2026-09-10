@@ -110,3 +110,17 @@ Also before the flip:
 
 Nothing. `billing_payments` never held a single Authorize.net row, so there is
 no payment history, no refund path and no reconciliation backlog tied to it.
+
+## 6. Not built yet — follow-up, not a launch blocker
+
+- [ ] **Apple Pay / digital wallets.** The Stax merchant account itself is
+      provisioned for it (`allow_cnp_digital_wallet: true` on `/self`), but
+      `create-stax-charge`/`charge-stax-payment` and the parent-billing.js
+      modal only mount Stax.js's plain card-number/CVV fields today — no
+      wallet button anywhere. Adding it means confirming with Stax whether
+      their Web Payments/Bolt tier supports a wallet button at all, updating
+      both edge functions to accept whatever payment_method shape a wallet
+      charge produces, adding the button to the parent-facing modal, and
+      hosting Apple's domain-verification file on mdo.timothystl.org. Treat
+      as a real follow-on project once the plain card flow is proven in
+      pilot, not something to add before the first real charge.
