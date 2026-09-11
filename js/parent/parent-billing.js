@@ -254,23 +254,17 @@ function pbRenderHome() {
     pbReturnState = null;
 }
 
-// Card-side of a split raised twice by real parents: a declined/failed card is
-// a Stax problem (they hold the card data, not us) while a wrong invoice
-// amount or a portal question is ours. Sending the first group to Stax
-// directly means the office isn't relaying card-decline troubleshooting it
-// has no visibility into; the second still comes to the office, same as
-// every other portal question. [PLACEHOLDER] until a real Stax support
-// number is on file — see CLAUDE.md's Stax section for why it can't be
-// guessed.
+// Stax's own published numbers are merchant-side support, not a line for our
+// parents to call — so every payment or portal question routes to the office
+// first, same as everything else. If a card issue turns out to need Stax's
+// help, the office is the one who calls them.
 function pbHelpCardHtml() {
     return `<section class="pd-card">
         <div class="pd-card-head">💳 Payment &amp; Account Help</div>
         <div class="pd-card-body">
             <p class="pd-row-body">We're now using Stax for tuition payments. If a card is
-                declined or a payment won't go through, call Stax support directly at
-                <strong>[ADD STAX SUPPORT PHONE NUMBER]</strong> — they handle everything on
-                the payment-processing side. For questions about your invoice, statement, or
-                the parent portal itself, email
+                declined, a payment won't go through, or you have a question about your
+                invoice, statement, or the parent portal itself, email
                 <a href="mailto:support@timothystl.org">support@timothystl.org</a> and you'll
                 hear back within a business day.</p>
         </div>
