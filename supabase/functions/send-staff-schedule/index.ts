@@ -71,7 +71,7 @@ serve(async (req) => {
         }
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
-        const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+        const fromEmail = `"Timothy MDO Staff" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
         // Reply to the admin who sent this schedule so staff replies land in their
         // inbox, not the generic org address. Fall back to RESEND_REPLY_TO if the
         // auth session somehow has no email (shouldn't happen in practice).

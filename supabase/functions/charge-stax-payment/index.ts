@@ -172,7 +172,7 @@ async function sendReceiptEmail(admin: any, o: {
     cardBrand?: string | null; cardLast4?: string | null;
 }): Promise<void> {
     const apiKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+    const fromEmail = `"Timothy MDO Billing" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
     if (!apiKey) { console.warn("charge-stax-payment: RESEND_API_KEY not set, skipping receipt"); return; }
 
     const { data: fam } = await admin.from("families")

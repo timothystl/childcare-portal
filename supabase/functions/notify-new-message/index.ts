@@ -35,7 +35,7 @@ serve(async (req) => {
         }
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
-        const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+        const fromEmail = `"Timothy MDO" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
 
         if (!apiKey) {
             return new Response(JSON.stringify({ error: "RESEND_API_KEY not set" }), {

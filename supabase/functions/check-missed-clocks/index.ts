@@ -128,7 +128,7 @@ serve(async (req) => {
         }
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
-        const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+        const fromEmail = `"Timothy MDO Alerts" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
         const replyTo   = Deno.env.get("RESEND_REPLY_TO")   || fromEmail;
         const workerUrl = Deno.env.get("WORKER_URL") || ""; // e.g. https://mdo.timothystl.org
 

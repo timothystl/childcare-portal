@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
     const link = `${ALLOWED_ORIGIN}/reset-pin.html?token=${encodeURIComponent(token)}`
 
     const apiKey    = Deno.env.get('RESEND_API_KEY')
-    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev'
+    const fromEmail = `"Timothy MDO Security" <${Deno.env.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev'}>`
     const replyTo   = Deno.env.get('RESEND_REPLY_TO')   || fromEmail
 
     if (apiKey) {
