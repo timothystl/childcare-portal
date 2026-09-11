@@ -1240,8 +1240,18 @@ export default {
     //
     // Truly immutable media (images, fonts, favicon) is content-stable and can
     // be cached hard. HTML stays `no-store` so a deploy is picked up instantly.
+    //
+    // /images/logo/ is the one exception: it holds brand assets (favicons, the
+    // wordmark, and each app's launcher/maskable icons under logo/apps/*) that
+    // get replaced in place under the same filename on a rebrand — exactly the
+    // "not content-hashed" hazard called out for JS/CSS above. An immutable
+    // year-long cache there stranded installed desktop/PWA app icons on the
+    // old artwork after the 2026-09 icon refresh, since Chrome's "Install as
+    // app" fetch is subject to this same HTTP cache. Revalidate every time.
     const p = url.pathname;
-    if (/\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot)$/i.test(p)) {
+    if (/^\/images\/logo\//i.test(p)) {
+      newHeaders.set('Cache-Control', 'no-cache');
+    } else if (/\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot)$/i.test(p)) {
       newHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
     } else if (/^\/(dist|css|img|images)\//i.test(p) || p === '/manifest.json') {
       newHeaders.set('Cache-Control', 'no-cache');
