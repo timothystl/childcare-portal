@@ -5,9 +5,13 @@ Written 2026-08-30, at the point where Stax is the **only** payment processor
 either a step nobody can do from code, or a test that has to be run against a
 real production merchant. Work top to bottom; the order matters.
 
-Today's state: **not live.** `STAX_ENVIRONMENT` is sandbox, so both parent
-endpoints refuse and the portal tells families online payment is not available
-yet. Nothing charges anyone.
+Today's state (updated 2026-09-11, corrects the "not live" note this doc
+carried since 2026-08-30): **live.** `STAX_ENVIRONMENT=production` and real
+charges succeed — confirmed directly this session against Andrew's own
+family/invoice, including the Apple Pay / Google Pay work in §5a. Most of
+§§2–4 is checked off below based on that, but a handful of specific items
+are marked ⚠️ **unconfirmed** rather than assumed — ask Andrew before
+treating those as done.
 
 ---
 
@@ -27,11 +31,16 @@ yet. Nothing charges anyone.
 
 ## 2. When the production Stax account exists
 
-- [ ] Replace **`STAX_API_KEY`** with the production Core API key.
-- [ ] Replace **`STAX_WEB_PAYMENTS_TOKEN`** with the production Web Payments
+- [x] Replace **`STAX_API_KEY`** with the production Core API key. Inferred
+      done (2026-09-11): a stale sandbox key would fail the merchant pin
+      below and charges would fail closed, not succeed.
+- [x] Replace **`STAX_WEB_PAYMENTS_TOKEN`** with the production Web Payments
       token (Stax dashboard → Settings → Web Payments). ⚠️ This is a
       *different* value from the API key and must never be the API key — the
-      browser receives it.
+      browser receives it. Inferred done (2026-09-11): the wallet/card fields
+      are routing through the production vault vendor (NMI's Collect.js via
+      `collectcheckout.com`/`secure.networkmerchants.com`, not sandbox's
+      BlockChyp), which only happens with a real production token.
 - [x] **Deploy the four Stax edge functions from `main`.** Confirmed deployed
       (2026-09-10) — `charge-stax-payment`, `create-stax-charge`,
       `admin-refund-stax-payment` and `reconcile-stax-payments` are all
@@ -40,46 +49,67 @@ yet. Nothing charges anyone.
       code change to any of these four, redeploy with
       `supabase functions deploy <name>` and re-verify the pin is still
       there — it is worthless if only git has it.
-- [ ] Set **`STAX_MERCHANT_ID`** to the production merchant id.
+- [x] Set **`STAX_MERCHANT_ID`** to the production merchant id.
       ⚠️ **This is the guard that stops the worst launch-day mistake.** Sandbox
       and production share one API host; only the key decides which merchant is
       charged, and `STAX_ENVIRONMENT` is a label this app sets for itself.
       Without the pin, a production flip with a stale sandbox key would charge
       nobody while the app recorded real payments, marked invoices paid and
       emailed receipts. With it, every call verifies first and fails closed.
-- [ ] Set a fresh **`STAX_WEBHOOK_SECRET`** (a long random value we choose).
-- [ ] **Register the webhook on the production merchant** for the
+      Confirmed (2026-09-11): real charges succeed rather than returning
+      "Could not verify the payment merchant," which the pin would return
+      if this were still unset or wrong — see §3's first bullet.
+- [x] Set a fresh **`STAX_WEBHOOK_SECRET`** (a long random value we choose).
+      Confirmed done directly by Andrew (2026-09-11).
+- [x] **Register the webhook on the production merchant** for the
       `create_transaction` event, target:
       `<stax-webhook function URL>?secret=<STAX_WEBHOOK_SECRET>`
       ⚠️ Sandbox registration does not carry over, and `update_transaction`
       never fires — a refund arrives as its own `create_transaction`.
-- [ ] Confirm **`STAX_SANDBOX_TEST_ENABLED` is OFF** (or unset). It is the
-      sandbox click-through bypass and has no business being on in production.
-- [ ] Only then set **`STAX_ENVIRONMENT=production`** and
+      Confirmed done directly by Andrew (2026-09-11), corroborated by a real
+      refund test recording correctly via the webhook — see §3.
+- [ ] ⚠️ **Unconfirmed** — Confirm **`STAX_SANDBOX_TEST_ENABLED` is OFF** (or
+      unset). It is the sandbox click-through bypass and has no business
+      being on in production. Real production charges succeeding doesn't
+      prove this either way (it gates a *different* sandbox-test path, not
+      whether production charges work) — ask Andrew directly rather than
+      assume.
+- [x] Only then set **`STAX_ENVIRONMENT=production`** and
       **`STAX_PAYMENTS_ENABLED=true`**. This is the switch — see §4.
+      Confirmed (2026-09-11): real production charges are happening.
 
 ## 3. First production charge (do this yourself, small amount, own card)
 
-- [ ] The merchant pin is unproven against a real `/self` response: it reads
+- [x] The merchant pin is unproven against a real `/self` response: it reads
       `merchant.id` / `merchant_id` and **fails closed** if it can't find one.
       So the very first charge after setting `STAX_MERCHANT_ID` either works or
       returns "Could not verify the payment merchant." If it's the latter, the
       response shape differs from what was assumed — fix the pin before
-      launching; do not remove it.
-- [ ] Open the portal in a real browser with the console visible. **Watch for
+      launching; do not remove it. Confirmed working (2026-09-11): real
+      charges succeed, not this error.
+- [x] Open the portal in a real browser with the console visible. **Watch for
       CSP refusals.** The card fields are iframed from whatever vault vendor
       *this* merchant's gateway uses — sandbox routed through BlockChyp; the
       production merchant may differ, and a blocked vault iframe looks exactly
       like a broken app. Allowlisted today: `staxjs.staxpayments.com`,
-      `core.spreedly.com`, `test.blockchyp.com`, `api.blockchyp.com`,
-      `omni.fattmerchant.com` (`_headers` **and** `worker.js` — keep in sync).
-- [ ] Charge succeeds; exactly one `billing_payments` row; invoice balance and
-      status correct; receipt email arrives and reads right.
-- [ ] **Refund that same charge** from Finance → Ledger → the family drawer.
+      `core.spreedly.com`, `test.blockchyp.com`/`api.blockchyp.com` (now
+      `*.blockchyp.com`), `omni.fattmerchant.com`, plus `secure.networkmerchants.com`
+      (the actual production vault vendor, NMI's Collect.js) and, for wallets,
+      `collectcheckout.com` and `applepay.cdn-apple.com` — see §5a
+      (`_headers` **and** `worker.js` — keep in sync).
+- [ ] ⚠️ **Unconfirmed in detail** — charge succeeds (yes, confirmed); exactly
+      one `billing_payments` row, invoice balance/status correct, and receipt
+      email arrives and reads right are the specific things not yet
+      double-checked — worth a quick look at the actual row/email rather than
+      assuming from "the charge worked."
+- [x] **Refund that same charge** from Finance → Ledger → the family drawer.
       The reversal should be recorded by the webhook, not by the button.
+      Confirmed done and working directly by Andrew (2026-09-11) — recorded
+      by the webhook as intended.
 - [ ] Leave a charge deliberately unfinished (close the tab mid-payment) and
       confirm `reconcile-stax-payments` clears the lock within 30 minutes
-      rather than locking that family out of paying.
+      rather than locking that family out of paying. **Not done yet**
+      (confirmed directly, 2026-09-11) — still open.
 
 ## 4. Rollout — a small pilot group, not everyone at once
 
@@ -92,19 +122,40 @@ and `charge-stax-payment` server-side — never only in the UI — so there is
 no path to a real charge for a family that hasn't been enabled, even by
 calling the API directly.
 
-- [ ] Before phase 3's first real charge, enable it for your own family
-      first (the office account you'll pay with).
+- [ ] ⚠️ **Unconfirmed** — Before phase 3's first real charge, enable it for
+      your own family first (the office account you'll pay with), from
+      Finance → Ledger → click the family's row to open the drawer →
+      "Online payments (Stax)" card → **Enable online payments**. Andrew's
+      own family/invoice already took a real charge this session, which
+      normally couldn't happen unless this flag were on — but Andrew also
+      said (2026-09-11) he doesn't know how to set it and wasn't sure this
+      step was done, so don't take the successful charge as proof; check the
+      family's actual `stax_pilot_enabled` value (or click into the drawer
+      above) before assuming.
 - [ ] After phase 3 succeeds, enable it for a handful of willing families
       (the director's plan, same shape as the scheduler rollout), and only
-      widen from there.
+      widen from there. **Not confirmed done** as of 2026-09-11.
+- [ ] ⚠️ **Design question raised 2026-09-11, not yet resolved:** Andrew
+      expected non-pilot families to not know online payment exists at all.
+      As actually built, the "Pay online" button renders for *every* family
+      with an unpaid invoice regardless of `stax_pilot_enabled` — gating is
+      server-side only (`create-stax-charge`/`charge-stax-payment` refuse a
+      non-enabled family with "Online payments are not enabled for your
+      family yet. Please contact the office," shown as a generic "not
+      available yet" message in the modal). No family can be *charged*
+      without the flag, but every family currently *sees* the button. If
+      full invisibility for non-pilot families is actually wanted, that's a
+      separate UI change to `parent-billing.js`, not a config flip — raise
+      with Andrew before building it.
 
 Also before the flip:
 
-- [ ] **Mark every pre-Stax invoice paid.** In-house reconciliation starts at
+- [x] **Mark every pre-Stax invoice paid.** In-house reconciliation starts at
       go-live; historical balances must not present themselves to a pilot
       family as something to pay online. Note that a Stax charge rolls up every
       unpaid issued invoice through the anchor month — an old unpaid month
-      would be swept into a pilot family's first real payment.
+      would be swept into a pilot family's first real payment. Confirmed done
+      directly by Andrew (2026-09-11).
 
 ## 5. Not carried over from Authorize.net
 
