@@ -1527,6 +1527,8 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     .fh-release-btn { width: 100%; }
     .fh-search { width: 100%; }
     .fh-refresh-btn { width: 100%; }
+    .fh-payments-toolbar { flex-direction: column; }
+    .fh-payments-toolbar .fh-search { width: 100%; }
     .fh-row-actions { width: auto; }
     #fhDrawer.inc-drawer { width: 100%; }
 }
@@ -1735,6 +1737,27 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    status meaning (tang = caution, green = resolved) and reusing that
    vocabulary for plain navigation would say something the pills don't mean.
    ------------------------------------------------------------ */
+.fh-payments-pane { padding-top: 20px; }
+.fh-payments-toolbar { display: flex; gap: 10px; margin-bottom: 14px; }
+.fh-payments-toolbar .fh-search { width: 260px; }
+.fh-payments-table-wrap { overflow-x: auto; }
+.fh-payments-table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;
+}
+.fh-payments-table th, .fh-payments-table td {
+    text-align: left; padding: 10px 14px; font-size: 13px;
+    border-bottom: 1px solid var(--border);
+}
+.fh-payments-table th {
+    background: var(--linen); color: var(--navy); font-weight: 800;
+    text-transform: uppercase; letter-spacing: .03em; font-size: 11px;
+}
+.fh-payments-table tbody tr:last-child td { border-bottom: none; }
+.fh-pay-refund-amt { color: var(--tang-dark, #7a2a18); font-weight: 700; }
+.fh-pay-refund-tag { color: var(--text-muted); font-size: 12px; }
+.fh-payments-count { margin: 10px 2px 0; color: var(--text-muted); font-size: 12px; }
+
 .fh-bk-pane { padding-top: 20px; }
 .bk-title { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--navy); margin: 0 0 4px; }
 .bk-subtitle { margin: 0 0 18px; }

@@ -2213,6 +2213,14 @@
                              Same director, no separate role; see
                              js/admin/admin-finance-bookkeeper.js. -->
                         <button type="button" class="fh-tab" data-fh-tab="bookkeeper" role="tab" aria-selected="false">Bookkeeper</button>
+                        <!-- Every billing_payments row, regardless of month or current
+                             enrollment — the Ledger tab only shows families with real
+                             attendance for the selected month, so a payment for a family
+                             outside that (a registration/waitlist deposit, or — how this
+                             screen got built — a Stax go-live test payment) is otherwise
+                             invisible in the admin UI even though it's fully recorded.
+                             See js/admin/admin-finance-hub.js's renderAllPaymentsView(). -->
+                        <button type="button" class="fh-tab" data-fh-tab="payments" role="tab" aria-selected="false">All Payments</button>
                     </div>
 
                     <div id="fhLedgerPane">
@@ -2241,6 +2249,14 @@
 
                     <div class="fh-bk-pane" id="fhBookkeeperPane" style="display:none">
                         <div id="bkRoot"><p class="empty-hint">Loading&hellip;</p></div>
+                    </div>
+
+                    <div class="fh-payments-pane" id="fhPaymentsPane" style="display:none">
+                        <div class="fh-payments-toolbar">
+                            <input type="text" id="fhPaymentsSearch" class="fh-search" placeholder="Find a family&hellip;">
+                            <button type="button" id="fhPaymentsRefreshBtn" class="fh-refresh-btn" title="Reload every payment on file.">&#8635; Refresh</button>
+                        </div>
+                        <div id="fhPaymentsRoot"><p class="empty-hint">Loading&hellip;</p></div>
                     </div>
 
                     <div class="fh-note-editor">
