@@ -1137,13 +1137,15 @@ export default {
       // Stax.js itself calls, read directly out of its own bundled source
       // (grepped staxjs-captcha.js for fattlabs.com/fattmerchant.com/
       // staxpayments.com references) rather than guessed from docs.
-      // test.blockchyp.com / api.blockchyp.com: the real vault vendor for
-      // THIS merchant's Stax gateway, per its own console log ("Vendor
-      // lookup complete: using BlockChyp") — Stax bundles several possible
-      // vault backends (Spreedly above is one; BlockChyp is the one this
+      // *.blockchyp.com (test./api.): the real vault vendor for THIS
+      // merchant's Stax gateway, per its own console log ("Vendor lookup
+      // complete: using BlockChyp") — Stax bundles several possible vault
+      // backends (Spreedly above is one; BlockChyp is the one this
       // merchant's test gateway actually routes through), so which one
       // matters can only be learned from the actual browser session, not
-      // from reading the library's source.
+      // from reading the library's source. Written as a wildcard (both
+      // subdomains needed, one host) to buy back line-length room spent on
+      // the CSP additions below — see the 2,000-char _headers limit test.
       // www.google.com: recaptcha itself calls back to
       // recaptcha/api2/clr for its own internal analytics/logging beacon,
       // after everything else (script-src's gstatic.com fix, the BlockChyp
@@ -1160,26 +1162,37 @@ export default {
       // and fails with "Giving up on retrieving token!" — caught live from a
       // real Pay attempt on the console, same shape as every other vendor
       // here needing both script-src and connect-src for its own domain.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com https://www.google.com https://secure.networkmerchants.com; " +
-      "img-src 'self' data:; " +
+      // applepay.cdn-apple.com (connect-src / img-src): the desktop-Chrome
+      // Apple Pay flow renders an <apple-pay-modal> web component (Apple's
+      // own cross-browser QR-handoff Apple Pay, not ApplePaySession — that
+      // still only exists in Safari/WebKit) whose hosted content it loads
+      // from this same CDN host already allowed in script-src/font-src for
+      // the button itself. Without frame-src/img-src/connect-src too, the
+      // modal exists in the DOM but its content is refused, showing as
+      // Chrome's own "This content is blocked" page instead of the QR code.
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://*.blockchyp.com https://www.google.com https://secure.networkmerchants.com https://applepay.cdn-apple.com; " +
+      "img-src 'self' data: https://applepay.cdn-apple.com; " +
       // frame-src for the Google Maps embed on the home page contact section.
       // There is no frame-src default: without this it falls back to
       // `default-src 'self'` and the map renders as an empty box with only a
       // console error to say why — the same silent-failure shape as R25 above.
       // Both hosts are needed: the /maps?output=embed URL is served by
-      // maps.google.com and redirects to www.google.com/maps/embed.
+      // maps.google.com and redirects to www.google.com/maps/embed — written
+      // as the *.google.com wildcard for the same line-length reason as the
+      // blockchyp one above; nothing here narrows what script-src/connect-src
+      // already trust from google.com elsewhere in this same policy.
       // staxjs.staxpayments.com / omni.fattmerchant.com: Stax.js mounts the
       // card-number/CVV fields as small iframes from one of these — the
       // charge response's own merchant_location_descriptor names
       // omni.fattmerchant.com, so both are allowed rather than guessed at.
       // core.spreedly.com is the actual card-number/CVV iframe host — see
       // the script-src comment above for how this was found.
-      // test.blockchyp.com / api.blockchyp.com: the actual card-number/CVV
-      // iframe origin for this merchant's gateway, confirmed live from a
-      // browser console postMessage error naming
-      // https://test.blockchyp.com as the target origin the iframe never
-      // reached (blocked here, so it stayed at origin 'null' — the
-      // "flash of real fields, then reverts to blocked" symptom).
+      // *.blockchyp.com (test./api.): the actual card-number/CVV iframe
+      // origin for this merchant's gateway, confirmed live from a browser
+      // console postMessage error naming https://test.blockchyp.com as the
+      // target origin the iframe never reached (blocked here, so it stayed
+      // at origin 'null' — the "flash of real fields, then reverts to
+      // blocked" symptom).
       // collectcheckout.com: a separate host from secure.networkmerchants.com
       // (which only serves Collect.js's own script/tokenize XHR) — NMI routes
       // the Apple Pay / Google Pay wallet fields through their own iframe at
@@ -1189,7 +1202,7 @@ export default {
       // blocked-navigation page, with this as the refused src. Without it the
       // Google Pay button renders as a broken-frame icon and Apple Pay's own
       // wallet field throws deep inside Collect.js instead of tokenizing.
-      "frame-src https://maps.google.com https://www.google.com https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com https://collectcheckout.com; " +
+      "frame-src https://*.google.com https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://*.blockchyp.com https://collectcheckout.com https://applepay.cdn-apple.com; " +
       // applepay.cdn-apple.com (font-src): once script-src let the Apple Pay
       // SDK load, its own apple-pay-button.js/apple-wallet-sdk.js load their
       // button label's webfont (en-US.woff2/.woff) from this same CDN host —
