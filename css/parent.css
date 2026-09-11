@@ -1125,10 +1125,9 @@ body.pb-modal-open { overflow: hidden; }
 }
 .pb-stax-field iframe { display: block; width: 100%; height: 100%; }
 .pb-stax-wallet-buttons { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
-.pb-stax-wallet-btn { height: 40px; }
+.pb-stax-wallet-btn { height: 40px; overflow: hidden; }
 .pb-stax-wallet-btn:empty { display: none; height: 0; }
-.pb-stax-wallet-btn iframe,
-.pb-stax-wallet-btn > * { display: block; width: 100%; height: 100%; border: none; }
+.pb-stax-wallet-btn iframe { display: block; width: 100%; height: 100%; border: none; }
 .pb-stax-wallet-divider {
     margin: 6px 0 0; text-align: center; position: relative;
     font-size: .78em; color: var(--text-muted);
