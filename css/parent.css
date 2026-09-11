@@ -1129,7 +1129,7 @@ body.pb-modal-open { overflow: hidden; }
 .pb-stax-row > div:last-child { flex: 1; }
 .pb-stax-exp-row { display: flex; gap: 8px; }
 .pb-stax-select {
-    flex: 1; height: 44px; border: 1px solid var(--border);
+    flex: 1; height: 36px; border: 1px solid var(--border);
     border-radius: var(--radius-sm); background: var(--white);
     font-family: inherit; font-size: .9em; color: var(--text);
     padding: 0 8px;
