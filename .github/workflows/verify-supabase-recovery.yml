@@ -1,0 +1,108 @@
+name: Verify Supabase backup and recovery
+
+# See scripts/verify-supabase-recovery.sh's own header for the full design
+# note — in short: first build for this repo (chms's/website's drills cover
+# Cloudflare D1/R2 only), restores into a local ephemeral Postgres service
+# container rather than a new cloud Supabase project (deliberate — see the
+# script), and every verification step is structural/numeric only, never
+# printing or retaining actual family/child/staff/payment content.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full main commit SHA approved for the recovery exercise
+        required: true
+        type: string
+      reason:
+        description: Reason for this recovery exercise
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-recovery-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Dump, restore, and reconcile the production database
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    services:
+      # The disposable restore target. Destroyed with the job — no cleanup
+      # step, no cloud resource, no cost. See the script's own header for
+      # why this is a local container rather than a new Supabase project.
+      restore-db:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      RESTORE_DB_PASSWORD: postgres
+      RESULT_FILE: /tmp/supabase-recovery-result.json
+    steps:
+      - name: Check out the approved commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.expected_sha }}
+
+      - name: Verify the approved commit is on main
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+
+      # Production is Postgres 17 (see this repo's AGENTS.md / the Supabase
+      # project's own reported engine version) — pg_dump must be at least as
+      # new as the server it dumps from, and ubuntu-latest's default
+      # postgresql-client is older. The official PGDG apt repo has a
+      # postgresql-client-17 package; installing it explicitly avoids
+      # depending on whatever happens to be preinstalled on the runner image.
+      - name: Install a Postgres 17 client (pg_dump/psql)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Dump, restore, reconcile, and clean up
+        run: bash scripts/verify-supabase-recovery.sh
+
+      - name: Record recovery summary
+        shell: bash
+        env:
+          RECOVERY_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Supabase (myMDO) recovery verification'
+            echo
+            echo "- Approved commit: \`${GITHUB_SHA}\`"
+            echo "- Reason: ${RECOVERY_REASON}"
+            jq -r '
+              "- Source: `" + .source_host + "` — dump " + (.dump_bytes | tostring) + " bytes; SHA-256 `" + .dump_sha256 + "`",
+              "- Restore target: " + .restore_target,
+              "- Rows: " + (.tables_matched | tostring) + " tables matched; control SHA-256 `" + .row_control_sha256 + "`",
+              "- Monetary/wage controls: " + (.monetary_controls_matched | tostring) + " columns matched; control SHA-256 `" + .monetary_control_sha256 + "`",
+              "- Disposal: plaintext dump deleted; restore target was a job-scoped container, already gone",
+              "- Family, child, staff, and payment values were not printed or retained as artifacts"
+            ' "$RESULT_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
