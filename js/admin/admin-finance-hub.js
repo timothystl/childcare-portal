@@ -375,6 +375,7 @@ async function _fhLoad() {
 
             return {
                 familyId, name: r.name, email: r.email,
+                children: r.children || [],
                 total: r.total, causes: r.causes || [],
                 // Carried through from computeBillMonthExceptions() so the
                 // strip can show gross tuition / discounts / fees separately
@@ -536,7 +537,8 @@ function _fhVisibleRows() {
     const q = _fhSearch.trim().toLowerCase();
     const owingRows = _fhFilter === 'owing' ? _fhOwingRowsDeduped() : null;
     return _fhRows.filter(r => {
-        if (q && !r.name.toLowerCase().includes(q)) return false;
+        if (q && !r.name.toLowerCase().includes(q) &&
+            !(r.children || []).some(c => c.toLowerCase().includes(q))) return false;
         switch (_fhFilter) {
             case 'all':           return r.status !== 'withdrawn';
             case 'needs_review':  return r.status === 'needs_review';
