@@ -1124,6 +1124,18 @@ body.pb-modal-open { overflow: hidden; }
     background: var(--white); overflow: hidden;
 }
 .pb-stax-field iframe { display: block; width: 100%; height: 100%; }
+.pb-stax-wallet-buttons { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.pb-stax-wallet-btn { min-height: 40px; }
+.pb-stax-wallet-btn:empty { display: none; }
+.pb-stax-wallet-divider {
+    margin: 6px 0 0; text-align: center; position: relative;
+    font-size: .78em; color: var(--text-muted);
+}
+.pb-stax-wallet-divider span { background: var(--white); padding: 0 8px; position: relative; z-index: 1; }
+.pb-stax-wallet-divider::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 50%;
+    border-top: 1px solid var(--border);
+}
 .pb-stax-row { display: flex; gap: 16px; align-items: flex-start; }
 .pb-stax-row > div:first-child { flex: 1.3; }
 .pb-stax-row > div:last-child { flex: 1; }
