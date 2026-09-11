@@ -1244,10 +1244,17 @@ export default {
     // /images/logo/ is the one exception: it holds brand assets (favicons, the
     // wordmark, and each app's launcher/maskable icons under logo/apps/*) that
     // get replaced in place under the same filename on a rebrand — exactly the
-    // "not content-hashed" hazard called out for JS/CSS above. An immutable
-    // year-long cache there stranded installed desktop/PWA app icons on the
-    // old artwork after the 2026-09 icon refresh, since Chrome's "Install as
-    // app" fetch is subject to this same HTTP cache. Revalidate every time.
+    // "not content-hashed" hazard called out for JS/CSS above. Revalidate
+    // every time instead of caching it for a year.
+    //
+    // NONE of this branch below is reachable for a real static file, though:
+    // every path it checks (images/dist/css/img extensions and prefixes) is
+    // served by Cloudflare Workers Assets directly, without ever invoking
+    // this Worker script — wrangler.jsonc's `run_worker_first` covers only
+    // "/" and "/index.html", neither of which matches any of these checks.
+    // `_headers` is the file that actually governs Cache-Control for every
+    // real asset in production; keep both in sync so this stays true rather
+    // than becoming a second, silently-wrong copy of the policy.
     const p = url.pathname;
     if (/^\/images\/logo\//i.test(p)) {
       newHeaders.set('Cache-Control', 'no-cache');
