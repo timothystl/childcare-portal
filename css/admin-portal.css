@@ -1293,8 +1293,12 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-aging-amt { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--navy); margin-top: 2px; }
 .fh-aging-count { font-size: .8em; color: var(--text-muted); }
 
-/* Filter chips */
-.fh-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+/* Filter chips, and the family/child search box that sits beside them —
+   directly above the table, so it's actually noticed rather than stranded up
+   in the header (see _fhRenderLedger() in admin-finance-hub.js). */
+.fh-chips-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.fh-chips-row .fh-search { width: 220px; }
+.fh-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .fh-chip {
     border: 1px solid var(--border); background: #fff; border-radius: 999px;
     padding: 6px 12px; font-family: var(--font-body); font-weight: 700; font-size: 12.5px;
@@ -1526,6 +1530,7 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     .fh-strip-spacer { display: none; }
     .fh-release-btn { width: 100%; }
     .fh-search { width: 100%; }
+    .fh-chips-row { flex-direction: column; align-items: stretch; }
     .fh-refresh-btn { width: 100%; }
     .fh-payments-toolbar { flex-direction: column; }
     .fh-payments-toolbar .fh-search { width: 100%; }
