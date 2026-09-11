@@ -132,10 +132,6 @@ function _fhBindHeaderOnce() {
         try { await _fhRefreshData(); }
         finally { if (btn) { btn.disabled = false; btn.innerHTML = '&#8635; Refresh'; } }
     });
-    _fhEl('fhSearch')?.addEventListener('input', e => {
-        _fhSearch = e.target.value || '';
-        _fhRenderLedger();
-    });
     _fhEl('fhPaymentsSearch')?.addEventListener('input', e => {
         _fhPaymentsSearch = e.target.value || '';
         _fhRenderAllPaymentsTable();
@@ -205,15 +201,16 @@ function _fhSwitchTab(tab) {
     if (reportPane)   reportPane.style.display   = tab === 'report' ? '' : 'none';
     if (bkPane)       bkPane.style.display       = tab === 'bookkeeper' ? '' : 'none';
     if (paymentsPane) paymentsPane.style.display = tab === 'payments' ? '' : 'none';
-    // The note editor and the month/search toolbar belong to the Ledger and
-    // the Billing Report. Bookkeeper carries its own month controls per
+    // The note editor and the month toolbar belong to the Ledger and the
+    // Billing Report. Bookkeeper carries its own month controls per
     // sub-view, and All Payments carries its own search box (it isn't
     // month-scoped, unlike the header's month nav) — "note on every invoice
     // email" is a Ledger setting, and both read as broken controls elsewhere.
+    // (The family/child search box itself is no longer part of this shared
+    // header — it renders inside _fhRenderLedger()'s own template, right
+    // above the table, and so is already scoped to the Ledger pane alone.)
     const noteEditor = document.querySelector('#financeHubSection .fh-note-editor');
     if (noteEditor) noteEditor.style.display = (tab === 'bookkeeper' || tab === 'payments') ? 'none' : '';
-    const searchBox = _fhEl('fhSearch');
-    if (searchBox) searchBox.style.display = (tab === 'bookkeeper' || tab === 'payments') ? 'none' : '';
     if (tab === 'report' && !_fhReportLoaded) {
         _fhReportLoaded = true;
         const brMonth = _fhEl('brMonth');
@@ -666,6 +663,17 @@ function _fhRenderLedger() {
     const root = _fhEl('fhRoot');
     if (!root) return;
 
+    // The search box lives inside this same innerHTML below (right above the
+    // table it filters, not off in the header) so that typing in it — which
+    // calls this function on every keystroke — doesn't visibly move it. That
+    // means every keystroke also destroys and recreates the input itself, so
+    // focus and cursor position have to be captured before the swap and
+    // restored after, or a search would only ever accept one character
+    // before losing focus.
+    const searchHadFocus = document.activeElement?.id === 'fhSearch';
+    const searchSelStart = searchHadFocus ? document.activeElement.selectionStart : null;
+    const searchSelEnd   = searchHadFocus ? document.activeElement.selectionEnd   : null;
+
     const active     = _fhRows.filter(r => r.status !== 'withdrawn');
     const needsLook  = active.filter(r => r.status === 'needs_review');
     const drafted    = active.filter(r => r.status === 'drafted');
@@ -778,11 +786,14 @@ function _fhRenderLedger() {
         </div>
         ${_fhShowAging ? _fhAgingHtml(owingRows) : ''}
 
-        <div class="fh-chips">
-            ${chips.map(([key, label]) => `
-                <button type="button" class="fh-chip fh-chip-${key}${_fhFilter === key ? ' is-on' : ''}" data-fh-filter="${key}">
-                    ${escHtml(label)} <span class="fh-chip-count">${counts[key]}</span>
-                </button>`).join('')}
+        <div class="fh-chips-row">
+            <div class="fh-chips">
+                ${chips.map(([key, label]) => `
+                    <button type="button" class="fh-chip fh-chip-${key}${_fhFilter === key ? ' is-on' : ''}" data-fh-filter="${key}">
+                        ${escHtml(label)} <span class="fh-chip-count">${counts[key]}</span>
+                    </button>`).join('')}
+            </div>
+            <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family or child&hellip;" value="${escHtml(_fhSearch)}">
         </div>
 
         <div class="table-wrapper">
@@ -801,6 +812,11 @@ function _fhRenderLedger() {
         <p class="ap-note fh-footer-note">${_fhBillingReportLinkNote()}</p>`;
 
     _fhBindLedgerListeners(root);
+
+    if (searchHadFocus) {
+        const el = _fhEl('fhSearch');
+        if (el) { el.focus(); el.setSelectionRange(searchSelStart, searchSelEnd); }
+    }
 
     // Async and cached — later renders reuse the first fetch.
     _fhRenderCoverage();
@@ -881,6 +897,10 @@ function _fhRowHtml(row) {
 }
 
 function _fhBindLedgerListeners(root) {
+    _fhEl('fhSearch')?.addEventListener('input', e => {
+        _fhSearch = e.target.value || '';
+        _fhRenderLedger();
+    });
     root.querySelectorAll('[data-fh-filter]').forEach(el => {
         el.addEventListener('click', () => { _fhFilter = el.dataset.fhFilter; _fhRenderLedger(); });
     });

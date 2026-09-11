@@ -422,7 +422,18 @@ serve(async (req) => {
 
             const fam = famById.get(String(inv.family_id));
             if (!fam)                       { skipped.push({ id: inv.id, reason: "no family record" }); continue; }
-            if (!looksLikeEmail(fam.parent_email)) {
+
+            // Every email on file for the household, not just the primary
+            // parent — a second parent/guardian with their own portal login
+            // was silently never seeing an invoice land in their own inbox.
+            // Deduped case-insensitively (some families reuse the same
+            // address for both fields).
+            const recipients = [...new Set(
+                [fam.parent_email, fam.parent2_email]
+                    .filter(looksLikeEmail)
+                    .map((e: string) => e.trim()),
+            )];
+            if (!recipients.length) {
                 skipped.push({ id: inv.id, reason: "no usable email on the family record" });
                 continue;
             }
@@ -446,7 +457,7 @@ serve(async (req) => {
                 headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                     from:     fromEmail,
-                    to:       [String(fam.parent_email).trim()],
+                    to:       recipients,
                     reply_to: replyTo,
                     subject:  `Your ${monthLabel(month)} invoice — Timothy Lutheran MDO`,
                     html,
@@ -463,9 +474,10 @@ serve(async (req) => {
             // Stamped only after Resend accepted it, so the record cannot
             // claim a send that did not happen.
             const stampedAt = new Date().toISOString();
+            const sentTo = recipients.join(", ");
             const { error: upErr } = await admin
                 .from("billing_invoices")
-                .update({ status: "sent", sent_at: stampedAt, sent_to: fam.parent_email })
+                .update({ status: "sent", sent_at: stampedAt, sent_to: sentTo })
                 .eq("id", inv.id);
             if (upErr) {
                 // The family has the email; failing to record it is worth
@@ -474,7 +486,7 @@ serve(async (req) => {
                 continue;
             }
 
-            sent.push({ id: inv.id, to: fam.parent_email });
+            sent.push({ id: inv.id, to: sentTo });
 
             // Best-effort push alongside the email (same escape-hatch pattern
             // /send-push already documents for scheduled/service-role senders
