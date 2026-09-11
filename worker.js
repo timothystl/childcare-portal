@@ -1181,7 +1181,12 @@ export default {
       // reached (blocked here, so it stayed at origin 'null' — the
       // "flash of real fields, then reverts to blocked" symptom).
       "frame-src https://maps.google.com https://www.google.com https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
-      "font-src 'self' data: https://fonts.gstatic.com"
+      // applepay.cdn-apple.com (font-src): once script-src let the Apple Pay
+      // SDK load, its own apple-pay-button.js/apple-wallet-sdk.js load their
+      // button label's webfont (en-US.woff2/.woff) from this same CDN host —
+      // a second, separate CSP miss on the same Apple Pay button, caught
+      // live the same way: "Loading the font ... violates ... font-src".
+      "font-src 'self' data: https://fonts.gstatic.com https://applepay.cdn-apple.com"
     );
     // SX4: the rest of the baseline security headers. Kept byte-identical to
     // `_headers` — that file is the effective policy for every path backed by a
