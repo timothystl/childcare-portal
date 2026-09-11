@@ -1082,8 +1082,6 @@ async function _fhLoadDrawerBody(row) {
     try { auditLines = await _fhFetchInvoiceAudit(row.ar?.invoiceId); } catch (_) { /* best-effort only */ }
     let familyPayments = [];
     try { familyPayments = await fetchPaymentsForFamily(row.familyId); } catch (_) { /* non-fatal */ }
-    let staxPilotEnabled = false;
-    try { staxPilotEnabled = await fetchStaxPilotEnabled(row.familyId); } catch (_) { /* non-fatal */ }
 
     const baseAmt = row.ar?.invoiceId ? (row.ar.billed || 0) : row.total;
     const overrideLine = auditLines.find(a => ['add_fee', 'add_credit', 'override_total'].includes(a.action));
@@ -1122,16 +1120,6 @@ async function _fhLoadDrawerBody(row) {
                     <span>${escHtml(_fhMonthLabel(m.month))} · charged ${_fhMoney(m.billed)}${m.sentAt ? ` (${escHtml(friendlyShort(String(m.sentAt).slice(0, 10)))})` : ''} · paid ${_fhMoney(m.collected)}${m.lastPaymentDate ? ` (${escHtml(friendlyShort(String(m.lastPaymentDate).slice(0, 10)))})` : ''}</span>
                     <strong class="${(m.billed - m.collected) > 0 ? 'fh-bal-owed' : 'fh-bal-clear'}">${_fhMoney(Math.max(0, m.billed - m.collected))}</strong>
                 </div>`).join('')}
-        </div>
-
-        <div class="inc-dr-field">
-            <div class="fh-dr-card-title-row">
-                <div class="fh-dr-card-title">Online payments (Stax)</div>
-            </div>
-            <p class="fh-dr-hint">${staxPilotEnabled
-                ? 'This family can pay online — part of the pilot rollout (docs/STAX_GO_LIVE.md).'
-                : 'This family cannot pay online yet. Their portal will not show a working "Pay online" button until enabled here.'}</p>
-            <button type="button" class="fh-link-btn" id="fhStaxPilotToggle">${staxPilotEnabled ? 'Disable online payments' : 'Enable online payments'}</button>
         </div>
 
         <div class="inc-dr-field">
@@ -1179,28 +1167,11 @@ async function _fhLoadDrawerBody(row) {
     _fhEl('fhUndoSendBtn')?.addEventListener('click', () => _fhUndoSend(row, _fhEl('fhUndoSendBtn')));
     _fhEl('fhPrintStatementBtn')?.addEventListener('click', () => _fhPrintStatement(row, familyPayments));
     _fhEl('fhRecordPaymentBtn')?.addEventListener('click', () => _fhShowPaymentForm(row));
-    _fhEl('fhStaxPilotToggle')?.addEventListener('click', () => _fhToggleStaxPilot(row, staxPilotEnabled));
     _fhEl('fhDrawerCloseFoot')?.addEventListener('click', _fhCloseDrawer);
     _fhEl('fhDrawerRemindBtn')?.addEventListener('click', () => _fhRemindOne(row.familyId, _fhEl('fhDrawerRemindBtn')));
     body.querySelectorAll('.fh-pay-refund-btn').forEach(btn => {
         btn.addEventListener('click', () => _fhRefundPayment(Number(btn.dataset.paymentId), btn.dataset.processor, row));
     });
-}
-
-/** Flip one family's Stax pilot-rollout access from the Ledger drawer. The
- *  edge functions (create-stax-charge, charge-stax-payment) are what
- *  actually enforce this; this button only changes whether the family is
- *  let through, same as the go-live checklist's pilot-group step. */
-async function _fhToggleStaxPilot(row, currentlyEnabled) {
-    const btn = _fhEl('fhStaxPilotToggle');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    try {
-        await setStaxPilotEnabled(row.familyId, !currentlyEnabled);
-        await _fhLoadDrawerBody(row);
-    } catch (err) {
-        alert('Could not update online payment access: ' + (err.message || err));
-        if (btn) { btn.disabled = false; btn.textContent = currentlyEnabled ? 'Disable online payments' : 'Enable online payments'; }
-    }
 }
 
 /** An online card charge (Authorize.net or Stax) can be reversed; a payment
