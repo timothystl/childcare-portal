@@ -230,21 +230,11 @@ serve(async (req) => {
 
         const { data: family, error: famErr } = await admin
             .from("families")
-            .select("id, parent_name, parent_email, parent_phone, stax_customer_id, stax_default_payment_method_id, stax_default_card_last_four, stax_default_card_brand, stax_pilot_enabled")
+            .select("id, parent_name, parent_email, parent_phone, stax_customer_id, stax_default_payment_method_id, stax_default_card_last_four, stax_default_card_brand")
             .eq("id", invoice.family_id)
             .maybeSingle();
         if (famErr) return json({ error: famErr.message }, 500, ch);
         if (!family) return json({ error: "Family record not found." }, 404, ch);
-        // ── Pilot rollout gate — see docs/STAX_GO_LIVE.md §4 ────────
-        // As built, the environment/enabled secrets are all-or-nothing; this
-        // per-family flag is the only thing standing between "flip the
-        // switch" and every family's online-pay button going live at once.
-        // Checked here, before a Stax customer is ever created for this
-        // family, and again in charge-stax-payment before money moves —
-        // never only in the parent-billing.js UI.
-        if (!family.stax_pilot_enabled) {
-            return json({ error: "Online payments are not enabled for your family yet. Please contact the office." }, 403, ch);
-        }
 
         const nameParts = String(family.parent_name || "Family").trim().split(/\s+/);
         const firstname = nameParts[0] || "Family";

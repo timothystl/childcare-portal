@@ -504,8 +504,7 @@ async function pbStartStaxPayment(invoiceId) {
         const err = pbEl(`pbStaxError-${invoiceId}`);
         if (err) {
             const notLive = e?.message === 'Online payments are not configured for production yet.'
-                || e?.message === 'Stax payments are not currently available.'
-                || e?.message === 'Online payments are not enabled for your family yet. Please contact the office.';
+                || e?.message === 'Stax payments are not currently available.';
             err.textContent = notLive
                 ? 'Online payment is not available yet. Please contact the office to pay this bill.'
                 : (e.message || 'Could not start payment. Please try again.');
