@@ -1197,8 +1197,14 @@ export default {
     // Scoped, not blanket-denied: clockin.html legitimately calls
     // getCurrentPosition for the geofence. Nothing in this app uses
     // getUserMedia, so camera and microphone are denied outright.
+    // payment=(self): Google Pay in the Stax billing modal (pay-with-google
+    // in parent-billing.js) goes through the browser's native Payment
+    // Request API rather than a separate Google-hosted script — unlike
+    // payment=(), which blocked the API for every origin including this
+    // one and left canMakePayment()/hasEnrolledInstrument() failing
+    // silently, so the wallet button never rendered and nothing logged.
     newHeaders.set('Permissions-Policy',
-      'geolocation=(self), camera=(), microphone=(), payment=()');
+      'geolocation=(self), camera=(), microphone=(), payment=(self)');
 
     // Cache-Control (R9). Previously every asset was `no-store`, so each page
     // view re-downloaded the whole stack — dist/admin.min.js alone is ~600 KB.
