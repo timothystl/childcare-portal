@@ -1,19 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { safeEqual } from '../_shared/timing-safe.ts'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
   })
-}
-
-// Constant-time comparison so a wrong X-Api-Key can't be brute-forced via
-// response-time differences.
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return diff === 0
 }
 
 // settings.value can be a JSON-encoded TEXT string or a native jsonb object
@@ -65,7 +57,7 @@ Deno.serve(async (req) => {
 
   const expectedKey = Deno.env.get('FINANCE_API_KEY')
   const providedKey = req.headers.get('x-api-key')
-  if (!expectedKey || !providedKey || !safeEqual(providedKey, expectedKey)) {
+  if (!expectedKey || !providedKey || !(await safeEqual(providedKey, expectedKey))) {
     return json({ error: 'unauthorized' }, 401)
   }
 

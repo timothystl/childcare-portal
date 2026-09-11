@@ -1419,6 +1419,58 @@ describe('cross-file drift guard — worker.js SSR copies must match js/ source'
             );
         }
     });
+
+    // supabase/functions/waitlist-status/index.ts's own comment says BASE_ROOMS mirrors
+    // js/supabase.js's ROOMS, but (unlike worker.js's copy above) nothing was ever checking that
+    // -- an id-keyed object rather than the id-carrying array js/supabase.js uses, so it needs its
+    // own extractor tolerant of the TypeScript type annotation between the name and `=`.
+    test('waitlist-status BASE_ROOMS matches the label/capacity/age window of js/supabase.js ROOMS', () => {
+        function extractTsObjectLiteral(sourceText, name) {
+            const match = sourceText.match(new RegExp(`^const\\s+${name}\\s*(?::[^=]+)?=\\s*\\{`, 'm'));
+            if (!match) return null;
+            const open = match.index + match[0].length - 1;
+            let depth = 0, i = open;
+            for (; i < sourceText.length; i++) {
+                const c = sourceText[i];
+                if (c === '{') depth++;
+                else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+            }
+            // eslint-disable-next-line no-eval
+            return eval(`(${sourceText.slice(open, i)})`);
+        }
+
+        const ROOMS_FIELDS = ['label', 'capacity', 'ageMinMonths', 'ageMaxMonths'];
+        const source = extractLiteral(read('js/supabase.js'), 'ROOMS', '[', ']');
+        const baseRooms = extractTsObjectLiteral(
+            read('supabase/functions/waitlist-status/index.ts'), 'BASE_ROOMS'
+        );
+        if (!source) throw new Error('ROOMS not found in js/supabase.js');
+        if (!baseRooms) throw new Error('BASE_ROOMS not found in supabase/functions/waitlist-status/index.ts');
+
+        // 'summer' is deliberately excluded here, matching this file's own comment ("'summer' is
+        // excluded -- same as wlpRooms()") and js/admin/admin-waitlist.js's wlpRooms(), which
+        // filters it the same way: Summer Camp is seasonal, not a year-round waitlist room.
+        const fromSource = Object.fromEntries(
+            source.filter(r => r.id !== 'summer')
+                  .map(r => [r.id, Object.fromEntries(ROOMS_FIELDS.map(f => [f, r[f] ?? null]))])
+        );
+        const fromWaitlist = Object.fromEntries(
+            Object.entries(baseRooms).map(([id, r]) => [id, Object.fromEntries(ROOMS_FIELDS.map(f => [f, r[f] ?? null]))])
+        );
+
+        const want = JSON.stringify(fromSource, null, 1);
+        const got  = JSON.stringify(fromWaitlist, null, 1);
+        if (want !== got) {
+            throw new Error(
+                'BASE_ROOMS has drifted from js/supabase.js ROOMS.\n' +
+                '      A room added, renamed, re-capacitied or re-aged in js/supabase.js must be\n' +
+                '      mirrored in waitlist-status/index.ts\'s BASE_ROOMS, or waitlist position and\n' +
+                '      capacity logic will disagree with the live room config.\n' +
+                `      --- js/supabase.js ---\n      ${want}\n` +
+                `      --- waitlist-status/index.ts ---\n      ${got}`
+            );
+        }
+    });
 });
 
 describe('billing invoice integrity guards', () => {
@@ -1922,10 +1974,19 @@ describe('scheduled jobs use a scoped cron credential', () => {
     });
 
     test('cron secret comparison is constant-time and never logs the secret', () => {
-        const source = read('supabase/functions/_shared/cron-auth.ts');
-        expect(source.includes('crypto.subtle.digest')).toBe(true);
-        expect(source.includes('difference |=')).toBe(true);
-        expect(source.includes('console.')).toBe(false);
+        // The comparison itself now lives in the shared safeEqual() helper (also used by
+        // stax-webhook and finance-summary) -- cron-auth.ts delegates to it rather than
+        // reimplementing it, so check both: that cron-auth.ts actually delegates, and that the
+        // shared implementation is still hash-based/constant-time and never logs.
+        const cronAuth = read('supabase/functions/_shared/cron-auth.ts');
+        expect(cronAuth.includes("from \"./timing-safe.ts\"")).toBe(true);
+        expect(cronAuth.includes('safeEqual(')).toBe(true);
+        expect(cronAuth.includes('console.')).toBe(false);
+
+        const timingSafe = read('supabase/functions/_shared/timing-safe.ts');
+        expect(timingSafe.includes('crypto.subtle.digest')).toBe(true);
+        expect(timingSafe.includes('diff |=')).toBe(true);
+        expect(timingSafe.includes('console.')).toBe(false);
     });
 
     test('replacement cron commands read a scoped Vault secret, not a service-role JWT', () => {
