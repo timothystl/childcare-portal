@@ -20,6 +20,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { safeEqual } from "../_shared/timing-safe.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -28,19 +29,6 @@ function json(body: unknown, status: number) {
         status,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
-}
-
-async function safeEqual(actual: string, expected: string): Promise<boolean> {
-    const encoder = new TextEncoder();
-    const [a, b] = await Promise.all([
-        crypto.subtle.digest("SHA-256", encoder.encode(actual)),
-        crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-    ]);
-    const av = new Uint8Array(a);
-    const bv = new Uint8Array(b);
-    let diff = av.length ^ bv.length;
-    for (let i = 0; i < av.length; i++) diff |= av[i] ^ bv[i];
-    return diff === 0;
 }
 
 function cents(value: unknown): number | null {
