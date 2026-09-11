@@ -309,7 +309,7 @@ serve(async (req) => {
         if (ids.length > MAX_BATCH) return json({ error: `Too many invoices in one call (max ${MAX_BATCH}).` }, 400, ch);
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
-        const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+        const fromEmail = `"Timothy MDO Billing" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
         const replyTo   = Deno.env.get("RESEND_REPLY_TO")   || fromEmail;
         if (!apiKey) return json({ error: "RESEND_API_KEY secret is not set" }, 500, ch);
 

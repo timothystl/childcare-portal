@@ -155,7 +155,7 @@ async function sendAlertEmail(o: {
     released: Array<{ lockId: number; reason: string }>;
 }): Promise<void> {
     const apiKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+    const fromEmail = `"Timothy MDO Payments" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
     const toEmail = Deno.env.get("RESEND_REPLY_TO") || "mdo@timothystl.org";
     if (!apiKey) { console.warn("reconcile-stax-payments: RESEND_API_KEY not set, skipping alert"); return; }
 

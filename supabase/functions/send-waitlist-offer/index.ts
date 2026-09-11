@@ -59,7 +59,7 @@ serve(async (req) => {
         }
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
-        const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+        const fromEmail = `"Timothy MDO Waitlist" <${Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev"}>`;
         const replyTo   = Deno.env.get("RESEND_REPLY_TO")   || fromEmail;
 
         if (!apiKey) {
