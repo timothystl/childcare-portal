@@ -56,7 +56,8 @@ jobs. The public hostname is `mdo.timothystl.org`. The repository may eventually
 
 ## Tests and release behavior
 
-Use Node 20 for the existing workflow:
+Use Node 22 for the existing workflow (bumped from 20 on 2026-09-11 — the CI-pinned version must support
+native `.ts` execution for `test/shared/timing-safe.test.js`, which Node 20 does not):
 
 ```bash
 npm ci
