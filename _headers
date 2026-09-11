@@ -37,3 +37,13 @@
 
 /images/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Exception: /images/logo/ holds brand assets (favicons, wordmark, and each
+# app's launcher/maskable icons under logo/apps/*) that get replaced in place
+# under the same filename on a rebrand, the same "not content-hashed" hazard
+# as the bundles above. Immutable caching there stranded installed
+# desktop/PWA app icons on stale artwork after the 2026-09 icon refresh.
+# Declared after /images/* so it wins for this subpath (Cloudflare applies
+# later matching blocks' headers over earlier ones for the same path).
+/images/logo/*
+  Cache-Control: no-cache
