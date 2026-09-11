@@ -1391,6 +1391,54 @@ function currentFeeCycleYear(renewalMonthDay) {
     return todayMD >= renewalMD ? year : year - 1;
 }
 
+// The current annual-fee cycle's date window, as [start, end) — start is the
+// renewal date in cycleYear, end is the same date one year later. Mirrors the
+// database's public._family_month_annual_fees() cycle window exactly, so the
+// preview below can't drift out of sync with what actually gets billed.
+function feeCycleWindow(renewalMonthDay, cycleYear) {
+    const renewalMD = /^\d{2}-\d{2}$/.test(renewalMonthDay || '') ? renewalMonthDay : '01-01';
+    const [mm, dd] = renewalMD.split('-').map(Number);
+    return {
+        start: new Date(cycleYear, mm - 1, dd),
+        end:   new Date(cycleYear + 1, mm - 1, dd),
+    };
+}
+
+// The earliest calendar month ("YYYY-MM") with a real, confirmed,
+// non-waitlisted care day matching the given child/family, optionally
+// restricted to [windowStart, windowEnd). Returns null if there is none.
+//
+// This mirrors the database's public._family_month_annual_fees() single-
+// month gate: the annual supply fee and one-time new-family fee are only
+// ever truly due in the ONE month this returns (the cycle's first real
+// month for the child, or — with no window, i.e. across all history — the
+// family's first-ever month for the new-family fee). Without this check, a
+// child/family already billed the fee on an earlier month's draft would show
+// as "still owing" on every later month's preview too, purely because
+// nothing had been SENT yet to stamp it — see fold_annual_fees_into_invoice_real
+// and annual_fee_single_month_gate for the incident this closes.
+function firstBilledCycleMonth(allRegistrations, { childName = null, parentEmail, parent2Email, windowStart = null, windowEnd = null }) {
+    const email1 = (parentEmail || '').toLowerCase().trim();
+    const email2 = (parent2Email || '').toLowerCase().trim();
+    const nameKey = childName ? childName.toLowerCase().trim() : null;
+    let earliest = null;
+    (allRegistrations || []).forEach(r => {
+        if (r.status !== 'confirmed') return;
+        const rEmail = (r.parent_email || '').toLowerCase().trim();
+        if (rEmail !== email1 && !(email2 && rEmail === email2)) return;
+        if (nameKey && (r.child_name || '').toLowerCase().trim() !== nameKey) return;
+        (r.registration_dates || []).forEach(rd => {
+            if (rd.waitlisted) return;
+            const careDate = new Date(rd.care_date);
+            if (windowStart && careDate < windowStart) return;
+            if (windowEnd && careDate >= windowEnd) return;
+            const monthKey = `${careDate.getFullYear()}-${String(careDate.getMonth() + 1).padStart(2, '0')}`;
+            if (!earliest || monthKey < earliest) earliest = monthKey;
+        });
+    });
+    return earliest;
+}
+
 async function restoreFamily(id) {
     return updateFamily(id, { active: true });
 }
