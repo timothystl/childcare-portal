@@ -419,13 +419,35 @@ async function generateFamilyBillingReport() {
         } catch (e) { /* ignore — currentFeeCycleYear() itself falls back to '01-01' */ }
     }
     const currentYear = currentFeeCycleYear(regFeeRenewalDate);
+    // Owing the fee takes more than "not yet stamped paid this cycle" — that
+    // stamp is what THIS function sets, below, the moment it finds someone
+    // owing, but it's also set when an invoice carrying the fee is actually
+    // sent (fold_annual_fees_into_invoice_real). Either way, if this report
+    // runs again for a later month before that stamp exists yet (e.g. the
+    // month it was really due hasn't been sent), it must not charge the fee
+    // a second time — so it also requires THIS to be the one month the fee
+    // is actually due: the child's first real day within the current cycle,
+    // or (new-family fee) the family's first-ever billed month. See
+    // annual_fee_single_month_gate for the incident this closes.
+    const { start: feeCycleStart, end: feeCycleEnd } = feeCycleWindow(regFeeRenewalDate, currentYear);
     const regFeeOwedByChild = new Map(); // childName key → { owed, studentId }
     const feeChargeStudentIds = [];
     families.forEach(fam => fam.children.forEach(c => {
         const key = (c.childName || '').toLowerCase().trim();
         if (regFeeOwedByChild.has(key)) return;
         const student = studentByName.get(key);
-        const owed = regFeeAmount > 0 && !!student && student.reg_fee_paid_year !== currentYear;
+        let owed = false;
+        if (regFeeAmount > 0 && student && student.reg_fee_paid_year !== currentYear) {
+            const family = familyByEmail.get((fam.parentEmail || '').toLowerCase().trim());
+            const firstMonth = firstBilledCycleMonth(allRegistrations, {
+                childName: c.childName,
+                parentEmail: fam.parentEmail,
+                parent2Email: family?.parent2_email,
+                windowStart: feeCycleStart,
+                windowEnd: feeCycleEnd,
+            });
+            owed = firstMonth === monthVal;
+        }
         regFeeOwedByChild.set(key, { owed, studentId: student?.id });
         if (owed && student.id) feeChargeStudentIds.push(student.id);
     }));
@@ -434,16 +456,25 @@ async function generateFamilyBillingReport() {
             updateStudentRegFee(id, currentYear).catch(e => console.warn('updateStudentRegFee failed for', id, e))));
     }
 
-    // One-time new-family fee: owed whenever the family record exists and hasn't
-    // been stamped yet. Charged and stamped the moment their billing report is
-    // generated, same "no manual step" pattern as the supply fee above.
+    // One-time new-family fee: owed whenever the family record exists, hasn't
+    // been stamped yet, and this is the family's actual first-ever billed
+    // month (same single-month gate as the reg fee above). Charged and
+    // stamped the moment their billing report is generated, same "no manual
+    // step" pattern as the supply fee above.
     const newFamilyFeeOwedByEmail = new Map(); // parentEmail → owed boolean
     const newFamilyFeeChargeIds = [];
     families.forEach(fam => {
         const key = (fam.parentEmail || '').toLowerCase().trim();
         if (newFamilyFeeOwedByEmail.has(key)) return;
         const family = familyByEmail.get(key);
-        const owed = newFamilyFeeAmount > 0 && !!family && !family.new_family_fee_charged;
+        let owed = false;
+        if (newFamilyFeeAmount > 0 && family && !family.new_family_fee_charged) {
+            const firstMonth = firstBilledCycleMonth(allRegistrations, {
+                parentEmail: fam.parentEmail,
+                parent2Email: family.parent2_email,
+            });
+            owed = firstMonth === monthVal;
+        }
         newFamilyFeeOwedByEmail.set(key, owed);
         if (owed) newFamilyFeeChargeIds.push(family.id);
     });

@@ -135,12 +135,33 @@ async function computeBillMonthExceptions(month) {
     lastMonth.forEach(fam => prevChildCount.set((fam.parentEmail || '').toLowerCase().trim(), fam.children.length));
 
     // ── This month's families ──
+    // Owing the annual fee takes more than "not yet stamped paid this cycle"
+    // (that stamp only lands once an invoice is actually SENT — see
+    // fold_annual_fees_into_invoice_real): it also requires THIS to be the
+    // one month the fee is actually due (the child's first real cycle month,
+    // the family's first-ever month for the new-family fee). Otherwise a
+    // family already billed the fee on an earlier month's still-unsent draft
+    // would show as owing it again on every later month too — see
+    // annual_fee_single_month_gate.
+    const { start: feeCycleStart, end: feeCycleEnd } = feeCycleWindow(regFeeRenewalMD, currentYear);
     const regFeeOwedByChild = new Map();
     thisMonth.forEach(fam => fam.children.forEach(c => {
         const key = (c.childName || '').toLowerCase().trim();
         if (regFeeOwedByChild.has(key)) return;
         const student = studentByName.get(key);
-        regFeeOwedByChild.set(key, regFeeAmount > 0 && !!student && student.reg_fee_paid_year !== currentYear);
+        let owed = false;
+        if (regFeeAmount > 0 && student && student.reg_fee_paid_year !== currentYear) {
+            const fam2 = familyByEmail.get((fam.parentEmail || '').toLowerCase().trim());
+            const firstMonth = firstBilledCycleMonth(allRegistrations, {
+                childName: c.childName,
+                parentEmail: fam.parentEmail,
+                parent2Email: fam2?.parent2_email,
+                windowStart: feeCycleStart,
+                windowEnd: feeCycleEnd,
+            });
+            owed = firstMonth === month;
+        }
+        regFeeOwedByChild.set(key, owed);
     }));
 
     const rows = thisMonth.map(fam => {
@@ -152,7 +173,12 @@ async function computeBillMonthExceptions(month) {
         const owedChildren = fam.children.filter(c => regFeeOwedByChild.get((c.childName || '').toLowerCase().trim()));
         const rawSupply    = owedChildren.length * regFeeAmount;
         const regFee       = supplyFeeMax > 0 && rawSupply > supplyFeeMax ? supplyFeeMax : rawSupply;
-        const familyNewFee = newFamilyFee > 0 && match && !match.new_family_fee_charged ? newFamilyFee : 0;
+        // A true one-time fee: owed only in the family's first-ever real
+        // month (no cycle window), same single-month gate as the reg fee above.
+        const familyFirstMonth = newFamilyFee > 0 && match && !match.new_family_fee_charged
+            ? firstBilledCycleMonth(allRegistrations, { parentEmail: fam.parentEmail, parent2Email: match.parent2_email })
+            : null;
+        const familyNewFee = familyFirstMonth === month ? newFamilyFee : 0;
 
         const famCredits = match ? (creditsByFamily.get(match.id) || []) : [];
         const creditTotal = famCredits.reduce((s, c) => s + parseFloat(c.amount || 0), 0);
