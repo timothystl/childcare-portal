@@ -111,50 +111,35 @@ treating those as done.
       rather than locking that family out of paying. **Not done yet**
       (confirmed directly, 2026-09-11) — still open.
 
-## 4. Rollout — a small pilot group, not everyone at once
+## 4. Rollout — pilot gate removed, open to every family (2026-09-11)
 
-A per-family pilot gate now exists (`families.stax_pilot_enabled`,
-default false). §2's environment secrets still turn the *feature* on for
-the whole app, but a family's own "Pay online" button will not actually
-work until an admin flips it on for that family from **Finance → Ledger →
-[family] → Online payments (Stax)**. Enforced in both `create-stax-charge`
-and `charge-stax-payment` server-side — never only in the UI — so there is
-no path to a real charge for a family that hasn't been enabled, even by
-calling the API directly.
+A per-family pilot gate (`families.stax_pilot_enabled`) existed briefly
+(added 2026-09-10) and was removed the next day at Andrew's explicit
+direction: he wants every family able to pay online, with knowledge of the
+portal itself being the only real gate — not a per-family admin flag.
 
-- [ ] ⚠️ **Unconfirmed** — Before phase 3's first real charge, enable it for
-      your own family first (the office account you'll pay with), from
-      Finance → Ledger → click the family's row to open the drawer →
-      "Online payments (Stax)" card → **Enable online payments**. Andrew's
-      own family/invoice already took a real charge this session, which
-      normally couldn't happen unless this flag were on — but Andrew also
-      said (2026-09-11) he doesn't know how to set it and wasn't sure this
-      step was done, so don't take the successful charge as proof; check the
-      family's actual `stax_pilot_enabled` value (or click into the drawer
-      above) before assuming.
-- [ ] After phase 3 succeeds, enable it for a handful of willing families
-      (the director's plan, same shape as the scheduler rollout), and only
-      widen from there. **Not confirmed done** as of 2026-09-11.
-- [ ] ⚠️ **Design question raised 2026-09-11, not yet resolved:** Andrew
-      expected non-pilot families to not know online payment exists at all.
-      As actually built, the "Pay online" button renders for *every* family
-      with an unpaid invoice regardless of `stax_pilot_enabled` — gating is
-      server-side only (`create-stax-charge`/`charge-stax-payment` refuse a
-      non-enabled family with "Online payments are not enabled for your
-      family yet. Please contact the office," shown as a generic "not
-      available yet" message in the modal). No family can be *charged*
-      without the flag, but every family currently *sees* the button. If
-      full invisibility for non-pilot families is actually wanted, that's a
-      separate UI change to `parent-billing.js`, not a config flip — raise
-      with Andrew before building it.
+What changed: `create-stax-charge` and `charge-stax-payment` no longer read
+or check `stax_pilot_enabled` — any family with a real invoice and a Stax
+customer record can charge. The admin "Online payments (Stax)" toggle in
+the Finance → Ledger family drawer, and the `fetchStaxPilotEnabled`/
+`setStaxPilotEnabled` functions behind it, were removed as dead code rather
+than left as a non-functional button. The `families.stax_pilot_enabled`
+column itself was **left in the schema, unused** — dropping a column is a
+separate, riskier step than removing the code that read it, and nothing
+requires it gone. If it's ever worth cleaning up, that's its own migration.
 
-Also before the flip:
+This also resolves the design mismatch flagged the day before: the "Pay
+online" button already rendered for every family regardless of the flag
+(gating was server-side only) — Andrew's direction here confirms that was
+the *wanted* behavior all along, not a bug to hide the button for.
+
+Also part of go-live:
 
 - [x] **Mark every pre-Stax invoice paid.** In-house reconciliation starts at
-      go-live; historical balances must not present themselves to a pilot
-      family as something to pay online. Note that a Stax charge rolls up every
+      go-live; historical balances must not present themselves to a family
+      as something to pay online. Note that a Stax charge rolls up every
       unpaid issued invoice through the anchor month — an old unpaid month
-      would be swept into a pilot family's first real payment. Confirmed done
+      would be swept into a family's first real payment. Confirmed done
       directly by Andrew (2026-09-11).
 
 ## 5. Not carried over from Authorize.net

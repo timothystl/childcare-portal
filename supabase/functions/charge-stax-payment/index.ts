@@ -421,17 +421,10 @@ serve(async (req) => {
 
         const { data: family, error: famErr } = await admin
             .from("families")
-            .select("id, stax_customer_id, stax_default_payment_method_id, stax_default_card_brand, stax_default_card_last_four, stax_pilot_enabled")
+            .select("id, stax_customer_id, stax_default_payment_method_id, stax_default_card_brand, stax_default_card_last_four")
             .eq("id", invoice.family_id)
             .maybeSingle();
         if (famErr) return json({ error: "Could not load the payment customer." }, 500, ch);
-        // ── Pilot rollout gate — see docs/STAX_GO_LIVE.md §4 ────────
-        // Re-checked here independently of create-stax-charge: a family
-        // could otherwise call this function directly with a stale/replayed
-        // session and reach a real charge without ever passing the gate.
-        if (!family?.stax_pilot_enabled) {
-            return json({ error: "Online payments are not enabled for your family yet. Please contact the office." }, 403, ch);
-        }
         if (!family?.stax_customer_id) {
             return json({ error: "Start a payment session before charging." }, 400, ch);
         }
