@@ -111,19 +111,54 @@ Also before the flip:
 Nothing. `billing_payments` never held a single Authorize.net row, so there is
 no payment history, no refund path and no reconciliation backlog tied to it.
 
+## 5a. Apple Pay / Google Pay — built and confirmed working (2026-09-11)
+
+Both wallets are live in the parent billing modal (`pay-with-apple` /
+`pay-with-google` in `parent-billing.js`, mounted by Stax.js) and confirmed
+end-to-end across Safari, mobile Safari, mobile Chrome, and desktop Chrome.
+Getting there took three separate fixes plus one Stax-side merchant setting —
+worth recording so the next silent wallet failure doesn't start from zero:
+
+- **`Permissions-Policy: payment=(self)`** (`worker.js` / `_headers`,
+  [#357](https://github.com/timothystl/childcare-portal/pull/357)). Google
+  Pay goes through the browser's native Payment Request API rather than a
+  separate Google-hosted script; `payment=()` blocked that API for every
+  origin including this one, so `canMakePayment()` failed silently and the
+  button never rendered — no console error, no CSP violation, just absence.
+- **`frame-src` needs `collectcheckout.com`**
+  ([#358](https://github.com/timothystl/childcare-portal/pull/358)). NMI's
+  Collect.js routes both wallet fields through iframes at
+  `collectcheckout.com/token/{apple,google}_pay_field.php` — a different
+  host from `secure.networkmerchants.com`, which only ever serves Collect.js's
+  own script and its tokenize XHR. Without it, Google Pay's mount showed a
+  broken-frame icon and Apple Pay crashed deep inside Collect.js instead of
+  tokenizing.
+- **`frame-src`/`img-src`/`connect-src` need `applepay.cdn-apple.com`**
+  ([#359](https://github.com/timothystl/childcare-portal/pull/359)). Desktop
+  Chrome (no native `ApplePaySession` — that's Safari/WebKit only, which is
+  why Safari and every iOS browser, all WebKit under the hood, already
+  worked) renders Apple's own cross-browser `<apple-pay-modal>` QR-handoff
+  component instead. Its host was already allowed in `script-src`/`font-src`
+  for the button itself, but not in the three directives its hosted content
+  (the QR code) actually needs — so the modal existed in the DOM but Chrome
+  refused its content, showing "This content is blocked" instead.
+- **Stax-side merchant setting, not code**: Apple Pay additionally required
+  Stax's Customer/Partner Success team to explicitly enable
+  `mdo.timothystl.org` for Apple Pay on their end — the domain-verification
+  file (`.well-known/apple-developer-merchantid-domain-association`) alone
+  was not enough. If Google Pay ever silently stops working with no CSP
+  violation and eligibility (Chrome, signed into Google, saved card) checks
+  out, ask Stax whether an equivalent domain/merchant flag lapsed.
+
+Net effect on the CSP line: three new hosts across `frame-src`/`img-src`/
+`connect-src` pushed `_headers` toward Cloudflare's 2,000-char limit again,
+so `test.blockchyp.com`/`api.blockchyp.com` and (in `frame-src` only)
+`maps.google.com`/`www.google.com` are now written as `*.blockchyp.com` /
+`*.google.com` wildcards to buy room back — same pattern as the existing
+`*.supabase.co` entry, not a trust widening.
+
 ## 6. Not built yet — follow-up, not a launch blocker
 
-- [ ] **Apple Pay / digital wallets.** The Stax merchant account itself is
-      provisioned for it (`allow_cnp_digital_wallet: true` on `/self`), but
-      `create-stax-charge`/`charge-stax-payment` and the parent-billing.js
-      modal only mount Stax.js's plain card-number/CVV fields today — no
-      wallet button anywhere. Adding it means confirming with Stax whether
-      their Web Payments/Bolt tier supports a wallet button at all, updating
-      both edge functions to accept whatever payment_method shape a wallet
-      charge produces, adding the button to the parent-facing modal, and
-      hosting Apple's domain-verification file on mdo.timothystl.org. Treat
-      as a real follow-on project once the plain card flow is proven in
-      pilot, not something to add before the first real charge.
 - [ ] **An admin "all payments" view.** Finance → Ledger only shows families
       with real enrollment/attendance for the selected month
       (`computeBillMonthExceptions`) — a payment for a family with no
