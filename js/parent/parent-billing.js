@@ -55,6 +55,7 @@ let pbLoadFailed = false;   // a thrown error, as distinct from an empty payload
 let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by parent-auth.js
 let pbStaxPaying = null;    // invoice id currently in the Stax comparison modal, or null
 let pbStaxInstance = null;  // the live StaxJs() instance for the open modal, or null
+let pbStaxWalletObserver = null;  // watches for Stax.js mounting a wallet button, or null
 
 // ── Screen navigation (2026-08-28 redesign) ──────────────────
 // Billing is its own small stack — Home → All Invoices → Invoice Detail,
@@ -607,6 +608,11 @@ function pbUpdateStaxDisplayedAmount() {
         if (amountEl) amountEl.textContent = pbMoney(amount);
         if (payBtn) payBtn.textContent = `Pay ${pbMoney(amount)}`;
         if (savedBtn) savedBtn.textContent = `Pay ${pbMoney(amount)} with this card`;
+        // Apple/Google Pay must show the actual amount before the parent taps
+        // the wallet button — keep it in sync with "pay a different amount".
+        if (pbStaxInstance && typeof pbStaxInstance.setPrice === 'function') {
+            pbStaxInstance.setPrice(amount.toFixed(2));
+        }
     } catch (_) {
         if (amountEl) amountEl.textContent = '—';
         if (payBtn) payBtn.textContent = 'Pay';
@@ -650,6 +656,13 @@ function pbOpenStaxModal(session) {
     const saveCardEl = pbEl('pbStaxSaveCard');
     if (numberMount) numberMount.innerHTML = '';
     if (cvvMount) cvvMount.innerHTML = '';
+    if (pbStaxWalletObserver) { pbStaxWalletObserver.disconnect(); pbStaxWalletObserver = null; }
+    const walletWrap = pbEl('pbStaxWalletButtons');
+    const applePayMount = pbEl('pay-with-apple');
+    const googlePayMount = pbEl('pay-with-google');
+    if (applePayMount) applePayMount.innerHTML = '';
+    if (googlePayMount) googlePayMount.innerHTML = '';
+    if (walletWrap) walletWrap.classList.add('hidden');
     if (nameEl) {
         const who = `${session.firstname} ${session.lastname}`.trim();
         nameEl.textContent = session.invoiceId ? `${who} · Invoice INV-${session.invoiceId}` : who;
@@ -693,7 +706,33 @@ function pbOpenStaxModal(session) {
             style: 'height: 36px; width: 100%; font-size: 15px; padding: 0 12px; border: none; outline: none;',
             type: 'text',
         },
+        // Apple/Google Pay: Stax.js wants the price before it decides whether
+        // to render a wallet button into these containers at all — it's a
+        // no-op on any Stax.js build that doesn't support digital wallets
+        // (see the "not built yet" note this replaces in docs/STAX_GO_LIVE.md),
+        // so this never breaks the plain card fields above.
+        price: Number(session.amount).toFixed(2),
     });
+
+    // Stax.js decides on its own, per browser/device, whether a wallet is
+    // actually available (Apple Pay needs Safari + a card in the system
+    // Wallet; Google Pay needs a signed-in Chrome/Android with a saved
+    // card) — there is no "not available" callback, only silence. So watch
+    // the two mount points ourselves: reveal the wallet section (and its
+    // "or pay with card" divider) only once Stax.js actually injects a
+    // button into one of them, and leave the modal exactly as it looks
+    // today if it never does.
+    if (typeof MutationObserver !== 'undefined' && applePayMount && googlePayMount && walletWrap) {
+        pbStaxWalletObserver = new MutationObserver(() => {
+            if (applePayMount.childElementCount || googlePayMount.childElementCount) {
+                walletWrap.classList.remove('hidden');
+                pbStaxWalletObserver.disconnect();
+                pbStaxWalletObserver = null;
+            }
+        });
+        pbStaxWalletObserver.observe(applePayMount, { childList: true });
+        pbStaxWalletObserver.observe(googlePayMount, { childList: true });
+    }
 
     // .showCardForm() is documented on Stax's "accepting a credit card
     // payment" sample; feature-detect it in case a given Stax.js build
@@ -712,10 +751,44 @@ function pbOpenStaxModal(session) {
     if (typeof pbStaxInstance.on === 'function') {
         pbStaxInstance.on('card_form_complete', () => { if (payBtn) payBtn.disabled = false; });
         pbStaxInstance.on('card_form_uncomplete', () => { if (payBtn) payBtn.disabled = true; });
+        // Fired once Apple/Google Pay have tokenized the wallet card. We take
+        // the resulting payment_method_id and charge it through our own
+        // server-side endpoint below (pbStaxHandleWalletTokenize), exactly
+        // like a typed card — never pbStaxInstance.pay(), which would let
+        // the browser trigger the charge directly against a client-supplied
+        // amount instead of the server re-deriving it from the invoice.
+        pbStaxInstance.on('digitalwallet_tokenize', pbStaxHandleWalletTokenize);
     }
 
     if (modal) modal.classList.remove('hidden');
     document.body.classList.add('pb-modal-open');
+}
+
+/**
+ * Shared tail for every Stax payment path (typed card, saved card, wallet):
+ * charges an already-tokenized payment_method_id server-side — where the
+ * amount is re-derived from the invoice, never trusted from the browser —
+ * and builds the receipt. Throws on failure; callers keep their own
+ * try/catch so each can restore its own button/status UI.
+ */
+async function pbStaxFinishCharge(session, paymentMethodId, { saveCard = false, paymentMethodLine = null } = {}) {
+    const amount = pbSelectedStaxAmount();
+    const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId, {
+        saveCard, amount, paymentAttemptId: session.paymentAttemptId,
+        sandboxTest: pbStaxTestEnabled(),
+    });
+    if (!chargeResult || chargeResult.success !== true) {
+        throw new Error('Payment was not confirmed. Please try again.');
+    }
+    pbLastReceipt = {
+        familyName: (typeof portalContext !== 'undefined' && (portalContext?.parent_name || portalContext?.family_name)) || 'there',
+        amount: Number(chargeResult.amount) || amount,
+        invoiceNumber: `INV-${session.invoiceId}`,
+        paidOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        paymentMethodLine,
+        confirmationNumber: chargeResult.transactionId || '—',
+    };
+    pbCloseStaxModal(true);
 }
 
 async function pbStaxTokenizeAndCharge() {
@@ -730,7 +803,6 @@ async function pbStaxTokenizeAndCharge() {
     if (status) { status.hidden = false; status.textContent = 'Processing payment…'; }
 
     try {
-        const amount = pbSelectedStaxAmount();
         // Per Stax's documented sample, expiration month/year travel as
         // plain fields here — only the number and CVV are collected inside
         // Stax's own iframes. See create-stax-charge's ✅ note for why.
@@ -751,32 +823,49 @@ async function pbStaxTokenizeAndCharge() {
         if (!paymentMethodId) throw new Error('Could not read the card. Please check the details and try again.');
 
         const saveCard = !!pbEl('pbStaxSaveCard')?.checked;
-        const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId, {
-            saveCard, amount, paymentAttemptId: session.paymentAttemptId,
-            sandboxTest: pbStaxTestEnabled(),
-        });
-        if (!chargeResult || chargeResult.success !== true) {
-            throw new Error('Payment was not confirmed. Please try again.');
-        }
-
         // A fresh card's brand/last-four live only inside Stax's own iframe —
         // this app never reads card data, so unlike the saved-card path below
         // there's no verified field to show here. pbRenderReceipt already
         // omits the row entirely when paymentMethodLine is null.
-        pbLastReceipt = {
-            familyName: (typeof portalContext !== 'undefined' && (portalContext?.parent_name || portalContext?.family_name)) || 'there',
-            amount: Number(chargeResult.amount) || amount,
-            invoiceNumber: `INV-${session.invoiceId}`,
-            paidOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            paymentMethodLine: null,
-            confirmationNumber: chargeResult.transactionId || '—',
-        };
-        pbCloseStaxModal(true);
+        await pbStaxFinishCharge(session, paymentMethodId, { saveCard, paymentMethodLine: null });
     } catch (e) {
         if (e.nextPaymentAttemptId) session.paymentAttemptId = e.nextPaymentAttemptId;
         if (status) {
             status.hidden = false;
             status.textContent = e.message || 'Payment failed. Please check the card details and try again.';
+        }
+        if (payBtn) payBtn.disabled = false;
+    }
+}
+
+/**
+ * Handles Stax.js's `digitalwallet_tokenize` event (Apple Pay / Google Pay).
+ * The event hands us an already-tokenized payment_method_id — same shape as
+ * a typed card's tokenize() result — so it goes through the exact same
+ * server-side charge path as pbStaxTokenizeAndCharge rather than
+ * pbStaxInstance.pay(), which would charge directly from the browser.
+ */
+async function pbStaxHandleWalletTokenize(details) {
+    const session = window.__pbStaxSession;
+    const payBtn = pbEl('pbStaxPayBtn');
+    const status = pbEl('pbStaxModalStatus');
+    if (!session) return;
+    const paymentMethodId = details && (details.id || details.payment_method_id);
+    if (!paymentMethodId) return;
+
+    if (payBtn) payBtn.disabled = true;
+    if (status) { status.hidden = false; status.textContent = 'Processing payment…'; }
+
+    try {
+        // Wallet-tokenized cards aren't offered as "save for next time" —
+        // that checkbox lives in the typed-card section the parent never
+        // sees when paying by wallet.
+        await pbStaxFinishCharge(session, paymentMethodId, { saveCard: false, paymentMethodLine: 'Apple Pay / Google Pay' });
+    } catch (e) {
+        if (e.nextPaymentAttemptId) session.paymentAttemptId = e.nextPaymentAttemptId;
+        if (status) {
+            status.hidden = false;
+            status.textContent = e.message || 'Payment failed. Please try again.';
         }
         if (payBtn) payBtn.disabled = false;
     }
@@ -828,6 +917,12 @@ function pbCloseStaxModal(success) {
     const cvvMount = pbEl('pbStaxCardCvv');
     if (numberMount) numberMount.innerHTML = '';
     if (cvvMount) cvvMount.innerHTML = '';
+    if (pbStaxWalletObserver) { pbStaxWalletObserver.disconnect(); pbStaxWalletObserver = null; }
+    const applePayMount = pbEl('pay-with-apple');
+    const googlePayMount = pbEl('pay-with-google');
+    if (applePayMount) applePayMount.innerHTML = '';
+    if (googlePayMount) googlePayMount.innerHTML = '';
+    pbEl('pbStaxWalletButtons')?.classList.add('hidden');
     pbStaxInstance = null;
     window.__pbStaxSession = null;
     pbStaxPaying = null;
