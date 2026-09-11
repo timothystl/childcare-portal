@@ -35,6 +35,9 @@ let _fhDrawerRow    = null;       // the row currently open in the drawer
 let _fhShowAging    = false;
 let _fhBusy         = false;
 let _fhReportLoaded = false;
+let _fhPaymentsLoaded = false;
+let _fhAllPayments  = [];         // every billing_payments row, unfiltered by month/enrollment
+let _fhPaymentsSearch = '';
 
 const FH_OWED_TRAILING_MONTHS = 2; // + the open month = 3 months of real balance history
 
@@ -133,6 +136,16 @@ function _fhBindHeaderOnce() {
         _fhSearch = e.target.value || '';
         _fhRenderLedger();
     });
+    _fhEl('fhPaymentsSearch')?.addEventListener('input', e => {
+        _fhPaymentsSearch = e.target.value || '';
+        _fhRenderAllPaymentsTable();
+    });
+    _fhEl('fhPaymentsRefreshBtn')?.addEventListener('click', async () => {
+        const btn = _fhEl('fhPaymentsRefreshBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+        try { await renderAllPaymentsView(); }
+        finally { if (btn) { btn.disabled = false; btn.innerHTML = '&#8635; Refresh'; } }
+    });
     document.querySelectorAll('#fhTabs .fh-tab').forEach(btn => {
         btn.addEventListener('click', () => _fhSwitchTab(btn.dataset.fhTab));
     });
@@ -184,20 +197,23 @@ function _fhSwitchTab(tab) {
         b.classList.toggle('is-on', on);
         b.setAttribute('aria-selected', String(on));
     });
-    const ledgerPane = _fhEl('fhLedgerPane');
-    const reportPane = _fhEl('billingReportSection');
-    const bkPane     = _fhEl('fhBookkeeperPane');
-    if (ledgerPane) ledgerPane.style.display = tab === 'ledger' ? '' : 'none';
-    if (reportPane) reportPane.style.display = tab === 'report' ? '' : 'none';
-    if (bkPane)     bkPane.style.display     = tab === 'bookkeeper' ? '' : 'none';
+    const ledgerPane   = _fhEl('fhLedgerPane');
+    const reportPane   = _fhEl('billingReportSection');
+    const bkPane       = _fhEl('fhBookkeeperPane');
+    const paymentsPane = _fhEl('fhPaymentsPane');
+    if (ledgerPane)   ledgerPane.style.display   = tab === 'ledger' ? '' : 'none';
+    if (reportPane)   reportPane.style.display   = tab === 'report' ? '' : 'none';
+    if (bkPane)       bkPane.style.display       = tab === 'bookkeeper' ? '' : 'none';
+    if (paymentsPane) paymentsPane.style.display = tab === 'payments' ? '' : 'none';
     // The note editor and the month/search toolbar belong to the Ledger and
     // the Billing Report. Bookkeeper carries its own month controls per
-    // sub-view, and "note on every invoice email" is a Ledger setting — both
-    // read as broken controls on a close screen.
+    // sub-view, and All Payments carries its own search box (it isn't
+    // month-scoped, unlike the header's month nav) — "note on every invoice
+    // email" is a Ledger setting, and both read as broken controls elsewhere.
     const noteEditor = document.querySelector('#financeHubSection .fh-note-editor');
-    if (noteEditor) noteEditor.style.display = tab === 'bookkeeper' ? 'none' : '';
+    if (noteEditor) noteEditor.style.display = (tab === 'bookkeeper' || tab === 'payments') ? 'none' : '';
     const searchBox = _fhEl('fhSearch');
-    if (searchBox) searchBox.style.display = tab === 'bookkeeper' ? 'none' : '';
+    if (searchBox) searchBox.style.display = (tab === 'bookkeeper' || tab === 'payments') ? 'none' : '';
     if (tab === 'report' && !_fhReportLoaded) {
         _fhReportLoaded = true;
         const brMonth = _fhEl('brMonth');
@@ -207,6 +223,81 @@ function _fhSwitchTab(tab) {
     if (tab === 'bookkeeper' && typeof renderFinanceBookkeeper === 'function') {
         renderFinanceBookkeeper(_fhMonth);
     }
+    if (tab === 'payments' && !_fhPaymentsLoaded) {
+        _fhPaymentsLoaded = true;
+        renderAllPaymentsView();
+    }
+}
+
+/** Every billing_payments row on file, independent of month or current
+ *  enrollment — the one place a payment for a family with no current
+ *  billing-cycle row (a registration/waitlist deposit, or the kind of
+ *  synthetic test payment that surfaced this gap during Stax go-live
+ *  testing) is still visible. Read-only by design: reversing a charge still
+ *  happens from the Ledger drawer once that family has a real month row,
+ *  since a refund needs the same family/invoice context that button
+ *  already has — building that here too would duplicate it. */
+async function renderAllPaymentsView() {
+    const root = _fhEl('fhPaymentsRoot');
+    if (root) root.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        if (typeof allFamiliesData === 'undefined' || !allFamiliesData || !allFamiliesData.length) {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: false });
+        }
+        _fhAllPayments = await fetchAllBillingPayments();
+    } catch (err) {
+        if (root) root.innerHTML = `<p class="empty-hint">Could not load payments: ${escHtml(err.message || String(err))}</p>`;
+        return;
+    }
+    _fhRenderAllPaymentsTable();
+}
+
+function _fhRenderAllPaymentsTable() {
+    const root = _fhEl('fhPaymentsRoot');
+    if (!root) return;
+    const q = _fhPaymentsSearch.trim().toLowerCase();
+    const famById = new Map((allFamiliesData || []).map(f => [String(f.id), f]));
+    const rows = (_fhAllPayments || [])
+        .map(p => ({ ...p, _fam: famById.get(String(p.family_id)) }))
+        .filter(p => !q || (p._fam?.parent_name || '').toLowerCase().includes(q))
+        .sort((a, b) => {
+            const ad = String(a.payment_date || ''), bd = String(b.payment_date || '');
+            if (ad !== bd) return bd.localeCompare(ad);
+            return (b.id || 0) - (a.id || 0);
+        });
+
+    if (!rows.length) {
+        root.innerHTML = `<p class="empty-hint">${q ? 'No payments match that search.' : 'No payments on file yet.'}</p>`;
+        return;
+    }
+
+    root.innerHTML = `
+        <div class="fh-payments-table-wrap">
+        <table class="fh-payments-table">
+            <thead>
+                <tr>
+                    <th>Date</th><th>Family</th><th>Amount</th>
+                    <th>Method</th><th>Invoice</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map(p => {
+                    const method = p.processor === 'stax' ? 'Stax' : (p.payment_method || 'Manual');
+                    const invoiceLabel = p.invoice_id ? `INV-${p.invoice_id}` : 'Unapplied credit';
+                    return `<tr>
+                        <td>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))}</td>
+                        <td>${escHtml(p._fam?.parent_name || '(family not found)')}</td>
+                        <td class="${Number(p.amount) < 0 ? 'fh-pay-refund-amt' : ''}">${_fhMoney(p.amount)}</td>
+                        <td>${escHtml(method)}</td>
+                        <td>${escHtml(invoiceLabel)}</td>
+                        <td>${p.refund_of_payment_id ? `<span class="fh-pay-refund-tag">&#8617; refund of #${p.refund_of_payment_id}</span>` : ''}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+        </div>
+        <p class="fh-payments-count">${rows.length} payment${rows.length === 1 ? '' : 's'}${q ? ` matching "${escHtml(_fhPaymentsSearch)}"` : ''}</p>
+    `;
 }
 
 /** getOrCreateBillingCycle(), tolerant of one specific transient failure:
