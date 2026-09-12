@@ -111,5 +111,11 @@ function ptGoTab(key) {
 
 function ptInitTabs() {
     ptRenderTabs();
-    ptGoTab('today');
+    // The one deep link this shell supports: a page navigating INTO /parent
+    // (e.g. calendar.html's app-mode tab bar, which is a real page load, not
+    // a pane of this SPA) can request an initial tab via ?tab=. Anything
+    // else — an unset or unrecognized value — falls back to Today exactly as
+    // before.
+    const requestedTab = new URLSearchParams(location.search).get('tab');
+    ptGoTab(PT_TABS.some(t => t.key === requestedTab) ? requestedTab : 'today');
 }
