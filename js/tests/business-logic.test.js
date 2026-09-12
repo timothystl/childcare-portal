@@ -1767,6 +1767,29 @@ describe('Stax processor fee / card-vs-ACH tracking', () => {
     });
 });
 
+describe('All Payments search finds a payment by invoice number, not just family name', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+    const adminHtml = read('admin.html');
+
+    test('the search box invites an invoice number, not just a family name', () => {
+        expect(adminHtml.includes('id="fhPaymentsSearch"')).toBe(true);
+        expect(adminHtml.includes('placeholder="Find a family or invoice #&hellip;"')).toBe(true);
+    });
+
+    test('typing an invoice number (with or without the INV- prefix) matches its payment', () => {
+        const start = financeHubJs.indexOf('function _fhRenderAllPaymentsTable');
+        const end = financeHubJs.indexOf('\n}', financeHubJs.indexOf('root.innerHTML = `', start));
+        const fnBody = financeHubJs.slice(start, end);
+        expect(fnBody.includes('const invoiceLabel = p.invoice_id != null')).toBe(true);
+        expect(fnBody.includes('invoiceLabel.includes(q)')).toBe(true);
+        // Still matches by family name too — this adds a second match path,
+        // it doesn't replace the first.
+        expect(fnBody.includes("(p._fam?.parent_name || '').toLowerCase().includes(q)")).toBe(true);
+    });
+});
+
 describe('admin-refund-stax-payment — Stax reversal support, wired into the LIVE Ledger drawer', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

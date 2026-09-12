@@ -256,7 +256,15 @@ function _fhRenderAllPaymentsTable() {
     const famById = new Map((allFamiliesData || []).map(f => [String(f.id), f]));
     const rows = (_fhAllPayments || [])
         .map(p => ({ ...p, _fam: famById.get(String(p.family_id)) }))
-        .filter(p => !q || (p._fam?.parent_name || '').toLowerCase().includes(q))
+        .filter(p => {
+            if (!q) return true;
+            if ((p._fam?.parent_name || '').toLowerCase().includes(q)) return true;
+            // Lets the office pull up a payment straight from the invoice
+            // number a parent reads off their bill — "4267" or "INV-4267"
+            // both match, the same way typing part of a family's name does.
+            const invoiceLabel = p.invoice_id != null ? `inv-${p.invoice_id}` : '';
+            return invoiceLabel.includes(q);
+        })
         .sort((a, b) => {
             const ad = String(a.payment_date || ''), bd = String(b.payment_date || '');
             if (ad !== bd) return bd.localeCompare(ad);
