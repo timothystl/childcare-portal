@@ -1759,6 +1759,10 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     text-transform: uppercase; letter-spacing: .03em; font-size: 11px;
 }
 .fh-payments-table tbody tr:last-child td { border-bottom: none; }
+.fh-payments-table th.fh-sort-th { cursor: pointer; user-select: none; }
+.fh-payments-table th.fh-sort-th:hover, .fh-payments-table th.fh-sort-th:focus-visible {
+    color: var(--tang, #E97D55);
+}
 .fh-pay-refund-amt { color: var(--tang-dark, #7a2a18); font-weight: 700; }
 .fh-pay-refund-tag { color: var(--text-muted); font-size: 12px; }
 .fh-payments-count { margin: 10px 2px 0; color: var(--text-muted); font-size: 12px; }
