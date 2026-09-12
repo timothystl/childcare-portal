@@ -530,6 +530,11 @@ serve(async (req) => {
                 }),
             });
             chargeData = await chargeRes.json().catch(() => ({}));
+            // TEMPORARY DIAGNOSTIC — logged to Supabase's own function logs only
+            // (never a public endpoint), to confirm Stax's real field names for
+            // fee/funding-method before trusting the shared extractor's guess.
+            // Remove this line once confirmed.
+            console.log("DIAG_RAW_STAX_CHARGE_RESPONSE", JSON.stringify(chargeData));
         } catch (_err) {
             await setState("ambiguous", undefined, "Network failure while awaiting Stax response");
             return json({ error: "We couldn't confirm whether your payment went through. Please wait and contact the office before trying again.", ambiguous: true }, 502, ch);
