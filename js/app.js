@@ -416,6 +416,13 @@ async function tryPortalSessionFamily() {
     // complaint — the bar alone is not enough.
     document.querySelector('.lookup-section')?.classList.add('lookup-via-session');
 
+    // The waitlist callout ("New to Timothy Lutheran MDO?") is for people this
+    // page doesn't already recognize. A parent who arrived from their own
+    // portal session is an active, enrolled family — showing them a pitch to
+    // join a waitlist they're already past reads as the page not knowing who
+    // they are.
+    document.querySelector('.waitlist-callout')?.classList.add('hidden');
+
     const bar = document.querySelector('#familySelectedBar .family-selected-name');
     if (bar) {
         const who = result.isParent2
@@ -513,6 +520,9 @@ function resetFamilyLookup() {
     // Put the email and PIN inputs back — "Change" has to land on a form the
     // parent can actually use.
     document.querySelector('.lookup-section')?.classList.remove('lookup-via-session');
+    // And restore the waitlist callout: past "Change", this could be a
+    // different, not-yet-enrolled family on a shared device.
+    document.querySelector('.waitlist-callout')?.classList.remove('hidden');
     selectedFamily      = null;
     _familySessionToken = null;
     _isParent2          = false;
