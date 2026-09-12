@@ -274,18 +274,22 @@ function _fhRenderAllPaymentsTable() {
             <thead>
                 <tr>
                     <th>Date</th><th>Family</th><th>Amount</th>
-                    <th>Method</th><th>Invoice</th><th></th>
+                    <th>Method</th><th>Fee</th><th>Invoice</th><th></th>
                 </tr>
             </thead>
             <tbody>
                 ${rows.map(p => {
-                    const method = p.processor === 'stax' ? 'Stax' : (p.payment_method || 'Manual');
+                    const method = p.processor === 'stax'
+                        ? (p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card')
+                        : (p.payment_method || 'Manual');
+                    const feeLabel = p.processor_fee != null ? _fhMoney(p.processor_fee) : '—';
                     const invoiceLabel = p.invoice_id ? `INV-${p.invoice_id}` : 'Unapplied credit';
                     return `<tr>
                         <td>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))}</td>
                         <td>${escHtml(p._fam?.parent_name || '(family not found)')}</td>
                         <td class="${Number(p.amount) < 0 ? 'fh-pay-refund-amt' : ''}">${_fhMoney(p.amount)}</td>
                         <td>${escHtml(method)}</td>
+                        <td>${escHtml(feeLabel)}</td>
                         <td>${escHtml(invoiceLabel)}</td>
                         <td>${p.refund_of_payment_id ? `<span class="fh-pay-refund-tag">&#8617; refund of #${p.refund_of_payment_id}</span>` : ''}</td>
                     </tr>`;

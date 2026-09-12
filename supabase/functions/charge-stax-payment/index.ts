@@ -80,6 +80,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
 
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 const STAX_API_URL = "https://apiprod.fattlabs.com";
@@ -489,12 +490,19 @@ serve(async (req) => {
             return json({ error: "This payment attempt is already processing. Please wait and check your balance before trying again.", ambiguous: prepared.status === "ambiguous" }, 409, ch);
         }
 
-        const setState = async (status: "ambiguous" | "processor_succeeded" | "failed", transactionId?: string, note?: string) => {
+        const setState = async (
+            status: "ambiguous" | "processor_succeeded" | "failed",
+            transactionId?: string,
+            note?: string,
+            fields?: { processorFee: number | null; paymentMethod: "card" | "ach" | null },
+        ) => {
             const { error } = await admin.rpc("stax_set_charge_state", {
                 p_lock_id: lockId,
                 p_status: status,
                 p_transaction_id: transactionId || null,
                 p_note: note || null,
+                p_processor_fee: fields?.processorFee ?? null,
+                p_payment_method: fields?.paymentMethod ?? null,
             });
             if (error) console.error("charge-stax-payment: could not persist processor state", error.code);
             return !error;
@@ -557,7 +565,8 @@ serve(async (req) => {
             return json({ error: "The processor response did not match this payment. The office must reconcile it before another attempt.", ambiguous: true }, 502, ch);
         }
 
-        const stateSaved = await setState("processor_succeeded", transactionId);
+        const staxFields = extractStaxPaymentFields(chargeData);
+        const stateSaved = await setState("processor_succeeded", transactionId, undefined, staxFields);
         if (!stateSaved) {
             return json({ error: "Payment succeeded but could not be recorded. Contact the office; do not retry.", ambiguous: true }, 500, ch);
         }

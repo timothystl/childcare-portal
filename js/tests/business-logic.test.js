@@ -1548,6 +1548,7 @@ describe('Stax payment security guards', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const migration = read('supabase/migrations/20260827225514_harden_stax_payments.sql');
+    const feeTrackingMigration = read('supabase/migrations/20260912150000_track_stax_transaction_fee_and_funding_method.sql');
     const chargeFn = read('supabase/functions/charge-stax-payment/index.ts');
     const webhookFn = read('supabase/functions/stax-webhook/index.ts');
 
@@ -1566,11 +1567,31 @@ describe('Stax payment security guards', () => {
         for (const signature of [
             'stax_quote_balance(bigint, uuid)',
             'stax_prepare_charge(bigint, uuid, numeric, text)',
-            'stax_set_charge_state(bigint, text, text, text)',
             'stax_finalize_charge(bigint)',
             'stax_record_reversal(text, text, text, numeric)',
         ]) {
             expect(migration.includes(`REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC, anon, authenticated`)).toBe(true);
+        }
+        // stax_set_charge_state gained fee/funding-method params in the
+        // later migration, which drops the old 4-arg overload rather than
+        // leaving it behind unrevoked — assert against the current signature.
+        expect(migration.includes('stax_set_charge_state(bigint, text, text, text)')).toBe(true);
+        expect(feeTrackingMigration.includes('DROP FUNCTION IF EXISTS public.stax_set_charge_state(bigint, text, text, text)')).toBe(true);
+        expect(feeTrackingMigration.includes(
+            'REVOKE ALL ON FUNCTION public.stax_set_charge_state(bigint, text, text, text, numeric, text) FROM PUBLIC, anon, authenticated'
+        )).toBe(true);
+    });
+
+    test('fee and card/ACH funding method are read from Stax\'s own verified response, never guessed', () => {
+        // Both charge-stax-payment (the synchronous /charge response) and
+        // stax-webhook (the re-fetched /transaction response) must go
+        // through the one shared reader, and hand its result straight to
+        // stax_set_charge_state rather than inventing their own field names.
+        for (const fn of [chargeFn, webhookFn]) {
+            expect(fn.includes('import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts"')).toBe(true);
+            expect(fn.includes('extractStaxPaymentFields(')).toBe(true);
+            expect(fn.includes('p_processor_fee:')).toBe(true);
+            expect(fn.includes('p_payment_method:')).toBe(true);
         }
     });
 
@@ -1698,6 +1719,51 @@ describe('Stax payment security guards', () => {
         for (const secretName of ['STAX_API_KEY', 'STAX_WEBHOOK_SECRET', 'SUPABASE_SERVICE_ROLE_KEY']) {
             expect(bundles.includes(secretName)).toBe(false);
         }
+    });
+});
+
+describe('Stax processor fee / card-vs-ACH tracking', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const feeMigration = read('supabase/migrations/20260912150000_track_stax_transaction_fee_and_funding_method.sql');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+
+    test('billing_payments and payment_charge_locks both gain a processor_fee column', () => {
+        expect(feeMigration.includes('ADD COLUMN IF NOT EXISTS processor_fee numeric(12,2)')).toBe(true);
+        expect(/ALTER TABLE public\.billing_payments[\s\S]*?processor_fee/.test(feeMigration)).toBe(true);
+        expect(/ALTER TABLE public\.payment_charge_locks[\s\S]*?processor_fee/.test(feeMigration)).toBe(true);
+    });
+
+    test('funding method reuses the existing payment_method column/vocabulary instead of a parallel column', () => {
+        // billing_payments.payment_method already documented 'ach' as a
+        // valid value before this feature existed — Stax charges just never
+        // used it. A new column here would fork the same concept in two
+        // places for no reason.
+        expect(feeMigration.includes("payment_method IN ('card', 'ach')")).toBe(true);
+        expect(feeMigration.includes("v_lock.family_id, v_row.invoice_id, v_amount, current_date, v_payment_method")).toBe(true);
+    });
+
+    test('a rolled-up multi-invoice charge splits its fee proportionally, never duplicates it per invoice', () => {
+        expect(feeMigration.includes('v_row_fee := CASE')).toBe(true);
+        expect(feeMigration.includes('round(v_lock.processor_fee * v_amount / v_lock.charge_amount, 2)')).toBe(true);
+    });
+
+    test('a refund/void inherits the original payment\'s funding method rather than assuming card', () => {
+        expect(feeMigration.includes('original.payment_method')).toBe(true);
+        expect(feeMigration.includes("coalesce(v_row.payment_method, 'card')")).toBe(true);
+    });
+
+    test('the old 4-arg stax_set_charge_state is dropped, not left behind as an unrevoked overload', () => {
+        expect(feeMigration.includes('DROP FUNCTION IF EXISTS public.stax_set_charge_state(bigint, text, text, text);')).toBe(true);
+        expect(feeMigration.includes(
+            'GRANT EXECUTE ON FUNCTION public.stax_set_charge_state(bigint, text, text, text, numeric, text) TO service_role;'
+        )).toBe(true);
+    });
+
+    test('finance table shows the fee and whether Stax funded from a card or ACH', () => {
+        expect(financeHubJs.includes('<th>Fee</th>')).toBe(true);
+        expect(financeHubJs.includes("p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card'")).toBe(true);
+        expect(financeHubJs.includes('p.processor_fee != null ? _fhMoney(p.processor_fee)')).toBe(true);
     });
 });
 
@@ -1899,6 +1965,13 @@ describe('Stax payment reconciliation job', () => {
     test('recovery reuses the same atomic RPCs the webhook already uses, no new billing logic', () => {
         expect(reconcileFn.includes('admin.rpc("stax_set_charge_state"')).toBe(true);
         expect(reconcileFn.includes('admin.rpc("stax_finalize_charge"')).toBe(true);
+    });
+
+    test('a reconciliation-recovered charge records fee and funding method too, same as the webhook path', () => {
+        expect(reconcileFn.includes('import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts"')).toBe(true);
+        expect(reconcileFn.includes('extractStaxPaymentFields(matched)')).toBe(true);
+        expect(reconcileFn.includes('p_processor_fee: staxFields.processorFee')).toBe(true);
+        expect(reconcileFn.includes('p_payment_method: staxFields.paymentMethod')).toBe(true);
     });
 
     test('a stale lock with no matching Stax transaction is eventually released, not locked out forever', () => {

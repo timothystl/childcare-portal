@@ -60,6 +60,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
+import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -237,10 +238,13 @@ serve(async (req) => {
                 const success = matched.success === true
                     && (!matched.status || String(matched.status).toUpperCase() === "SUCCESS");
                 if (success) {
+                    const staxFields = extractStaxPaymentFields(matched);
                     const { error: stateErr } = await admin.rpc("stax_set_charge_state", {
                         p_lock_id: lock.id, p_status: "processor_succeeded",
                         p_transaction_id: String(matched.id),
                         p_note: "Recovered by scheduled reconciliation (no webhook delivery seen)",
+                        p_processor_fee: staxFields.processorFee,
+                        p_payment_method: staxFields.paymentMethod,
                     });
                     if (!stateErr) {
                         const { data: finalized, error: finalizeErr } = await admin.rpc("stax_finalize_charge", { p_lock_id: lock.id });
