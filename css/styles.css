@@ -979,11 +979,6 @@ button:focus-visible,
    ============================================================ */
 .lookup-section { background: var(--linen); border-radius: 10px; padding: 24px; margin-bottom: 12px; }
 .lookup-section h2 { margin-bottom: 8px; }
-/* The parent arrived already signed in from the portal, so there is nothing to
-   look up. Only the "Signed in as ..." bar and its Change button remain — an
-   empty PIN box left on screen reads as being asked for it again. */
-.lookup-section.lookup-via-session .lookup-row,
-.lookup-section.lookup-via-session > .hint { display: none; }
 
 .lookup-row {
     display: flex;
@@ -1774,6 +1769,44 @@ input.prefilled {
     .app-route { overflow: visible !important; }
     .app-shell { display: block !important; }
 }
+
+/* ============================================================
+   IN-APP REGISTRATION MODE  (calendar.html reached from /parent)
+   ============================================================ */
+/* A parent arriving here from inside their own signed-in app already knows
+   who they are — the public logo, the waitlist pitch, and "Find Your Family"
+   (including its own "Change family" control) are all for a visitor who
+   isn't recognized yet. enterAppMode() in js/app.js toggles this class once
+   tryPortalSessionFamily() resolves a family from the portal session. */
+body.app-embedded .cal-public-header,
+body.app-embedded .waitlist-callout,
+body.app-embedded .lookup-section,
+body.app-embedded .btn-view-schedule-float {
+    display: none;
+}
+/* Room for the fixed tab bar below, and to keep the Contact Us bubble clear of it. */
+body.app-embedded { padding-bottom: 96px; }
+body.app-embedded .btn-contact-float { bottom: 122px; }
+
+.app-header { text-align: center; padding: 4px 16px 18px; }
+.app-header h1 {
+    font-family: var(--font-head);
+    color: var(--navy);
+    font-size: 1.4em;
+    margin: 0;
+}
+
+/* Same tabbar look the parent app itself uses (Item "APP SHELL + TAB BAR"
+   above) — fixed here instead of flex-docked, since this page is a full
+   navigation away from /parent rather than a pane inside it. */
+.tabbar-fixed {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+}
+.tabbar-fixed .tabbar-item { text-decoration: none; }
 
 /* Branded splash/loading screen shown while a page's own JS boots.
    Markup + the show/hide script live inline near <body> on each page.

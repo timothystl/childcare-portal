@@ -18,10 +18,16 @@
 </head>
 <body class="calendar-body">
     <div class="container">
-        <header>
+        <header class="cal-public-header">
             <img src="/images/logo/brand-wordmark-on-light.png" alt="myMDO" style="height:100px;display:block;margin:0 auto 18px;">
             <p class="cal-registration-label">Childcare Calendar Registration</p>
         </header>
+
+        <!-- Shown instead of the header above when this page is reached from
+             inside the signed-in parent app (see enterAppMode() in js/app.js) -->
+        <div id="appModeHeader" class="app-header hidden">
+            <h1>Register for Care Days</h1>
+        </div>
 
         <main>
             <!-- Registration window status banner -->
@@ -337,6 +343,10 @@
         <span class="fab-icon">📅</span><span class="fab-label"> My Schedule</span>
     </a>
 
+    <!-- App tab bar — shown instead of the floating links above when reached
+         from inside the signed-in parent app (see enterAppMode() in js/app.js) -->
+    <nav id="appTabbar" class="tabbar tabbar-fixed hidden" aria-label="Parent portal"></nav>
+
     <footer class="site-footer">
         <a href="https://timothystl.org/mdo" class="footer-program-link">About the MDO Program</a>
         &nbsp;·&nbsp;
@@ -347,7 +357,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase.js?v=35"></script>
     <script src="js/error-monitor.js"></script>
-    <script src="js/app.js?v=33"></script>
+    <script src="js/app.js?v=34"></script>
     <script src="js/push-notifications.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
