@@ -21,6 +21,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { safeEqual } from "../_shared/timing-safe.ts";
+import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -124,11 +125,14 @@ serve(async (req) => {
             return json({ error: "Verified charge customer does not match reserved attempt" }, 409);
         }
 
+        const staxFields = extractStaxPaymentFields(transaction);
         const { error: stateErr } = await admin.rpc("stax_set_charge_state", {
             p_lock_id: lock.id,
             p_status: "processor_succeeded",
             p_transaction_id: eventTransactionId,
             p_note: "Recovered/confirmed by verified Stax webhook",
+            p_processor_fee: staxFields.processorFee,
+            p_payment_method: staxFields.paymentMethod,
         });
         if (stateErr) return json({ error: "Could not record processor success" }, 500);
         const { data: finalized, error: finalizeErr } = await admin.rpc("stax_finalize_charge", {
