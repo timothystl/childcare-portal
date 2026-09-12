@@ -81,6 +81,11 @@ const AP_TABS = {
     market: {
         icon: '📈', label: 'Market Analysis', short: 'Market',
         blurb: 'How we compare to other providers on price, flexibility, and cost — and the provider set behind those numbers.',
+        // A once-in-a-while research tool, not something a director reaches
+        // for from her phone — dropping it from the bottom tab bar leaves
+        // more room for the tabs actually used on the go. Still fully
+        // reachable from the desktop sidebar (apNavHtml doesn't check this).
+        hideFromTabbar: true,
     },
     settings: {
         icon: '⚙️', label: 'Settings',
@@ -730,7 +735,7 @@ function apRender() {
 
     const tabbar = document.getElementById('apTabbar');
     if (tabbar) {
-        const visible = Object.keys(AP_TABS).filter(apTabAvailable);
+        const visible = Object.keys(AP_TABS).filter(k => apTabAvailable(k) && !AP_TABS[k].hideFromTabbar);
         tabbar.style.gridTemplateColumns = `repeat(${visible.length},1fr)`;
         tabbar.innerHTML = apTabbarHtml();
     }
@@ -897,12 +902,14 @@ function apNavSearchClear() {
 
 /**
  * The bottom tab bar — the mobile (<900px) equivalent of the sidebar, same
- * seven tabs and same visual pattern (.tabbar) as the parent app's own
- * bottom nav in parent.html. Unlike the sidebar it carries no tool
- * sub-list — a tool is one tap further, via the dashboard's own pills.
+ * visual pattern (.tabbar) as the parent app's own bottom nav in
+ * parent.html, minus any tab marked hideFromTabbar (see AP_TABS.market —
+ * still reachable from the desktop sidebar, just not worth a slot in a
+ * one-thumb row). Unlike the sidebar it carries no tool sub-list — a tool
+ * is one tap further, via the dashboard's own pills.
  */
 function apTabbarHtml() {
-    return Object.keys(AP_TABS).filter(apTabAvailable).map(k => {
+    return Object.keys(AP_TABS).filter(k => apTabAvailable(k) && !AP_TABS[k].hideFromTabbar).map(k => {
         const t = AP_TABS[k];
         return `<button type="button" class="tabbar-item${k === apState.tab ? ' is-active' : ''}"
                     data-ap-tab="${k}" role="tab" aria-selected="${k === apState.tab}">

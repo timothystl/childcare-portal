@@ -808,7 +808,7 @@ function _fhRenderLedger() {
             <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family or child&hellip;" value="${escHtml(_fhSearch)}">
         </div>
 
-        <div class="table-wrapper">
+        <div class="table-wrapper fh-table-wrap">
             <table class="report-table fh-table">
                 <thead><tr>
                     <th>Family</th><th class="fh-money-col">${_fhMonthLabel(_fhMonth).split(' ')[0]}</th>
@@ -931,6 +931,14 @@ function _fhBindLedgerListeners(root) {
     root.querySelectorAll('[data-fh-tab]').forEach(el => {
         el.addEventListener('click', () => _fhSwitchTab(el.dataset.fhTab));
     });
+
+    // Status/Note/Balance/actions run off the right edge of a phone screen
+    // with nothing telling you they're still there — .table-wrapper already
+    // scrolls (overflow-x: auto), the table just never said so. Only add the
+    // fade when the table is actually wider than its wrapper, so nothing
+    // shows on a desktop screen where every column already fits.
+    const wrap = root.querySelector('.fh-table-wrap');
+    if (wrap) wrap.classList.toggle('has-more-columns', wrap.scrollWidth > wrap.clientWidth + 1);
 }
 
 // ── Month history (read-only) ───────────────────────────────
