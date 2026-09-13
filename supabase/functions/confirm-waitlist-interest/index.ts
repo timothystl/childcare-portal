@@ -1,15 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
-
-function corsHeaders(req: Request): Record<string, string> {
-    const origin = req.headers.get("origin") || "";
-    return {
-        "Access-Control-Allow-Origin":  origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    };
-}
+import { corsHeaders } from "../_shared/http.ts";
 
 // Public endpoint reached from the "still interested?" link in tour-reminder
 // emails. The token is an unguessable UUID stored only server-side and emailed

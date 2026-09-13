@@ -46,8 +46,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
+import { corsHeaders, json as jsonResponse } from "../_shared/http.ts";
 
 // apiprod.fattlabs.com is Stax's single Core API host for both sandbox and
 // production credentials — which environment you hit is determined by
@@ -98,18 +97,8 @@ async function assertStaxMerchant(apiKey: string): Promise<void> {
     _staxMerchantVerified = true;
 }
 
-function corsHeaders(req: Request): Record<string, string> {
-    const origin = req.headers.get("origin") || "";
-    return {
-        "Access-Control-Allow-Origin":  origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    };
-}
-
 function json(body: unknown, status: number, ch: Record<string, string>) {
-    return new Response(JSON.stringify(body), {
-        status, headers: { ...ch, "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return jsonResponse(body, status, { ...ch, "Cache-Control": "no-store" });
 }
 
 async function staxRequest(apiKey: string, path: string, init: RequestInit = {}): Promise<{ ok: boolean; status: number; data: any }> {

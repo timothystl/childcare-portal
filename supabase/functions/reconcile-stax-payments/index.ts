@@ -61,6 +61,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
+import { json } from "../_shared/http.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -108,10 +109,6 @@ async function assertStaxMerchant(apiKey: string): Promise<void> {
 }
 const STALE_MINUTES = 15;
 const RELEASE_HOURS = 2;
-
-function json(body: unknown, status: number) {
-    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
 
 function escHtml(s: unknown): string {
     return String(s ?? "")

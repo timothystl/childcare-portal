@@ -2126,12 +2126,18 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .admin-header { padding: 12px 16px; gap: 8px; flex-wrap: nowrap; }
     .admin-header h1 { font-size: 1.1em; }
     .filters, .capacity-section, .table-section { padding: 16px; }
-    /* On mobile the header is just logo + active tab + Logout — title,
-       version badge, and signed-in-as badge are dropped so the header
-       stays one row. Logout has no other affordance now that navigation
-       moved to the bottom tab bar, so it stays visible here. */
+    /* On mobile the header is just logo + active tab + Help + Logout —
+       title, version badge, and signed-in-as badge are dropped so the
+       header stays one row. Logout has no other affordance now that
+       navigation moved to the bottom tab bar, so it stays visible here.
+       Help has no other affordance either (there's no in-app help entry
+       point besides this link), so it stays too, but as an icon only —
+       its text label was the difference between the row fitting and
+       Logout getting crowded toward the edge on a phone-width screen. */
     .admin-header-left > div { display: none; }
     .header-actions { gap: 8px; flex-wrap: nowrap; }
+    #adminHelpBtn { padding: 0 12px; }
+    #adminHelpBtn .header-btn-label { display: none; }
     .families-import-row { gap: 8px; }
     .families-list { max-height: none; }
 

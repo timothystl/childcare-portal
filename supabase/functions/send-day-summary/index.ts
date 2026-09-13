@@ -18,6 +18,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
+import { json } from "../_shared/http.ts";
 
 const WORKER_ORIGIN = "https://mdo.timothystl.org";
 
@@ -106,9 +107,3 @@ serve(async (req) => {
         return json({ error: "server_error" }, 500);
     }
 });
-
-function json(body: unknown, status = 200): Response {
-    return new Response(JSON.stringify(body), {
-        status, headers: { "Content-Type": "application/json" },
-    });
-}

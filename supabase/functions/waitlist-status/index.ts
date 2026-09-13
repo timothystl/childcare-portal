@@ -1,18 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const CORS_ORIGIN = 'https://mdo.timothystl.org'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': CORS_ORIGIN,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}
+import { corsHeaders, json as jsonResponse } from '../_shared/http.ts'
 
 // settings.value is a TEXT column holding a JSON-encoded string (despite an
 // outdated CREATE TABLE comment elsewhere describing it as jsonb) — parse it
@@ -483,8 +470,11 @@ function groupLabelFor(roomId: string, rooms: RoomCfg[]): string {
 }
 
 Deno.serve(async (req) => {
+  const ch = corsHeaders(req)
+  const json = (body: unknown, status = 200) => jsonResponse(body, status, ch)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: ch })
   }
 
   try {

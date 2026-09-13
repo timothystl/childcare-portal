@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders } from "../_shared/http.ts";
 
-const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 const NOTIFY_EMAIL   = "mdo@timothystl.org";
 
 function escHtml(s: string): string {
@@ -10,14 +10,6 @@ function escHtml(s: string): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
-}
-
-function corsHeaders(req: Request): Record<string, string> {
-    const origin = req.headers.get("origin") || "";
-    return {
-        "Access-Control-Allow-Origin":  origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    };
 }
 
 serve(async (req) => {

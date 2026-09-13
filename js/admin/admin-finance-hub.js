@@ -38,6 +38,8 @@ let _fhReportLoaded = false;
 let _fhPaymentsLoaded = false;
 let _fhAllPayments  = [];         // every billing_payments row, unfiltered by month/enrollment
 let _fhPaymentsSearch = '';
+let _fhPaymentsSortKey = 'date';  // 'date' | 'family' | 'amount' | 'method' | 'fee' | 'invoice'
+let _fhPaymentsSortDir = 'desc';  // 'asc' | 'desc'
 
 const FH_OWED_TRAILING_MONTHS = 2; // + the open month = 3 months of real balance history
 
@@ -249,12 +251,63 @@ async function renderAllPaymentsView() {
     _fhRenderAllPaymentsTable();
 }
 
+/** Same label the table cell shows — shared with the Method column's sort key
+ *  so sorting can never disagree with what's actually printed on screen. */
+function _fhPaymentMethodLabel(p) {
+    return p.processor === 'stax'
+        ? (p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card')
+        : (p.payment_method || 'Manual');
+}
+
+// One getter per sortable column. A missing fee/invoice sorts as -1, which
+// simply means "before everything else" ascending and "after everything
+// else" descending — good enough for an internal worklist, no need for a
+// dedicated nulls-last mode nobody asked for.
+const FH_PAYMENTS_SORT_GETTERS = {
+    date:    p => String(p.payment_date || ''),
+    family:  p => (p._fam?.parent_name || '').toLowerCase(),
+    amount:  p => Number(p.amount) || 0,
+    method:  p => _fhPaymentMethodLabel(p).toLowerCase(),
+    fee:     p => p.processor_fee != null ? Number(p.processor_fee) : -1,
+    invoice: p => p.invoice_id != null ? Number(p.invoice_id) : -1,
+};
+
+function _fhSortPayments(rows) {
+    const getter = FH_PAYMENTS_SORT_GETTERS[_fhPaymentsSortKey] || FH_PAYMENTS_SORT_GETTERS.date;
+    const dir = _fhPaymentsSortDir === 'asc' ? 1 : -1;
+    return rows.slice().sort((a, b) => {
+        const av = getter(a), bv = getter(b);
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return (b.id || 0) - (a.id || 0); // stable tiebreak: newest row first
+    });
+}
+
+/** Clicking a header sorts by it; clicking the active one flips direction.
+ *  Text columns default to A→Z, everything else to biggest/newest first —
+ *  whichever a first click on that column would most usefully show. */
+function _fhPaymentsHeaderCell(label, key) {
+    const active = _fhPaymentsSortKey === key;
+    const arrow = active ? (_fhPaymentsSortDir === 'asc' ? ' &#9650;' : ' &#9660;') : '';
+    return `<th class="fh-sort-th" data-sort-key="${key}" role="button" tabindex="0" aria-sort="${active ? (_fhPaymentsSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}">${escHtml(label)}${arrow}</th>`;
+}
+
+function _fhTogglePaymentsSort(key) {
+    if (_fhPaymentsSortKey === key) {
+        _fhPaymentsSortDir = _fhPaymentsSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        _fhPaymentsSortKey = key;
+        _fhPaymentsSortDir = (key === 'family' || key === 'method') ? 'asc' : 'desc';
+    }
+    _fhRenderAllPaymentsTable();
+}
+
 function _fhRenderAllPaymentsTable() {
     const root = _fhEl('fhPaymentsRoot');
     if (!root) return;
     const q = _fhPaymentsSearch.trim().toLowerCase();
     const famById = new Map((allFamiliesData || []).map(f => [String(f.id), f]));
-    const rows = (_fhAllPayments || [])
+    const rows = _fhSortPayments((_fhAllPayments || [])
         .map(p => ({ ...p, _fam: famById.get(String(p.family_id)) }))
         .filter(p => {
             if (!q) return true;
@@ -264,12 +317,7 @@ function _fhRenderAllPaymentsTable() {
             // both match, the same way typing part of a family's name does.
             const invoiceLabel = p.invoice_id != null ? `inv-${p.invoice_id}` : '';
             return invoiceLabel.includes(q);
-        })
-        .sort((a, b) => {
-            const ad = String(a.payment_date || ''), bd = String(b.payment_date || '');
-            if (ad !== bd) return bd.localeCompare(ad);
-            return (b.id || 0) - (a.id || 0);
-        });
+        }));
 
     if (!rows.length) {
         root.innerHTML = `<p class="empty-hint">${q ? 'No payments match that search.' : 'No payments on file yet.'}</p>`;
@@ -281,15 +329,18 @@ function _fhRenderAllPaymentsTable() {
         <table class="fh-payments-table">
             <thead>
                 <tr>
-                    <th>Date</th><th>Family</th><th>Amount</th>
-                    <th>Method</th><th>Fee</th><th>Invoice</th><th></th>
+                    ${_fhPaymentsHeaderCell('Date', 'date')}
+                    ${_fhPaymentsHeaderCell('Family', 'family')}
+                    ${_fhPaymentsHeaderCell('Amount', 'amount')}
+                    ${_fhPaymentsHeaderCell('Method', 'method')}
+                    ${_fhPaymentsHeaderCell('Fee', 'fee')}
+                    ${_fhPaymentsHeaderCell('Invoice', 'invoice')}
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 ${rows.map(p => {
-                    const method = p.processor === 'stax'
-                        ? (p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card')
-                        : (p.payment_method || 'Manual');
+                    const method = _fhPaymentMethodLabel(p);
                     const feeLabel = p.processor_fee != null ? _fhMoney(p.processor_fee) : '—';
                     const invoiceLabel = p.invoice_id ? `INV-${p.invoice_id}` : 'Unapplied credit';
                     return `<tr>
@@ -307,6 +358,12 @@ function _fhRenderAllPaymentsTable() {
         </div>
         <p class="fh-payments-count">${rows.length} payment${rows.length === 1 ? '' : 's'}${q ? ` matching "${escHtml(_fhPaymentsSearch)}"` : ''}</p>
     `;
+    root.querySelectorAll('.fh-sort-th').forEach(th => {
+        th.addEventListener('click', () => _fhTogglePaymentsSort(th.dataset.sortKey));
+        th.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _fhTogglePaymentsSort(th.dataset.sortKey); }
+        });
+    });
 }
 
 /** getOrCreateBillingCycle(), tolerant of one specific transient failure:
@@ -808,7 +865,7 @@ function _fhRenderLedger() {
             <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family or child&hellip;" value="${escHtml(_fhSearch)}">
         </div>
 
-        <div class="table-wrapper">
+        <div class="table-wrapper fh-table-wrap">
             <table class="report-table fh-table">
                 <thead><tr>
                     <th>Family</th><th class="fh-money-col">${_fhMonthLabel(_fhMonth).split(' ')[0]}</th>
@@ -931,6 +988,14 @@ function _fhBindLedgerListeners(root) {
     root.querySelectorAll('[data-fh-tab]').forEach(el => {
         el.addEventListener('click', () => _fhSwitchTab(el.dataset.fhTab));
     });
+
+    // Status/Note/Balance/actions run off the right edge of a phone screen
+    // with nothing telling you they're still there — .table-wrapper already
+    // scrolls (overflow-x: auto), the table just never said so. Only add the
+    // fade when the table is actually wider than its wrapper, so nothing
+    // shows on a desktop screen where every column already fits.
+    const wrap = root.querySelector('.fh-table-wrap');
+    if (wrap) wrap.classList.toggle('has-more-columns', wrap.scrollWidth > wrap.clientWidth + 1);
 }
 
 // ── Month history (read-only) ───────────────────────────────
