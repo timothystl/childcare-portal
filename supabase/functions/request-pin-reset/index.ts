@@ -1,19 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders, json } from '../_shared/http.ts'
 
 const ALLOWED_ORIGIN = 'https://mdo.timothystl.org'
 const TOKEN_TTL_MS   = 60 * 60 * 1000 // 1 hour
-
-const corsHeaders = (origin: string | null) => ({
-  'Access-Control-Allow-Origin':  origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : '',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-})
-
-function json(body: unknown, status: number, ch: Record<string, string>) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...ch, 'Content-Type': 'application/json' },
-  })
-}
 
 function generateToken(): string {
   const buf = new Uint8Array(32)
@@ -58,7 +47,7 @@ function emailHtml(parentName: string, link: string): string {
 }
 
 Deno.serve(async (req) => {
-  const ch = corsHeaders(req.headers.get('origin'))
+  const ch = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: ch })
 
   // Always answer 200 with { ok: true } so callers can't probe whether

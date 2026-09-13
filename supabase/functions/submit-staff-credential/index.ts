@@ -16,6 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders as baseCorsHeaders, json as jsonResponse } from "../_shared/http.ts";
 
 const ALLOWED_ORIGINS = new Set([
     "https://mdo.timothystl.org",
@@ -26,17 +27,15 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const CREDENTIAL_TYPES = new Set(["cpr_first_aid", "tb_test", "other"]);
 
 function corsHeaders(req: Request): Record<string, string> {
-    const origin = req.headers.get("origin") || "";
     return {
-        "Access-Control-Allow-Origin":  ALLOWED_ORIGINS.has(origin) ? origin : "",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+        ...baseCorsHeaders(req, ALLOWED_ORIGINS),
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Content-Type": "application/json",
     };
 }
 
 function json(req: Request, body: unknown, status = 200): Response {
-    return new Response(JSON.stringify(body), { status, headers: corsHeaders(req) });
+    return jsonResponse(body, status, corsHeaders(req));
 }
 
 serve(async (req) => {

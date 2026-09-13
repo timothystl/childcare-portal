@@ -1,6 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const CORS_ORIGIN = 'https://mdo.timothystl.org'
+import { corsHeaders, json as jsonResponse } from '../_shared/http.ts'
 
 // Produces a 1-hour HMAC-SHA256 token: "{familyId}:{expiry}:{b64url(sig)}"
 // The Cloudflare Worker validates this before saving a push subscription.
@@ -18,21 +17,12 @@ async function buildFamilyToken(familyId: string): Promise<string> {
   return `${familyId}:${exp}:${sig}`
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': CORS_ORIGIN,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}
-
 Deno.serve(async (req) => {
+  const ch = corsHeaders(req)
+  const json = (body: unknown, status = 200) => jsonResponse(body, status, ch)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: ch })
   }
 
   try {
