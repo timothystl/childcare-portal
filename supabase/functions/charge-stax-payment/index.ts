@@ -162,8 +162,18 @@ async function sendReceiptEmail(admin: any, o: {
     if (!apiKey) { console.warn("charge-stax-payment: RESEND_API_KEY not set, skipping receipt"); return; }
 
     const { data: fam } = await admin.from("families")
-        .select("parent_name, parent_email").eq("id", o.familyId).maybeSingle();
+        .select("parent_name, parent_email, parent2_email").eq("id", o.familyId).maybeSingle();
     if (!fam?.parent_email) return;
+
+    // A family with two parents on file should both hear a charge went
+    // through — this used to go to parent_email only, so a second parent
+    // (different inbox) never saw a receipt for a real, successful charge.
+    const seenEmails = new Map<string, string>();
+    for (const e of [fam.parent_email, fam.parent2_email]) {
+        const trimmed = typeof e === "string" ? e.trim() : "";
+        if (trimmed && !seenEmails.has(trimmed.toLowerCase())) seenEmails.set(trimmed.toLowerCase(), trimmed);
+    }
+    const toEmails = [...seenEmails.values()];
 
     const { data: invoice } = await admin.from("billing_invoices")
         .select("billing_cycles(month)")
@@ -214,7 +224,7 @@ async function sendReceiptEmail(admin: any, o: {
             headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 from: fromEmail,
-                to: [String(fam.parent_email).trim()],
+                to: toEmails,
                 subject: `Payment received — Timothy Lutheran MDO`,
                 html,
             }),
