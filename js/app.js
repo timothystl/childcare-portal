@@ -414,6 +414,29 @@ async function tryPortalSessionFamily() {
     // already are one) and add the app's own bottom tab bar so leaving this
     // page doesn't mean falling back on the browser's back button.
     enterAppMode();
+
+    // Say whose session this is. A shared phone is the case that matters: the
+    // "Change" button beside it is how you get out, and it must not look like
+    // the form simply skipped a step.
+    // Hide the email and PIN inputs outright. Leaving an empty PIN box sitting
+    // above "Signed in as ..." still reads as being asked, which is the whole
+    // complaint — the bar alone is not enough.
+    document.querySelector('.lookup-section')?.classList.add('lookup-via-session');
+
+    // The waitlist callout ("New to Timothy Lutheran MDO?") is for people this
+    // page doesn't already recognize. A parent who arrived from their own
+    // portal session is an active, enrolled family — showing them a pitch to
+    // join a waitlist they're already past reads as the page not knowing who
+    // they are.
+    document.querySelector('.waitlist-callout')?.classList.add('hidden');
+
+    const bar = document.querySelector('#familySelectedBar .family-selected-name');
+    if (bar) {
+        const who = result.isParent2
+            ? (result.family.parent2_name || result.family.parent_name)
+            : result.family.parent_name;
+        bar.textContent = who ? `Signed in as ${who}` : 'Signed in from your portal';
+    }
     return true;
 }
 
@@ -548,6 +571,12 @@ function resetFamilyLookup() {
     // it entirely), but leaving this out would strand a future caller in the
     // app chrome with the email/PIN form now showing underneath it.
     exitAppMode();
+    // Put the email and PIN inputs back — "Change" has to land on a form the
+    // parent can actually use.
+    document.querySelector('.lookup-section')?.classList.remove('lookup-via-session');
+    // And restore the waitlist callout: past "Change", this could be a
+    // different, not-yet-enrolled family on a shared device.
+    document.querySelector('.waitlist-callout')?.classList.remove('hidden');
     selectedFamily      = null;
     _familySessionToken = null;
     _isParent2          = false;
