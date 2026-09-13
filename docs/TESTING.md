@@ -1,6 +1,7 @@
 # Testing
 
-Use Node 20:
+Use Node 22 (bumped from 20 on 2026-09-11 — `test/shared/*.test.js` uses native `.ts` execution,
+which Node 20 doesn't support; see `AGENTS.md`):
 
 ```sh
 npm ci
