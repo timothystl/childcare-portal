@@ -16,6 +16,7 @@ records. They are not parallel sources of current architecture.
 Current references:
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Local development](docs/DEVELOPMENT.md)
 - [Data ownership](docs/DATA-OWNERSHIP.md)
 - [Operations](docs/OPERATIONS.md)
 - [Security](docs/SECURITY.md)
@@ -33,7 +34,7 @@ Current references:
 
 ## Local verification
 
-Use Node 20:
+Use Node 22 (see `docs/TESTING.md` for why):
 
 ```bash
 npm ci

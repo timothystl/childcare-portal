@@ -80,7 +80,22 @@ Beyond serving static assets, `worker.js` handles:
 | `stax-webhook` | Verified, atomic recording of a Stax transaction. |
 | `reconcile-stax-payments` | Safety net for a webhook that never arrived. |
 | `stax-webhook-admin-tmp` | **Correction to prior documentation**: an earlier architecture note (see the `digital-architecture` repo's overhaul plan) flagged this as a live, "temporary"-named function still handling payments and worth a deliberate look. Current code shows it was already replaced with an inert stub — it now unconditionally returns `410 Gone` with a comment describing it as the emergency replacement for a version that "previously contained a hardcoded administrator token and could create Stax charges and refunds." Delete it from the Supabase dashboard rather than treating it as a live payment path. |
-| `_shared/cron-auth.ts` | Shared helper: authenticates `pg_cron` scheduled calls via a constant-time-compared `X-Cron-Secret` header, so scheduled jobs don't need a service-role JWT. |
+
+### Shared Edge Function code (`supabase/functions/_shared/`)
+
+Consolidated in September 2026 out of copies that had drifted across a dozen-plus functions (see
+each file's own header comment for the specific bug that motivated it):
+
+| File | Purpose |
+|---|---|
+| `http.ts` | `corsHeaders(req, allowedOrigin)` and `json(body, status, headers)` — replaces ~20 pasted copies in four slightly different shapes. `corsHeaders` only ever echoes back the caller's own `Origin` when it's on the allowlist, never a wildcard. |
+| `html.ts` | `escHtml()` for building HTML email bodies. Replaces 12 pasted copies, one of which (`check-missed-clocks`) silently dropped the apostrophe — the same class of gap `chms`'s `scheduler-html.js` had. |
+| `timing-safe.ts` | `safeEqual()` — constant-time string comparison for secrets (API keys, cron secrets, webhook tokens), via SHA-256 digest comparison so unequal-length inputs never short-circuit into a faster path. |
+| `cron-auth.ts` | `isAuthorizedCronRequest()` / `unauthorizedCronResponse()` — authenticates `pg_cron` scheduled calls via a `safeEqual`-compared `X-Cron-Secret` header, so scheduled jobs don't need a service-role JWT. |
+| `stax-transaction-fields.ts` | `extractStaxPaymentFields()` — reads processor fee and card-vs-ACH funding method off a verified Stax transaction/charge response the same way in `charge-stax-payment`, `stax-webhook`, and `reconcile-stax-payments`, so all three record identical ledger metadata for the same shape of object. Both fields are informational; nothing here ever throws or blocks a payment. |
+
+Each has a focused unit suite under `test/shared/*.test.js`, run by `npm test` (see
+`docs/DEVELOPMENT.md`) — no Supabase project needed, since these are pure functions.
 
 ## Auth model
 
