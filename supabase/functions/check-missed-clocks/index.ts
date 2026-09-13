@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 import { escHtml } from "../_shared/html.ts";
+import { json } from "../_shared/http.ts";
 
 // Shift windows in 24-hr minutes
 const SHIFT_AM_START = 8 * 60 + 15;   // 08:15
@@ -41,7 +42,7 @@ serve(async (req) => {
         // Only run Mon–Fri
         const dow = new Date(workDate + "T12:00:00Z").getUTCDay(); // 0=Sun 6=Sat
         if (dow === 0 || dow === 6) {
-            return new Response(JSON.stringify({ skipped: "weekend" }), { status: 200 });
+            return json({ skipped: "weekend" }, 200);
         }
 
         // Determine which alert types to check based on current time
@@ -51,7 +52,7 @@ serve(async (req) => {
         const checkPmOut   = nowMins >= SHIFT_PM_END   + graceMins;
 
         if (!checkAmIn && !checkPmIn && !checkAmOut && !checkPmOut) {
-            return new Response(JSON.stringify({ skipped: "too early" }), { status: 200 });
+            return json({ skipped: "too early" }, 200);
         }
 
         // Fetch today's schedules with staff info
@@ -121,7 +122,7 @@ serve(async (req) => {
         }
 
         if (!alerts.length) {
-            return new Response(JSON.stringify({ checked: true, alerts: 0 }), { status: 200 });
+            return json({ checked: true, alerts: 0 }, 200);
         }
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
@@ -205,9 +206,9 @@ serve(async (req) => {
         }));
 
         const sent = results.filter(r => r.status === "fulfilled").length;
-        return new Response(JSON.stringify({ checked: true, alerts: alerts.length, sent }), { status: sent === alerts.length ? 200 : 502 });
+        return json({ checked: true, alerts: alerts.length, sent }, sent === alerts.length ? 200 : 502);
 
     } catch (err) {
-        return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500 });
+        return json({ error: (err as Error).message }, 500);
     }
 });

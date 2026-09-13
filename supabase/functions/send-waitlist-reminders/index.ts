@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 import { escHtml } from "../_shared/html.ts";
+import { json } from "../_shared/http.ts";
 
 const CONFIRM_URL = "https://mdo.timothystl.org/confirm-interest";
 const ADMIN_URL   = "https://mdo.timothystl.org/admin";
@@ -43,7 +44,7 @@ serve(async (req) => {
             .from("settings").select("value").eq("key", "waitlist_notify").maybeSingle();
         const notifySettings = parseSettingsValue(notifySettingsRow?.value);
         if (notifySettings.remindersEnabled !== true) {
-            return new Response(JSON.stringify({ skipped: "reminders disabled in settings" }), { status: 200 });
+            return json({ skipped: "reminders disabled in settings" }, 200);
         }
 
         const { data: apps, error } = await sb
@@ -61,7 +62,7 @@ serve(async (req) => {
         });
 
         if (!candidates.length) {
-            return new Response(JSON.stringify({ checked: apps?.length || 0, reminded: 0 }), { status: 200 });
+            return json({ checked: apps?.length || 0, reminded: 0 }, 200);
         }
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
@@ -197,9 +198,9 @@ serve(async (req) => {
             }
         }
 
-        return new Response(JSON.stringify({ checked: apps?.length || 0, reminded: sentTo.length, failed }), { status: failed ? 502 : 200 });
+        return json({ checked: apps?.length || 0, reminded: sentTo.length, failed }, failed ? 502 : 200);
 
     } catch (err) {
-        return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500 });
+        return json({ error: (err as Error).message }, 500);
     }
 });
