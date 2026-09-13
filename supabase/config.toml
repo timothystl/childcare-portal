@@ -38,6 +38,14 @@ verify_jwt = false
 [functions.reconcile-stax-payments]
 verify_jwt = false
 
+# NOT YET SCHEDULED — see supabase/functions/purge-client-error-log and
+# supabase/migrations/20260913160000_purge_client_error_log.sql. Listed here
+# with the other X-Cron-Secret jobs now so a future schedule migration is the
+# only thing standing between this and going live, matching the convention
+# above (never a broad service-role JWT in pg_cron command text).
+[functions.purge-client-error-log]
+verify_jwt = false
+
 # `finance-summary` is called server-to-server by the church's ChMS finance
 # integration, authenticated by a static X-Api-Key shared secret
 # (FINANCE_API_KEY) rather than a Supabase session — there's no user JWT for
