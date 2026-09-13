@@ -6,12 +6,16 @@
 let _currentFamily        = null;
 let _currentRegistrations = [];
 
+// True when the family came from a /parent session rather than email + PIN —
+// see tryPortalSessionLookup(), below.
+let _viaPortalSession = false;
+
 // MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
 
 // ============================================================
 // INIT
 // ============================================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('lookupBtn').addEventListener('click', doLookup);
     document.getElementById('lookupEmail')?.addEventListener('keydown', e => {
         if (e.key === 'Enter') doLookup();
@@ -32,9 +36,50 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('deletionRequestForm').classList.add('hidden');
     });
     document.getElementById('submitDeletionBtn')?.addEventListener('click', submitDeletionRequest);
+
+    // A parent who tapped "My Schedule" from inside the app already proved
+    // who they are at /parent. Adopt that session instead of showing the
+    // email + PIN form a second time — same pattern as calendar.html's
+    // tryPortalSessionFamily().
+    await tryPortalSessionLookup();
 });
 
+// Silent by design, exactly like tryPortalSessionFamily() in js/app.js: no
+// session, an expired one, or an admin rather than a parent all fall back to
+// the email + PIN form instead of erroring.
+async function tryPortalSessionLookup() {
+    if (typeof fetchFamilyForSession !== 'function') return false;
+
+    const result = await fetchFamilyForSession();
+    if (!result?.family) return false;
+
+    try {
+        const registrations = await fetchRegistrationsForSession();
+        _viaPortalSession = true;
+        _currentFamily = result.family;
+        const parentEmail = result.isParent2
+            ? (result.family.parent2_email || result.family.parent_email)
+            : result.family.parent_email;
+        if (!registrations.length) {
+            showError('No registrations found for your account.');
+            return true;
+        }
+        _currentRegistrations = registrations;
+        showResults(registrations, parentEmail);
+        return true;
+    } catch (err) {
+        console.error('Portal session lookup error:', err);
+        return false;
+    }
+}
+
 function resetToLookup() {
+    // "Log Out" on the portal path ends the session too — leaving it alive
+    // would just re-adopt the same family on the next load.
+    if (_viaPortalSession && typeof parentPortalLogout === 'function') {
+        parentPortalLogout().catch(() => {});
+    }
+    _viaPortalSession = false;
     document.getElementById('lookupResults').classList.add('hidden');
     document.getElementById('lookupScreen').classList.remove('hidden');
     document.getElementById('lookupError').classList.add('hidden');

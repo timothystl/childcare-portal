@@ -408,6 +408,13 @@ async function tryPortalSessionFamily() {
 
     if (!selectedFamily) { _viaPortalSession = false; return false; }
 
+    // A parent who signed in at /parent arrived here from inside the app, not
+    // as a public visitor. Drop the public chrome (logo, waitlist pitch, the
+    // "Find Your Family" lookup and its "Change family" control — they
+    // already are one) and add the app's own bottom tab bar so leaving this
+    // page doesn't mean falling back on the browser's back button.
+    enterAppMode();
+
     // Say whose session this is. A shared phone is the case that matters: the
     // "Change" button beside it is how you get out, and it must not look like
     // the form simply skipped a step.
@@ -431,6 +438,49 @@ async function tryPortalSessionFamily() {
         bar.textContent = who ? `Signed in as ${who}` : 'Signed in from your portal';
     }
     return true;
+}
+
+// ============================================================
+// APP-EMBEDDED MODE
+// ============================================================
+// Mirrors the parent app's own tab bar (js/parent/parent-nav.js's PT_TABS) so
+// a registration reached from /parent looks like a pane of the same app
+// rather than a different site. Kept as a plain link list instead of pulling
+// in parent-nav.js: this page is a real navigation away from /parent (not a
+// view inside its SPA shell), so there is no live route state to render —
+// only somewhere for each tab to land. /parent itself reads ?tab= on load
+// (parent-nav.js's ptInitTabs()) to open the matching tab instead of always
+// defaulting to Today.
+const APP_NAV_TABS = [
+    { key: 'today',    icon: 'images/icons/nav-today.png',    label: 'Today' },
+    { key: 'daily',    icon: 'images/icons/nav-recap.png',    label: 'Recap' },
+    { key: 'schedule', icon: 'images/icons/nav-schedule.png', label: 'Schedule' },
+    { key: 'billing',  icon: 'images/icons/nav-billing.png',  label: 'Billing' },
+    { key: 'messages', icon: 'images/icons/nav-messages.png', label: 'Messages' },
+    { key: 'account',  icon: 'images/icons/nav-account.png',  label: 'Account' },
+];
+
+function enterAppMode() {
+    document.body.classList.add('app-embedded');
+    document.getElementById('appModeHeader')?.classList.remove('hidden');
+
+    const nav = document.getElementById('appTabbar');
+    if (nav && !nav.dataset.rendered) {
+        // "Schedule" reads as active — registering care days is reached from,
+        // and belongs to, that tab.
+        nav.innerHTML = APP_NAV_TABS.map(t => `<a class="tabbar-item${t.key === 'schedule' ? ' is-active' : ''}" href="/parent?tab=${t.key}">
+            <img class="tabbar-icon" src="${t.icon}" alt="" aria-hidden="true">
+            <span class="tabbar-label">${t.label}</span>
+        </a>`).join('');
+        nav.dataset.rendered = '1';
+    }
+    nav?.classList.remove('hidden');
+}
+
+function exitAppMode() {
+    document.body.classList.remove('app-embedded');
+    document.getElementById('appModeHeader')?.classList.add('hidden');
+    document.getElementById('appTabbar')?.classList.add('hidden');
 }
 
 async function runEmailPinLookup() {
@@ -517,6 +567,10 @@ function resetFamilyLookup() {
     }
     _viaPortalSession   = false;
     _familyAuth         = null;
+    // "Change" is only reachable on the public path (app-embedded mode hides
+    // it entirely), but leaving this out would strand a future caller in the
+    // app chrome with the email/PIN form now showing underneath it.
+    exitAppMode();
     // Put the email and PIN inputs back — "Change" has to land on a form the
     // parent can actually use.
     document.querySelector('.lookup-section')?.classList.remove('lookup-via-session');
