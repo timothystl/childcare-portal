@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
+import { escHtml } from "../_shared/html.ts";
 
 const CONFIRM_URL = "https://mdo.timothystl.org/confirm-interest";
 const ADMIN_URL   = "https://mdo.timothystl.org/admin";
@@ -10,10 +11,6 @@ const ADMIN_URL   = "https://mdo.timothystl.org/admin";
 const FIRST_REMINDER_DAYS = 7;
 const FOLLOWUP_DAYS       = 21;
 const REMINDER_CAP        = 4;
-
-function escHtml(s: string): string {
-    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 function daysAgo(iso: string | null): number {
     if (!iso) return Infinity;

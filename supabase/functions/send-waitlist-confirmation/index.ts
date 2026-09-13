@@ -1,17 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
+import { escHtml } from "../_shared/html.ts";
 
 const ADMIN_URL = "https://mdo.timothystl.org/admin";
-
-function escHtml(s: string): string {
-    return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 function friendlyDayType(t: string): string {
     return t === "half" ? "Half Day" : "Full Day";

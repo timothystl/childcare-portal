@@ -33,17 +33,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, json } from "../_shared/http.ts";
+import { escHtml } from "../_shared/html.ts";
 
 const MAX_BATCH = 200;
-
-function escHtml(s: unknown): string {
-    return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 const money = (n: unknown) =>
     '$' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US', {

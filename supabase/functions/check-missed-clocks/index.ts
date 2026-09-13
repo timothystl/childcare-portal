@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
+import { escHtml } from "../_shared/html.ts";
 
 // Shift windows in 24-hr minutes
 const SHIFT_AM_START = 8 * 60 + 15;   // 08:15
@@ -16,10 +17,6 @@ function minutesNow(tz: string): number {
 
 function localDateStr(tz: string): string {
     return new Date().toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
-}
-
-function escHtml(s: string): string {
-    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 serve(async (req) => {

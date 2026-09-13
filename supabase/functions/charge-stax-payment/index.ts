@@ -82,6 +82,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
 import { corsHeaders, json as jsonResponse } from "../_shared/http.ts";
+import { escHtml } from "../_shared/html.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -138,12 +139,6 @@ function amountStr(n: number): string {
 }
 
 function money(n: number): string { return "$" + (Number(n) || 0).toFixed(2); }
-
-function escHtml(s: string): string {
-    return String(s ?? "").replace(/[&<>"']/g, c => (
-        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as Record<string, string>
-    )[c]);
-}
 
 /**
  * A payment receipt, sent only for a genuinely new charge (never a retry —

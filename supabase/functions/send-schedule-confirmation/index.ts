@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
+import { escHtml } from "../_shared/html.ts";
 
 interface DateEntry {
     date: string;
@@ -20,15 +21,6 @@ function groupByChild(dates: DateEntry[], childNames: string[]): Array<{ name: s
             return { name, rows, subtotal: rows.reduce((s, r) => s + r.amount, 0) };
         })
         .filter(group => group.rows.length > 0);
-}
-
-function escHtml(s: string): string {
-    return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
 }
 
 function friendlyDate(dateStr: string): string {
