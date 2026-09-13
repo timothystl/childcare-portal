@@ -1,12 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { safeEqual } from '../_shared/timing-safe.ts'
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
+import { json } from '../_shared/http.ts'
 
 // settings.value can be a JSON-encoded TEXT string or a native jsonb object
 // depending on which code path wrote it — handle both, same as
