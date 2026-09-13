@@ -113,8 +113,21 @@ while IFS= read -r table; do
 done < "$temp_dir/tables.txt"
 row_count_sql="$(paste -sd $'\n' "$temp_dir/row-count-sql.txt" | sed '$!s/$/ UNION ALL/')"
 
-psql "$source_conn" -X -A -F',' -t -c "$row_count_sql ORDER BY 1;" > "$temp_dir/source-rows.csv"
-psql "$restore_conn" -X -A -F',' -t -c "$row_count_sql ORDER BY 1;" > "$temp_dir/restore-rows.csv"
+# ORDER BY 1 (bare) sorts using each server's own default collation. Both
+# report the same locale NAME (en_US.UTF-8) but run on different underlying
+# OS/glibc builds -- Supabase's managed host vs. this job's Docker image --
+# and glibc collation tables for the "same" locale name are not guaranteed
+# identical across builds, notably around punctuation like underscores. A
+# live run hit exactly this: source and restore agreed on every row count
+# but disagreed on the relative order of two table names, which a plain
+# `cmp` reads as a mismatch even though nothing actually differs. Sorting
+# with an explicit COLLATE "C" (plain byte order, defined identically on
+# every Postgres build) makes the comparison collation-independent instead
+# of asking two different hosts' locale data to agree. Wrapped in a
+# subquery because Postgres's ORDER BY on a UNION ALL only accepts bare
+# result-column names, not a COLLATE expression, directly.
+psql "$source_conn" -X -A -F',' -t -c "SELECT * FROM ($row_count_sql) t ORDER BY table_name COLLATE \"C\";" > "$temp_dir/source-rows.csv"
+psql "$restore_conn" -X -A -F',' -t -c "SELECT * FROM ($row_count_sql) t ORDER BY table_name COLLATE \"C\";" > "$temp_dir/restore-rows.csv"
 if ! cmp -s "$temp_dir/source-rows.csv" "$temp_dir/restore-rows.csv"; then
   echo "Row-count reconciliation mismatch:"
   diff "$temp_dir/source-rows.csv" "$temp_dir/restore-rows.csv" || true
@@ -146,8 +159,10 @@ done < "$temp_dir/columns.tsv"
 test "$monetary_controls" -gt 0
 monetary_sql="$(paste -sd $'\n' "$temp_dir/monetary-sql.txt" | sed '$!s/$/ UNION ALL/')"
 
-psql "$source_conn" -X -A -F',' -t -c "$monetary_sql ORDER BY 1,2;" > "$temp_dir/source-money.csv"
-psql "$restore_conn" -X -A -F',' -t -c "$monetary_sql ORDER BY 1,2;" > "$temp_dir/restore-money.csv"
+# Same cross-host collation reasoning as the row-count comparison above --
+# force byte order so two different Postgres builds can't disagree on it.
+psql "$source_conn" -X -A -F',' -t -c "SELECT * FROM ($monetary_sql) t ORDER BY table_name COLLATE \"C\", column_name COLLATE \"C\";" > "$temp_dir/source-money.csv"
+psql "$restore_conn" -X -A -F',' -t -c "SELECT * FROM ($monetary_sql) t ORDER BY table_name COLLATE \"C\", column_name COLLATE \"C\";" > "$temp_dir/restore-money.csv"
 if ! cmp -s "$temp_dir/source-money.csv" "$temp_dir/restore-money.csv"; then
   echo "Monetary/wage control-total reconciliation mismatch:"
   diff "$temp_dir/source-money.csv" "$temp_dir/restore-money.csv" || true
