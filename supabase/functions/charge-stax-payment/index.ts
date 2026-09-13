@@ -209,7 +209,7 @@ async function sendReceiptEmail(admin: any, o: {
     });
 
     try {
-        await fetch("https://api.resend.com/emails", {
+        const res = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -219,6 +219,16 @@ async function sendReceiptEmail(admin: any, o: {
                 html,
             }),
         });
+        // fetch() only rejects on a network failure — a rejected send (bad
+        // API key, unverified domain, rate limit, bad recipient) comes back
+        // as a normal non-2xx response and was previously swallowed here
+        // with nothing logged, indistinguishable from a real send. Surface
+        // it the same way the catch below does, so "the family says they
+        // never got a receipt" has something to actually check.
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            console.error("charge-stax-payment: receipt email rejected by Resend", res.status, body);
+        }
     } catch (e) {
         // A failed receipt email must never undo or fail the payment record
         // itself — the charge already happened and is already stored.

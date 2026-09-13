@@ -316,6 +316,7 @@ function pbInvoiceListCard(inv) {
             <div class="pb-row"><span class="pb-row-label">Invoice #</span><span class="pb-row-value">INV-${inv.id}</span></div>
             <div class="pb-row"><span class="pb-row-label">Bill date</span><span class="pb-row-value">${pbDate(inv.sent_at)}</span></div>
             <div class="pb-row"><span class="pb-row-label">Due by</span><span class="pb-row-value">${pbDate(inv.sent_at)}</span></div>
+            ${pbFeeBreakdownRows(inv)}
             <div class="pb-row"><span class="pb-row-label">Billed</span><span class="pb-row-value">${pbMoney(inv.final_amount)}</span></div>
             ${inv.paid_amount > 0 ? `<div class="pb-row"><span class="pb-row-label">Paid</span><span class="pb-row-value">${pbMoney(inv.paid_amount)}</span></div>` : ''}
             <div class="pb-row pb-row-strong"><span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span><span class="pb-row-value">${pbMoney(due)}</span></div>
@@ -325,6 +326,19 @@ function pbInvoiceListCard(inv) {
                 <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}
         </div>
     </section>`;
+}
+
+/** Program-care-days vs. annual supply/new-family fee, both read straight off
+ *  the invoice row (my_schedule() computes tuition_amount server-side from
+ *  final_amount - annual_fee_amount) — no client-side billing math. Renders
+ *  nothing when this invoice never carried a fee, which is the common case. */
+function pbFeeBreakdownRows(inv) {
+    const fee = Number(inv.annual_fee_amount) || 0;
+    if (fee <= 0) return '';
+    const tuition = Number(inv.tuition_amount ?? (Number(inv.final_amount) || 0) - fee);
+    return `
+        <div class="pb-row"><span class="pb-row-label">Program care days</span><span class="pb-row-value">${pbMoney(tuition)}</span></div>
+        <div class="pb-row"><span class="pb-row-label">Annual supply / registration fee</span><span class="pb-row-value">${pbMoney(fee)}</span></div>`;
 }
 
 function pbRenderInvoiceDetail() {
@@ -350,6 +364,7 @@ function pbRenderInvoiceDetail() {
         ${pbChildDayCardsForMonth(inv.month)}
         <section class="pd-card pb-summary">
             <div class="pd-card-body">
+                ${pbFeeBreakdownRows(inv)}
                 <div class="pb-row"><span class="pb-row-label">Billed</span><span class="pb-row-value">${pbMoney(inv.final_amount)}</span></div>
                 ${inv.paid_amount > 0 ? `<div class="pb-row"><span class="pb-row-label">Paid</span><span class="pb-row-value">${pbMoney(inv.paid_amount)}</span></div>` : ''}
                 <div class="pb-row pb-row-strong"><span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span><span class="pb-row-value">${pbMoney(due)}</span></div>
