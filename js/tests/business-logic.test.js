@@ -2079,7 +2079,7 @@ describe('scheduled jobs report partial delivery failures honestly', () => {
     test('photo cleanup exposes orphaned-object deletion failures', () => {
         const source = read('supabase/functions/sweep-child-photos/index.ts');
         expect(source.includes('failed += chunk.length')).toBe(true);
-        expect(source.includes('status: failed ? 502 : 200')).toBe(true);
+        expect(source.includes('failed ? 502 : 200')).toBe(true);
     });
 
     test('waitlist reminders advance state only after confirmed email delivery', () => {
@@ -2091,7 +2091,7 @@ describe('scheduled jobs report partial delivery failures honestly', () => {
         expect(deliveryBlock.indexOf('if (!reminderResponse?.ok)')).toBeLessThan(
             deliveryBlock.indexOf('last_reminder_sent_at')
         );
-        expect(source.includes('status: failed ? 502 : 200')).toBe(true);
+        expect(source.includes('failed ? 502 : 200')).toBe(true);
     });
 
     test('clock alerts do not write their dedupe record after a failed notification', () => {

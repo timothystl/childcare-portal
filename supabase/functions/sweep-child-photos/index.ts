@@ -23,6 +23,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
+import { json } from "../_shared/http.ts";
 
 serve(async (req) => {
     if (!await isAuthorizedCronRequest(req)) return unauthorizedCronResponse();
@@ -36,16 +37,12 @@ serve(async (req) => {
         const { data: rows, error } = await admin.rpc("sweep_expired_child_photos");
         if (error) {
             console.error("sweep rpc:", error);
-            return new Response(JSON.stringify({ error: "sweep_failed" }), {
-                status: 500, headers: { "Content-Type": "application/json" },
-            });
+            return json({ error: "sweep_failed" }, 500);
         }
 
         const paths = (rows ?? []).map((r: { removed_path: string }) => r.removed_path).filter(Boolean);
         if (!paths.length) {
-            return new Response(JSON.stringify({ removed: 0 }), {
-                status: 200, headers: { "Content-Type": "application/json" },
-            });
+            return json({ removed: 0 }, 200);
         }
 
         // Storage remove caps out well below any plausible week of photos, but
@@ -67,14 +64,10 @@ serve(async (req) => {
         }
 
         console.log(`swept ${removed}/${paths.length} expired daily photos`);
-        return new Response(JSON.stringify({ removed, failed, rows_deleted: paths.length }), {
-            status: failed ? 502 : 200, headers: { "Content-Type": "application/json" },
-        });
+        return json({ removed, failed, rows_deleted: paths.length }, failed ? 502 : 200);
 
     } catch (err) {
         console.error("sweep-child-photos:", err);
-        return new Response(JSON.stringify({ error: "server_error" }), {
-            status: 500, headers: { "Content-Type": "application/json" },
-        });
+        return json({ error: "server_error" }, 500);
     }
 });
