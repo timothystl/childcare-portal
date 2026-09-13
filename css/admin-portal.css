@@ -1317,6 +1317,22 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 
 /* Table */
 .fh-table { border-radius: var(--radius-md); overflow: hidden; }
+/* .fh-table-wrap is .table-wrapper (overflow-x: auto) — has-more-columns is
+   only added when JS (_fhBindLedgerListeners) measures real overflow, so
+   this never shows on a screen wide enough to fit every column. The shadow
+   sits on the wrapper, not the scrolling table, so it stays pinned to the
+   right edge as a "there's more" cue instead of scrolling away with the
+   content. */
+.fh-table-wrap { position: relative; }
+.fh-table-wrap.has-more-columns::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 26px;
+    background: linear-gradient(to right, transparent, rgba(1,41,74,.16));
+    pointer-events: none;
+    border-radius: 0 10px 10px 0;
+}
 .fh-table thead th {
     background: transparent !important; color: var(--text-muted) !important;
     font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
@@ -1759,6 +1775,10 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     text-transform: uppercase; letter-spacing: .03em; font-size: 11px;
 }
 .fh-payments-table tbody tr:last-child td { border-bottom: none; }
+.fh-payments-table th.fh-sort-th { cursor: pointer; user-select: none; }
+.fh-payments-table th.fh-sort-th:hover, .fh-payments-table th.fh-sort-th:focus-visible {
+    color: var(--tang, #E97D55);
+}
 .fh-pay-refund-amt { color: var(--tang-dark, #7a2a18); font-weight: 700; }
 .fh-pay-refund-tag { color: var(--text-muted); font-size: 12px; }
 .fh-payments-count { margin: 10px 2px 0; color: var(--text-muted); font-size: 12px; }

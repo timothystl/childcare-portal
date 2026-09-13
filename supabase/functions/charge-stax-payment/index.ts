@@ -81,8 +81,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
+import { corsHeaders, json as jsonResponse } from "../_shared/http.ts";
 
-const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
 // ⚠️ MERCHANT PIN — the line between test money and real money.
@@ -128,18 +128,8 @@ async function assertStaxMerchant(apiKey: string): Promise<void> {
     _staxMerchantVerified = true;
 }
 
-function corsHeaders(req: Request): Record<string, string> {
-    const origin = req.headers.get("origin") || "";
-    return {
-        "Access-Control-Allow-Origin":  origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    };
-}
-
 function json(body: unknown, status: number, ch: Record<string, string>) {
-    return new Response(JSON.stringify(body), {
-        status, headers: { ...ch, "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return jsonResponse(body, status, { ...ch, "Cache-Control": "no-store" });
 }
 
 /** Stax wants a decimal dollar amount, same shape as Authorize.net's. */
@@ -530,6 +520,11 @@ serve(async (req) => {
                 }),
             });
             chargeData = await chargeRes.json().catch(() => ({}));
+            // TEMPORARY DIAGNOSTIC — logged to Supabase's own function logs only
+            // (never a public endpoint), to confirm Stax's real field names for
+            // fee/funding-method before trusting the shared extractor's guess.
+            // Remove this line once confirmed.
+            console.log("DIAG_RAW_STAX_CHARGE_RESPONSE", JSON.stringify(chargeData));
         } catch (_err) {
             await setState("ambiguous", undefined, "Network failure while awaiting Stax response");
             return json({ error: "We couldn't confirm whether your payment went through. Please wait and contact the office before trying again.", ambiguous: true }, 502, ch);

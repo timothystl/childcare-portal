@@ -33,16 +33,25 @@ set -euo pipefail
 # of this, it is a deliberate, separate, and much more expensive addition,
 # not a gap in this one.
 #
-# DEPARTURE 2 — connects directly to the production database (via
-# SUPABASE_DB_PASSWORD), not through the Supabase Management API. pg_dump
-# needs a real Postgres connection either way; the direct connection avoids
-# a second credential type and pooler transaction-mode quirks for a
-# schema+data dump. The connection is read-only in effect: nothing in this
-# script issues a single INSERT/UPDATE/DELETE against production.
+# DEPARTURE 2 — connects to production via Supabase's Session Pooler
+# (Supavisor, port 5432), not the direct database connection, and not
+# through the Supabase Management API either. pg_dump needs a real Postgres
+# connection either way. The first live dispatch of this script used the
+# direct connection (db.<ref>.supabase.co) and failed immediately with
+# "Network is unreachable": Supabase's direct connection is IPv6-only unless
+# a paid IPv4 add-on is enabled, and Supabase's own docs name GitHub Actions
+# runners specifically as an IPv4-only platform. The Session Pooler is
+# always IPv4 on every project tier, and Supabase's own migration docs
+# recommend it (over Transaction mode) for exactly this kind of task, since
+# Transaction mode's per-statement connection reuse doesn't support
+# everything a schema+data pg_dump relies on. The pooler's username is
+# project-qualified (postgres.<ref>, not plain postgres). The connection is
+# read-only in effect: nothing in this script issues a single
+# INSERT/UPDATE/DELETE against production.
 
-source_host="${SUPABASE_DB_HOST:-db.dahdstopsumxnqvdclmy.supabase.co}"
+source_host="${SUPABASE_DB_HOST:-aws-0-us-west-2.pooler.supabase.com}"
 source_db="${SUPABASE_DB_NAME:-postgres}"
-source_user="${SUPABASE_DB_USER:-postgres}"
+source_user="${SUPABASE_DB_USER:-postgres.dahdstopsumxnqvdclmy}"
 source_password="${SUPABASE_DB_PASSWORD:?SUPABASE_DB_PASSWORD is required}"
 restore_host="${RESTORE_DB_HOST:-localhost}"
 restore_port="${RESTORE_DB_PORT:-5432}"

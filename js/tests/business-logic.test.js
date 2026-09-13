@@ -1761,9 +1761,80 @@ describe('Stax processor fee / card-vs-ACH tracking', () => {
     });
 
     test('finance table shows the fee and whether Stax funded from a card or ACH', () => {
-        expect(financeHubJs.includes('<th>Fee</th>')).toBe(true);
+        expect(financeHubJs.includes("_fhPaymentsHeaderCell('Fee', 'fee')")).toBe(true);
         expect(financeHubJs.includes("p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card'")).toBe(true);
         expect(financeHubJs.includes('p.processor_fee != null ? _fhMoney(p.processor_fee)')).toBe(true);
+    });
+});
+
+describe('All Payments search finds a payment by invoice number, not just family name', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+    const adminHtml = read('admin.html');
+
+    test('the search box invites an invoice number, not just a family name', () => {
+        expect(adminHtml.includes('id="fhPaymentsSearch"')).toBe(true);
+        expect(adminHtml.includes('placeholder="Find a family or invoice #&hellip;"')).toBe(true);
+    });
+
+    test('typing an invoice number (with or without the INV- prefix) matches its payment', () => {
+        const start = financeHubJs.indexOf('function _fhRenderAllPaymentsTable');
+        const end = financeHubJs.indexOf('\n}', financeHubJs.indexOf('root.innerHTML = `', start));
+        const fnBody = financeHubJs.slice(start, end);
+        expect(fnBody.includes('const invoiceLabel = p.invoice_id != null')).toBe(true);
+        expect(fnBody.includes('invoiceLabel.includes(q)')).toBe(true);
+        // Still matches by family name too — this adds a second match path,
+        // it doesn't replace the first.
+        expect(fnBody.includes("(p._fam?.parent_name || '').toLowerCase().includes(q)")).toBe(true);
+    });
+});
+
+describe('All Payments table is sortable by clicking a column header', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+
+    test('every visible column has a sort getter and a clickable header', () => {
+        const columnLabels = { date: 'Date', family: 'Family', amount: 'Amount', method: 'Method', fee: 'Fee', invoice: 'Invoice' };
+        for (const [key, label] of Object.entries(columnLabels)) {
+            expect(financeHubJs.includes(`${key}:`)).toBe(true);
+            expect(financeHubJs.includes(`_fhPaymentsHeaderCell('${label}', '${key}')`)).toBe(true);
+        }
+    });
+
+    test('clicking the active column flips direction instead of resetting it', () => {
+        const start = financeHubJs.indexOf('function _fhTogglePaymentsSort');
+        const end = financeHubJs.indexOf('\n}', start);
+        const fnBody = financeHubJs.slice(start, end);
+        expect(fnBody.includes("_fhPaymentsSortDir = _fhPaymentsSortDir === 'asc' ? 'desc' : 'asc';")).toBe(true);
+    });
+
+    test('the default sort (date, newest first) reproduces the table\'s original fixed ordering', () => {
+        expect(financeHubJs.includes("let _fhPaymentsSortKey = 'date';")).toBe(true);
+        expect(financeHubJs.includes("let _fhPaymentsSortDir = 'desc';")).toBe(true);
+        // Same tiebreak the table always used, so a fresh page load looks
+        // identical to before this feature existed.
+        const start = financeHubJs.indexOf('function _fhSortPayments');
+        const end = financeHubJs.indexOf('\n}', start);
+        expect(financeHubJs.slice(start, end).includes('(b.id || 0) - (a.id || 0)')).toBe(true);
+    });
+
+    test('the Method column sorts by the exact same label the cell displays', () => {
+        // A sort that disagreed with the printed label (e.g. sorting by raw
+        // processor/payment_method instead of the "Stax · ACH" text) would
+        // look broken to anyone actually reading the column while sorting it.
+        const getterLine = financeHubJs.match(/method:\s*p => (.+),/);
+        if (!getterLine) throw new Error('method sort getter not found');
+        expect(getterLine[1].includes('_fhPaymentMethodLabel(p)')).toBe(true);
+    });
+
+    test('a missing fee or invoice never crashes the sort — both fall back to a plain number', () => {
+        const feeLine = financeHubJs.match(/fee:\s*p => (.+),/);
+        const invoiceLine = financeHubJs.match(/invoice:\s*p => (.+),/);
+        if (!feeLine || !invoiceLine) throw new Error('fee/invoice sort getters not found');
+        expect(feeLine[1].includes('!= null')).toBe(true);
+        expect(invoiceLine[1].includes('!= null')).toBe(true);
     });
 });
 

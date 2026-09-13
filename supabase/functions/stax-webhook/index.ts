@@ -22,14 +22,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { safeEqual } from "../_shared/timing-safe.ts";
 import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
+import { json as jsonResponse } from "../_shared/http.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
 function json(body: unknown, status: number) {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return jsonResponse(body, status, { "Cache-Control": "no-store" });
 }
 
 function cents(value: unknown): number | null {

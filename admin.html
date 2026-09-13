@@ -202,7 +202,7 @@
                 <span id="currentTabChip" class="current-tab-chip">
                     <span class="ctc-icon" id="currentTabIcon">🧭</span><span id="currentTabLabel">Director</span>
                 </span>
-                <a href="/adminguide" target="_blank" rel="noopener" class="btn-ghost" style="text-decoration:none;display:inline-flex;align-items:center;">📖 Help</a>
+                <a href="/adminguide" target="_blank" rel="noopener" id="adminHelpBtn" class="btn-ghost" style="text-decoration:none;display:inline-flex;align-items:center;" aria-label="Help &amp; user guide">📖 <span class="header-btn-label">Help</span></a>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
             </div>
         </header>
@@ -2255,7 +2255,7 @@
 
                     <div class="fh-payments-pane" id="fhPaymentsPane" style="display:none">
                         <div class="fh-payments-toolbar">
-                            <input type="text" id="fhPaymentsSearch" class="fh-search" placeholder="Find a family&hellip;">
+                            <input type="text" id="fhPaymentsSearch" class="fh-search" placeholder="Find a family or invoice #&hellip;">
                             <button type="button" id="fhPaymentsRefreshBtn" class="fh-refresh-btn" title="Reload every payment on file.">&#8635; Refresh</button>
                         </div>
                         <div id="fhPaymentsRoot"><p class="empty-hint">Loading&hellip;</p></div>
