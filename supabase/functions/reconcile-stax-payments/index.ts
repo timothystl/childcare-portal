@@ -62,6 +62,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAuthorizedCronRequest, unauthorizedCronResponse } from "../_shared/cron-auth.ts";
 import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts";
 import { json } from "../_shared/http.ts";
+import { escHtml } from "../_shared/html.ts";
 
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
@@ -109,12 +110,6 @@ async function assertStaxMerchant(apiKey: string): Promise<void> {
 }
 const STALE_MINUTES = 15;
 const RELEASE_HOURS = 2;
-
-function escHtml(s: unknown): string {
-    return String(s ?? "")
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
 
 async function staxGet(apiKey: string, path: string): Promise<any> {
     const res = await fetch(`${STAX_API_URL}${path}`, {
