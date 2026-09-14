@@ -238,6 +238,11 @@ const ENTRIES = [
                 // Last: the portal shell indexes the sections the modules above
                 // own, and calls into their loaders when a tool is opened.
                 'js/admin/admin-portal.js',
+                // After the shell it extends: below 900px it takes over the
+                // tab bar and four of the five dashboards (design handoff
+                // "Admin Mobile Redesigns.dc.html", model 1a). Reads the same
+                // apState.live the desktop dashboards read.
+                'js/admin/admin-portal-mobile.js',
             ].map((f, i) => i === 0 ? f : fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },

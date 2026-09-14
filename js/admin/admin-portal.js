@@ -693,6 +693,11 @@ function apRender() {
     const detail = document.getElementById('apDetail');
     if (!page || !detail) return;
 
+    // On a phone the lit tab is apState.mTab, which is stored separately
+    // from apState.tab and can disagree with it after a restored session —
+    // reconcile before anything below reads apState.tab. No-op on desktop.
+    if (typeof apmActive === 'function' && apmActive()) apmSyncState();
+
     // Fall back to a tab this account can actually see.
     if (!apTabAvailable(apState.tab)) {
         const next = Object.keys(AP_TABS).find(apTabAvailable);
@@ -733,12 +738,23 @@ function apRender() {
     const nav = document.getElementById('apNav');
     if (nav) nav.innerHTML = apNavHtml();
 
+    // Below 900px the phone shell owns the tab bar: five tabs, not seven
+    // (design handoff "Admin Mobile Redesigns.dc.html", model 1a — see
+    // js/admin/admin-portal-mobile.js). Above it, nothing here changes.
+    const onPhone = typeof apmActive === 'function' && apmActive();
+
     const tabbar = document.getElementById('apTabbar');
     if (tabbar) {
-        const visible = Object.keys(AP_TABS).filter(k => apTabAvailable(k) && !AP_TABS[k].hideFromTabbar);
-        tabbar.style.gridTemplateColumns = `repeat(${visible.length},1fr)`;
-        tabbar.innerHTML = apTabbarHtml();
+        const count = onPhone
+            ? apmVisibleTabs().length
+            : Object.keys(AP_TABS).filter(k => apTabAvailable(k) && !AP_TABS[k].hideFromTabbar).length;
+        tabbar.style.gridTemplateColumns = `repeat(${count},1fr)`;
+        tabbar.innerHTML = onPhone ? apmTabbarHtml() : apTabbarHtml();
     }
+
+    // Always called, not only on a phone: it is what clears the mobile
+    // header again when the window is dragged back past the breakpoint.
+    if (typeof apmRenderHead === 'function') apmRenderHead();
 
     if (apState.view) {
         page.classList.add('hidden');
@@ -1210,6 +1226,15 @@ async function apLoadLive() {
 }
 
 function apRenderDashboard(page) {
+    // Below 900px four of the five phone tabs are screens of their own, not
+    // narrower versions of these dashboards (design handoff
+    // "Admin Mobile Redesigns.dc.html", model 1a). They read this same
+    // apState.live, so there is still one source for every figure.
+    if (typeof apmOwnsDashboard === 'function' && apmOwnsDashboard()) {
+        apmRenderDashboard(page);
+        return;
+    }
+
     const live = apState.live;
     if (!live) {
         // No tab-name heading here: the sidebar already highlights the open
@@ -2781,6 +2806,10 @@ async function apRemoveOff(id) {
 // ============================================================
 function setupAdminPortal() {
     apLoadPrefs();
+    // The phone shell's own prefs, breakpoint listener and delegated
+    // handlers (js/admin/admin-portal-mobile.js). Before _apReady, so the
+    // first apRender() below already knows which shell it is rendering.
+    if (typeof apmSetup === 'function') apmSetup();
 
     document.body.classList.add('ap-on');
 

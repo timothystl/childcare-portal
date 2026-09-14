@@ -2352,3 +2352,395 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     .fl-actions { width: 100%; justify-content: flex-start; }
     .fl-btn, .fl-actions .fm-edit-btn, .fl-actions .fm-cal-btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* ============================================================
+   PHONE SHELL — design handoff "Admin Mobile Redesigns.dc.html",
+   model 1a "Five tabs, inbox first" (2026-09-13)
+   ============================================================
+   Everything here is inside `@media (max-width: 900px)` or scoped to
+   `body.apm-on`, which js/admin/admin-portal-mobile.js only sets below that
+   breakpoint. Nothing in this block reaches the desktop portal.
+
+   The handoff's frame is an iPhone 390 × 844: a mint header with a 3px gold
+   rule under it, a cream body of white cards at 14–16px radius, and the
+   bottom tab bar the parent app already uses. Card actions are 44px tall
+   because a thumb is not a cursor.
+
+   Colors are the brand tokens from css/styles.css, not the hex literals the
+   prototype inlined — the prototype was drawn against a copy of those
+   tokens, so every value here is the token it was copied from. */
+
+.apm-head-slot { display: none; }
+
+@media (max-width: 900px) {
+
+.apm-head-slot { display: block; }
+.apm-head-slot.hidden { display: none; }
+
+/* The mobile header names the screen, so the desktop header's tab chip
+   would be the same word twice, one above the other. */
+body.apm-on #currentTabChip { display: none; }
+
+/* The handoff's screens carry their own header and their own padding, so
+   #apPage gives up the shared .ap-page padding while one of them is on.
+   ⚠️ Two things must KEEP that gutter and do: #apDetail, which is also
+   .ap-page and holds every legacy tool section (the tools are unchanged by
+   this handoff), and #apPage itself when a desktop-only tab reached through
+   the escape hatch is rendering its ordinary dashboard in there — which is
+   what `apm-screen` distinguishes from plain `apm-on`. */
+body.apm-screen #apPage { padding: 0; }
+
+/* ── Screen header ──────────────────────────────────────── */
+/* ⚠️ Both this and .apm-card-head are <header> elements, and css/styles.css
+   styles bare `header` (mint fill, gold rule, 28px padding, centered). The
+   screen header WANTS that fill and rule — it is where the handoff's mint
+   header came from — but not the padding or the centering, and the card
+   headers want none of it. Each states what it takes rather than inheriting
+   a page-header's defaults by accident. */
+.apm-head {
+    background: var(--green-lt);
+    border-bottom: 3px solid var(--sun);
+    padding: 14px 18px 12px;
+    text-align: left;
+}
+.apm-head-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.apm-head-top h1 {
+    margin: 0; font-family: var(--font-head);
+    font-size: 1.62em; font-weight: 700; color: var(--navy);
+}
+.apm-head-meta { font-size: .82em; font-weight: 700; color: var(--navy); opacity: .75; white-space: nowrap; }
+.apm-head-sub  { font-size: .84em; color: var(--navy); opacity: .8; margin: 4px 0 0; line-height: 1.4; }
+.apm-head-acts { display: flex; gap: 8px; margin-top: 12px; }
+
+.apm-back {
+    display: inline-flex; align-items: center; gap: 4px;
+    min-height: 44px; margin: 0 0 2px -8px; padding: 0 8px;
+    background: none; border: none; cursor: pointer;
+    font: inherit; font-size: .84em; font-weight: 800; color: var(--navy);
+}
+
+.apm-search {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--white); border: 1.5px solid rgba(1, 41, 74, .15);
+    border-radius: var(--radius-md); padding: 11px 14px; margin-top: 12px;
+}
+.apm-search-input {
+    flex: 1; min-width: 0; border: none; background: none; outline: none;
+    font: inherit; font-size: .94em; color: var(--navy);
+}
+.apm-search-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+/* ── Body ───────────────────────────────────────────────── */
+/* 96px of bottom padding clears the fixed tab bar; the handoff's frames all
+   carry it and the last card is unreachable without it. */
+.apm-body {
+    padding: 14px 14px 96px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.apm-loading { padding: 24px 18px; color: var(--text-muted); font-size: .92em; }
+
+.apm-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+}
+/* The queue is coral-topped for the same reason the desktop .ap-needs is:
+   it is the only thing on the screen that is waiting on her. */
+.apm-card-urgent { border-top: 4px solid var(--tang); }
+.apm-card-gold   { border-top: 4px solid var(--sun); }
+.apm-card-edge   { border-color: var(--tang); }
+.apm-card-clear  { text-align: center; }
+
+.apm-card-head {
+    display: flex; align-items: center; gap: 10px;
+    /* Not a page header — see the note on .apm-head above. */
+    background: none; border-bottom: none; text-align: left;
+    padding: 13px 15px 8px;
+}
+.apm-card-head h3 {
+    margin: 0; flex: 1; font-family: var(--font-head);
+    font-size: 1.14em; font-weight: 700; color: var(--navy);
+}
+.apm-card-count { font-size: .8em; color: var(--text-muted); text-align: right; }
+.apm-card-body  { padding: 13px 15px 14px; }
+.apm-card-head + .apm-card-body { padding-top: 0; }
+
+.apm-eyebrow {
+    font-size: .72em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.apm-foot-note { font-size: .82em; color: var(--text-muted); margin: 10px 0 0; line-height: 1.45; }
+.apm-empty     { text-align: center; padding: 22px 8px; margin: 0; }
+.apm-ok    { color: var(--green-text); }
+.apm-warn  { color: var(--mustard-dark); }
+.apm-alert { color: var(--tang-dark); }
+
+/* ── Buttons ────────────────────────────────────────────── */
+.apm-btn {
+    flex: 1; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 0 15px; border-radius: 10px;
+    background: var(--white); border: 1px solid var(--border); color: var(--navy);
+    font: inherit; font-size: .84em; font-weight: 800; cursor: pointer;
+    text-align: center;
+}
+.apm-btn-primary { background: var(--navy); border-color: var(--navy); color: #fff; }
+.apm-btn-alert   { background: var(--tang-dark); border-color: var(--tang-dark); color: #fff; }
+.apm-btn-ghost   { flex: 0 1 auto; }
+/* The prototype drew this 32px tall. The repo's stated minimum tap target
+   is 44px (.tabbar-item, css/styles.css) and a thumb does not get smaller
+   because a secondary action is less important, so it keeps the floor and
+   loses the width instead. */
+.apm-btn-mini    { flex: none; min-height: 44px; padding: 0 13px; font-size: .78em; border-radius: 9px; }
+.apm-acts { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ── Pills, chips, chevrons ─────────────────────────────── */
+.apm-pill {
+    flex: none; border-radius: 999px; padding: 4px 10px;
+    font-size: .7em; font-weight: 800; white-space: nowrap;
+}
+.apm-pill-alert { background: var(--tang-pale); color: var(--tang-dark); border: 1px solid var(--tang-soft); }
+.apm-pill-ok    { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
+.apm-pill-gold  { background: var(--sun-pale); color: var(--mustard-dark); border: 1px solid var(--sun); }
+.apm-chevron    { flex: none; font-size: 1.2em; color: var(--text-muted); line-height: 1; }
+
+.apm-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.apm-chip {
+    min-height: 44px; padding: 0 14px; border-radius: 999px;
+    background: var(--white); border: 1px solid var(--border); color: var(--navy);
+    font: inherit; font-size: .78em; font-weight: 700; cursor: pointer;
+}
+.apm-chip.is-on { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 800; }
+
+/* ── Rows ───────────────────────────────────────────────── */
+.apm-row {
+    width: 100%; min-height: 56px;
+    display: flex; align-items: center; gap: 11px; text-align: left;
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 11px 13px;
+    box-shadow: var(--shadow-card);
+    font: inherit; color: inherit; cursor: pointer;
+}
+.apm-row-main  { flex: 1; min-width: 0; }
+.apm-row-title { display: block; font-size: .95em; font-weight: 800; color: var(--navy); }
+.apm-row-sub   {
+    display: block; font-size: .78em; color: var(--text-muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.apm-avatar {
+    flex: none; width: 38px; height: 38px; border-radius: 999px;
+    background: var(--warm-gray);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: .78em; font-weight: 800; color: var(--navy);
+}
+.apm-row-person .apm-avatar { background: var(--green-lt); }
+.apm-letter {
+    font-size: .72em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-muted); padding: 6px 4px 0;
+}
+
+/* ── Today: the queue ───────────────────────────────────── */
+.apm-queue {
+    background: var(--cream); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 13px;
+}
+.apm-queue + .apm-queue { margin-top: 10px; }
+.apm-queue.is-urgent { background: var(--tang-pale); border-color: var(--tang-soft); }
+.apm-queue-top   { display: flex; gap: 10px; align-items: flex-start; }
+.apm-queue-glyph { font-size: 1.2em; line-height: 1.3; flex: none; }
+.apm-queue-main  { flex: 1; min-width: 0; }
+.apm-queue-title { font-size: .95em; font-weight: 800; color: var(--navy); }
+.apm-queue-ctx   { font-size: .8em; color: var(--text-muted); margin-top: 2px; line-height: 1.45; }
+.apm-queue .apm-acts { margin-top: 11px; }
+
+.apm-clear-glyph { font-size: 1.8em; }
+.apm-clear-title { font-size: 1em; font-weight: 800; color: var(--navy); margin: 8px 0 0; }
+.apm-clear-sub   { font-size: .82em; color: var(--text-muted); margin: 4px 0 0; line-height: 1.45; }
+
+/* ── Today: who is in the building ──────────────────────── */
+.apm-tiles { display: flex; gap: 10px; margin-top: 12px; }
+.apm-tile {
+    flex: 1; min-width: 0; text-align: center;
+    background: var(--cream); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 6px;
+}
+.apm-tile.is-edge { background: var(--tang-pale); border-color: var(--tang); }
+.apm-tile-value {
+    font-family: var(--font-head); font-size: 1.35em; font-weight: 700; color: var(--navy);
+}
+.apm-tile.is-edge .apm-tile-value { color: var(--tang-dark); }
+.apm-tile-label {
+    font-size: .7em; font-weight: 700; color: var(--text-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.apm-tile-note  { font-size: .68em; font-weight: 800; color: var(--green-text); }
+.apm-tile.is-edge .apm-tile-note { color: var(--tang-dark); }
+
+/* ── Rooms ──────────────────────────────────────────────── */
+.apm-room-top  { display: flex; align-items: baseline; gap: 10px; }
+.apm-room-name {
+    margin: 0; flex: 1; min-width: 0;
+    font-family: var(--font-head); font-size: 1.14em; font-weight: 700; color: var(--navy);
+}
+.apm-room-figs  { display: flex; gap: 16px; align-items: baseline; margin-top: 10px; flex-wrap: wrap; }
+.apm-room-count {
+    font-family: var(--font-head); font-size: 1.55em; font-weight: 700;
+    color: var(--tang-dark); white-space: nowrap;
+}
+.apm-room-of    { font-family: var(--font-body); font-size: .5em; font-weight: 700; color: var(--text-muted); }
+.apm-room-staff { font-size: .82em; font-weight: 700; color: var(--text-muted); }
+.apm-room-note  { font-size: .8em; color: var(--text-muted); margin: 7px 0 0; line-height: 1.4; }
+
+.apm-sched-row {
+    display: flex; gap: 10px; align-items: center;
+    font-size: .84em; padding: 5px 0;
+}
+.apm-sched-row + .apm-sched-row { border-top: 1px solid var(--linen); }
+.apm-sched-name  { flex: 1; min-width: 0; color: var(--navy); font-weight: 800;
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apm-sched-room  { color: var(--text-muted); font-weight: 700; white-space: nowrap; }
+.apm-sched-shift { color: var(--text-muted); white-space: nowrap; }
+
+.apm-sched-short {
+    width: 100%; min-height: 44px; margin-top: 8px;
+    display: flex; gap: 10px; align-items: center; text-align: left;
+    background: var(--tang-pale); border: 1px solid var(--tang-soft);
+    border-radius: 10px; padding: 8px 10px;
+    font: inherit; cursor: pointer;
+}
+.apm-sched-short-room { flex: 1; min-width: 0; color: var(--tang-dark); font-weight: 800; font-size: .86em; }
+.apm-sched-short-note { color: var(--tang-dark); font-weight: 700; font-size: .82em; white-space: nowrap; }
+.apm-sched-short .apm-chevron { color: var(--tang-dark); }
+
+/* ── Money ──────────────────────────────────────────────── */
+.apm-money-top { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.apm-money-big {
+    font-family: var(--font-head); font-size: 1.9em; font-weight: 700; color: var(--navy);
+}
+.apm-money-of  { font-size: .84em; color: var(--text-muted); font-weight: 700; }
+.apm-bar {
+    height: 10px; border-radius: 99px; background: var(--warm-gray);
+    margin-top: 12px; overflow: hidden;
+}
+.apm-bar > span { display: block; height: 100%; background: var(--green-text); }
+.apm-money-legend {
+    display: flex; justify-content: space-between; gap: 10px;
+    margin-top: 9px; font-size: .82em;
+}
+
+.apm-owe {
+    display: flex; gap: 10px; align-items: center;
+    background: var(--cream); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 12px;
+}
+.apm-owe + .apm-owe { margin-top: 9px; }
+.apm-owe-main { flex: 1; min-width: 0; }
+.apm-owe-name { font-size: .9em; font-weight: 800; color: var(--navy);
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apm-owe-note { font-size: .78em; font-weight: 700; margin-top: 2px; }
+.apm-owe-amt  { font-size: .95em; font-weight: 800; color: var(--navy); white-space: nowrap; }
+
+.apm-note {
+    display: flex; gap: 10px; align-items: center;
+    border-radius: var(--radius-md); padding: 12px 14px;
+}
+.apm-note-ok    { background: var(--green-pale); border: 1px solid var(--green-lt); }
+.apm-note-title { font-size: .9em; font-weight: 800; color: var(--green-dark); }
+.apm-note-sub   { font-size: .78em; color: var(--green-text); margin-top: 2px; }
+
+/* ── The escape hatch ───────────────────────────────────── */
+.apm-more { margin-top: 4px; }
+.apm-more > summary {
+    min-height: 44px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; list-style: none;
+    font-size: .82em; font-weight: 800; color: var(--green-text);
+}
+.apm-more > summary::-webkit-details-marker { display: none; }
+.apm-more-body { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.apm-more-body .apm-foot-note { margin: 0 0 2px; }
+
+/* The tab bar's own icons are emoji here, not the parent app's <img>. */
+.apm-tabbar-icon {
+    width: auto; height: auto; font-size: 21px; line-height: 24px;
+}
+
+/* ── Inbox ──────────────────────────────────────────────── */
+/* The Inbox tab is the real Messages tool, not a phone copy of it: the
+   handoff's inbox screen (segmented Waiting / All / Sent over accent-railed
+   message cards) is what .msg-kpis + .ap-seg + .msg-row already are. Only
+   the widths needed work at 390px. */
+body.apm-on .msg-kpis { gap: 8px; margin: 14px 0 12px; }
+body.apm-on .msg-kpi  { padding: 9px 8px; }
+body.apm-on .msg-kpi-label { font-size: .64em; letter-spacing: .03em; }
+body.apm-on .msg-kpi-count { font-size: 1.35em; }
+/* The sub-line is the one part with no room at this width — the label and
+   the count already say what the tile is. */
+body.apm-on .msg-kpi-sub { display: none; }
+
+/* Four filters do not fit a 390px row; let the row scroll rather than wrap
+   the pills into a second line that reads as two controls. */
+body.apm-on .ap-seg {
+    display: flex; max-width: 100%;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+body.apm-on .ap-seg::-webkit-scrollbar { display: none; }
+body.apm-on .ap-seg-btn { flex: none; padding: 8px 14px; }
+
+/* An expanded thread was indented to clear the 38px row icon; at phone
+   width that gutter costs more than the alignment buys. */
+body.apm-on .msg-row-body { padding: 0 12px 14px; }
+
+/* A message row is four columns wide on a desktop — icon, the name/meta/
+   preview stack, and a status pill or a pair of Read/Archive checkboxes.
+   At 390px the pill was taking enough of the row to wrap "Sarah Whitfield"
+   onto two lines and cut the preview to ten characters, which is the one
+   thing on this screen she actually reads. Stack it instead: the row keeps
+   its full width, and the pill sits under the preview where it reads as a
+   status rather than competing with the name. */
+body.apm-on .msg-row-head { flex-wrap: wrap; row-gap: 8px; }
+body.apm-on .msg-row-clickable { flex: 1 1 100%; }
+body.apm-on .msg-row-actions { flex-direction: row; gap: 14px; padding-left: 50px; }
+body.apm-on .msg-status-pill { margin-left: 50px; }
+/* Two lines of the message, not ten characters of it. */
+body.apm-on .msg-row-preview {
+    white-space: normal; line-height: 1.45;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+
+/* The tool's own chrome — heading, notify toggle, filters, search, two
+   composers — ran about 330px deep before the first message. The whole
+   point of "inbox first" is that the app opens ON the messages, so on a
+   phone the composers become one row of equal buttons, the search and the
+   heading give up their own lines, and the fold lands inside the feed.
+   Nothing is removed; every control is still here and still works. */
+body.apm-on #messagesUnifiedSection > h2 {
+    /* The mint screen header already says "Inbox" one element above this. */
+    display: none;
+}
+body.apm-on .msg-toolbar-top { margin-bottom: 8px; }
+body.apm-on .msg-toolbar {
+    display: grid;
+    /* minmax(0, 1fr), not 1fr: the filter segment's min-content width is the
+       four filter labels laid end to end, and a bare `1fr` floor is auto —
+       which sized the column to that and pushed the whole page 25px wider
+       than the phone. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px; align-items: center;
+}
+body.apm-on .msg-toolbar > * { min-width: 0; }
+body.apm-on .msg-toolbar .ap-seg,
+body.apm-on .msg-toolbar #msgSearch { grid-column: 1 / -1; }
+body.apm-on .msg-toolbar #msgSearch { min-width: 0; width: 100%; box-sizing: border-box; }
+/* Two buttons, half a phone each. Their labels do not fit on one line at
+   that width, so they wrap rather than run out of the grid cell — the
+   button grows, the row stays inside the screen. */
+body.apm-on .msg-toolbar #msgOpenComposeBtn,
+body.apm-on .msg-toolbar #msgOpenAnnounceBtn {
+    min-height: 44px; padding: 8px 10px; font-size: .8em; line-height: 1.3;
+    white-space: normal; text-align: center;
+}
+
+}  /* end @media (max-width: 900px) */
