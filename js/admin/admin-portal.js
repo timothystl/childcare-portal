@@ -719,7 +719,17 @@ function apRender() {
     // and Settings use this for the same reason finance does: each has
     // exactly one tool, so there is no dashboard/tool split to fall into
     // (design handoff design_handoff_messages_settings, 2026-08-26).
-    if (!apState.view) {
+    //
+    // ⚠️ Not on a phone tab that has a screen of its own. The phone's Money
+    // tab borrows AP_TABS.finance for availability and role checks, and this
+    // block then read finance's defaultTool and opened the Finance Hub over
+    // the top of it — Money was unreachable on a phone, landing on the
+    // desktop ledger every time (found on a real phone, 2026-09-14). Today
+    // and Rooms were unaffected only because `director` and `classrooms`
+    // happen to name no defaultTool. Inbox still wants this: its AP_TABS
+    // entry IS the Messages tool, so apmOwnsDashboard() is false there and
+    // the fallback runs as before.
+    if (!apState.view && !(typeof apmOwnsDashboard === 'function' && apmOwnsDashboard())) {
         const defaultKey = AP_TABS[apState.tab]?.defaultTool;
         const defaultTool = defaultKey ? AP_TOOL_BY_KEY[defaultKey] : null;
         if (defaultTool && apToolAvailable(defaultTool)) { apState.view = defaultKey; tool = defaultTool; }
