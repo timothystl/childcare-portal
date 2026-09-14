@@ -6670,6 +6670,44 @@ function setupMissingCalendarReport() {
 
     document.getElementById('generateMissingCalendarBtn')?.addEventListener('click', generateMissingCalendarReport);
     document.getElementById('exportMissingCalendarBtn')?.addEventListener('click', exportMissingCalendarReport);
+
+    setupCalendarReminderNotifications();
+}
+
+// ============================================================
+// CALENDAR REMINDER NOTIFICATIONS (weekly missing-calendar email toggle)
+// ============================================================
+async function setupCalendarReminderNotifications() {
+    const enabledEl = document.getElementById('calReminderEnabled');
+    const emailEl   = document.getElementById('calReminderNotifyEmail');
+    try {
+        const settings = await loadCalendarReminderSettings();
+        if (emailEl) emailEl.value = settings.notifyEmail || '';
+        // Off unless explicitly turned on — a missing/undefined value must
+        // never be read as "on".
+        if (enabledEl) enabledEl.checked = settings.remindersEnabled === true;
+    } catch (_) {}
+
+    document.getElementById('calReminderSaveBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('calReminderSaveBtn');
+        const statusEl = document.getElementById('calReminderStatus');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+            await saveCalendarReminderSettings({
+                notifyEmail:      emailEl.value.trim() || null,
+                remindersEnabled: !!enabledEl?.checked,
+            });
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = '⚠️ ' + err.message; statusEl.style.color = '#c62828'; }
+        } finally {
+            btn.disabled = false; btn.textContent = '💾 Save';
+        }
+    });
 }
 
 let _missingCalendarData = [];

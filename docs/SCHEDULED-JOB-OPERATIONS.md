@@ -10,9 +10,10 @@ role JWT.
 1. Generate a high-entropy value without printing or committing it.
 2. Save it as the Edge Function secret `CRON_SECRET` and as the Vault secret
    named `mymdo_cron_secret`.
-3. Deploy all five scheduled functions with the repository `config.toml`.
-4. Apply `20260909030842_scope_scheduled_job_credentials.sql`.
-5. Verify the five named jobs in `cron.job`; their command text must reference
+3. Deploy all six scheduled functions with the repository `config.toml`.
+4. Apply `20260909030842_scope_scheduled_job_credentials.sql` and
+   `20260914120000_add_calendar_reminder_tracking.sql`.
+5. Verify the six named jobs in `cron.job`; their command text must reference
    Vault and must not contain an Authorization bearer value.
 6. Invoke each job through `cron.schedule`/`pg_net`, then inspect HTTP outcomes.
    Do not manually invoke payment reconciliation against live payment data.
@@ -46,6 +47,10 @@ credentials, photo paths, or payment data.
   removed, so investigate orphan cleanup rather than blindly repeating it.
 - Stax reconciliation runs every 30 minutes. Never retry it manually without
   following the payment reconciliation runbook and reviewing current lock state.
+- Calendar reminders run daily but only act from the 15th onward; a family's
+  `calendar_reminder_log` row only advances after provider-confirmed delivery,
+  so a failed send is retried on the job's next run once the weekly cadence in
+  `_shared/calendar-reminder-cadence.ts` makes them due again.
 
 The accountable owner must name a backup operator. Review access quarterly,
 rotate immediately after suspected disclosure, and remove access immediately

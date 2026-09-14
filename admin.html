@@ -416,6 +416,23 @@
                 <div id="missingCalendarContent">
                     <p class="empty-hint">Select a month above and click Generate Report.</p>
                 </div>
+                <div class="wl-notify-panel" style="margin-top:1rem;">
+                    <div class="wl-notify-field">
+                        <label>Weekly Missing-Calendar Reminders</label>
+                        <label class="wl-notify-checkbox">
+                            <input type="checkbox" id="calReminderEnabled">
+                            Automatically email families who had care days last month but haven't submitted this month's calendar (15th, then weekly, off by default)
+                        </label>
+                    </div>
+                    <div class="wl-notify-field">
+                        <label>Notify This Email When Reminders Go Out</label>
+                        <input type="email" id="calReminderNotifyEmail" placeholder="director@timothystl.org" autocomplete="off">
+                    </div>
+                    <div class="wl-notify-actions">
+                        <button id="calReminderSaveBtn" class="btn-secondary" type="button">💾 Save</button>
+                        <span id="calReminderStatus" class="rates-status"></span>
+                    </div>
+                </div>
             </section>
 
             <section class="table-section" id="allRegistrationsSection">
