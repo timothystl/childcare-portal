@@ -1512,8 +1512,16 @@ input.prefilled {
     .date-row { flex-direction: column; align-items: flex-start; }
     .date-controls { width: 100%; justify-content: space-between; }
     .lookup-row { flex-direction: column; }
+    /* .lookup-search-row/.lookup-pin-row's flex: 1 1 200px (desktop, row
+       direction) sets a 200px flex-basis meant as a minimum WIDTH for the
+       side-by-side layout. Once .lookup-row switches to a column here, that
+       same flex-basis applies to the main axis again — now vertical — so
+       without resetting it each row stretched to a 200px-tall box with its
+       one input vertically centered inside, leaving large dead gaps above
+       and below every field on mobile. flex-basis: auto restores natural
+       (content) height. */
     .lookup-search-row,
-    .lookup-pin-row { width: 100%; }
+    .lookup-pin-row { width: 100%; flex-basis: auto; }
     .field-grid-3 { grid-template-columns: 1fr 1fr; }
     .field-grid-3 .form-group-btn { grid-column: 1 / -1; }
     .child-cards-row { gap: 8px; }
