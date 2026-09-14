@@ -222,14 +222,21 @@
                            section, and its "Related" chips. Every legacy
                            .tab-pane lives inside it and the shell shows
                            exactly one section at a time.
+               #apmHead  — phone only (<900px): the screen header from the
+                           mobile handoff, and the way back out of a tool
+                           opened from one. Empty and hidden above 900px.
+                           See js/admin/admin-portal-mobile.js.
              ══════════════════════════════════════════════════════ -->
-        <!-- Below 900px this replaces the sidebar entirely — same seven
-             tabs, same bottom tab-bar pattern as the parent app. -->
+        <!-- Below 900px this replaces the sidebar entirely — five tabs there
+             (Inbox / Today / Rooms / Families / Money, built by
+             admin-portal-mobile.js), the full set above it. Same bottom
+             tab-bar pattern as the parent app either way. -->
         <nav class="tabbar ap-tabbar" id="apTabbar" aria-label="Sections"></nav>
 
         <div class="ap-shell" id="apShell">
         <nav class="ap-nav" id="apNav" aria-label="Tools"></nav>
         <div class="ap-main">
+        <div class="apm-head-slot hidden" id="apmHead"></div>
         <div class="ap-page hidden" id="apPage"></div>
         <div class="ap-page hidden" id="apDetail">
         <div class="ap-detail-head" id="apDetailHead"></div>
