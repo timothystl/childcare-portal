@@ -4481,6 +4481,34 @@ async function saveWaitlistNotifySettings(settings) {
     if (error) throw error;
 }
 
+// Load/save the weekly missing-calendar reminder toggle + optional staff
+// digest address. Same shape and same admin-only settings key pattern as
+// waitlist_notify above.
+async function loadCalendarReminderSettings() {
+    if (!sbClient) return { notifyEmail: null };
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'calendar_reminder_notify')
+            .maybeSingle();
+        if (error || !data) return { notifyEmail: null };
+        const raw = data.value;
+        if (typeof raw === 'string') return parseJsonOr(raw, { notifyEmail: null });
+        return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { notifyEmail: null };
+    } catch (_) {
+        return { notifyEmail: null };
+    }
+}
+
+async function saveCalendarReminderSettings(settings) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'calendar_reminder_notify', value: settings }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
 /**
  * Sends the registration confirmation email.
  *

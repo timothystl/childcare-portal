@@ -38,6 +38,9 @@ verify_jwt = false
 [functions.reconcile-stax-payments]
 verify_jwt = false
 
+[functions.send-calendar-reminders]
+verify_jwt = false
+
 # NOT YET SCHEDULED — see supabase/functions/purge-client-error-log and
 # supabase/migrations/20260913160000_purge_client_error_log.sql. Listed here
 # with the other X-Cron-Secret jobs now so a future schedule migration is the
