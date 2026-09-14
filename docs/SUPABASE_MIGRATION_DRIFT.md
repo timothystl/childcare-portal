@@ -112,11 +112,21 @@ GitHub integration is configured to push on `main`, that would schedule the
 in the Supabase dashboard, not this repo, and must be checked before anyone starts down this
 path.
 
-**B. Stop the integration checking migrations.** Turn off the migration check in the Supabase
-dashboard's GitHub integration settings. Zero production risk, and it stops the check lying.
-Costs the option of ever using `supabase db push` without doing (A) first. Given
+**B. Stop the integration checking migrations.** Zero production risk, and it stops the check
+lying. Costs the option of ever using `supabase db push` without doing (A) first. Given
 `docs/DEVELOPMENT.md` already documents hand-application as the real process, this is the
 option that matches how the project actually works.
+
+The control is in the Supabase dashboard under **Project Integrations Settings** — the same
+screen the check itself points at. Its own output on a PR head reads:
+
+> Creating a new preview branch per PR is disabled. You can re-enable it in Project
+> Integrations Settings.
+
+which is why the check reports `skipped` on branches and only fails once something reaches
+`main`: with preview branches off, the only thing it still does on `main` is compare the
+migration directory against production's history — the comparison that has never been able
+to pass here.
 
 **C. `supabase migration repair`.** Rewrites the live project's migration-history table.
 This is a production write and per `AGENTS.md` needs Andrew's explicit approval for that
