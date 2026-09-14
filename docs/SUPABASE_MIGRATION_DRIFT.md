@@ -94,11 +94,29 @@ and `20260914120000_add_calendar_reminder_tracking.sql`. The first is explicitly
 (not scheduled)" — see the `[functions.purge-client-error-log]` comment in
 `supabase/config.toml`. Both being local-only is the intended state, not drift.
 
-## What is left to decide — needs Andrew
+## The decision — settled 2026-09-14
 
-Adding the ten files does not turn the check green; 111 remote versions still have no
-matching local filename. Getting to green means picking a workflow, and each option has a
-real cost:
+Adding the ten files did not turn the check green; 111 remote versions still have no matching
+local filename, and the merge commit `29150954` went red again with the same message.
+
+**Andrew turned off the integration's migration check — option B below.** The options are
+kept here so the reasoning survives, and so anyone who later wants option A can see what it
+would cost before starting.
+
+What this means going forward:
+
+- `supabase/migrations/` stays what `docs/DEVELOPMENT.md` already called it: **a source
+  record, not a live ledger**. It is not CLI-managed and `supabase db push` is not the
+  deployment path.
+- Because nothing now compares the directory against production, **the gap this audit found
+  can silently reopen.** A migration applied by hand and not committed leaves no trace and no
+  red check. Committing the file is the only safeguard left.
+- Re-running the audit is cheap and worth doing periodically: compare
+  `mcp__Supabase__list_migrations` against `supabase/migrations/`, and for anything with no
+  local file, check `supabase_migrations.schema_migrations` for its statements. That is how
+  the ten below were found.
+
+### The options, and what each cost
 
 **A. Adopt the CLI convention.** Rename or split ~111 files so every remote version has a
 `<version>_<name>.sql`. Repo-only, no production write. But: the bundles do not map 1:1
@@ -112,10 +130,10 @@ GitHub integration is configured to push on `main`, that would schedule the
 in the Supabase dashboard, not this repo, and must be checked before anyone starts down this
 path.
 
-**B. Stop the integration checking migrations.** Zero production risk, and it stops the check
-lying. Costs the option of ever using `supabase db push` without doing (A) first. Given
-`docs/DEVELOPMENT.md` already documents hand-application as the real process, this is the
-option that matches how the project actually works.
+**B. Stop the integration checking migrations. ← chosen.** Zero production risk, and it stops
+the check lying. Costs the option of ever using `supabase db push` without doing (A) first.
+Given `docs/DEVELOPMENT.md` already documents hand-application as the real process, this is
+the option that matches how the project actually works.
 
 The control is in the Supabase dashboard under **Project Integrations Settings** — the same
 screen the check itself points at. Its own output on a PR head reads:
@@ -133,5 +151,6 @@ This is a production write and per `AGENTS.md` needs Andrew's explicit approval 
 operation. It is also the wrong tool here: these migrations really were applied, and marking
 them reverted would make the history less true, not more.
 
-**Recommendation: B now, A only as part of the "code normalized" overhaul work**, where
-splitting the bundles can be done deliberately with the deploy posture checked first.
+**B was taken. A remains available** as part of the "code normalized" overhaul work, where
+splitting the bundles can be done deliberately with the deploy posture checked first — and
+where turning the check back on would be the point of doing it.
