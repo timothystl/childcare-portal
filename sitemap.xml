@@ -24,6 +24,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://mdo.timothystl.org/tour</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://mdo.timothystl.org/menu</loc>
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>

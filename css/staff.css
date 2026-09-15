@@ -1090,3 +1090,31 @@
     background: none; border: none; color: var(--text-muted);
     font-size: 1em; cursor: pointer;
 }
+
+/* ============================================================
+   Room ratio bar — above the roster
+   (design handoff: Capacity & Fill, 1d)
+   ============================================================
+   Navy band, because it is chrome for the room rather than another
+   card in the list: a teacher reads it once on the way past, and the
+   roster below it is where she actually works. */
+
+.sl-room-head{background:var(--navy);padding:14px 16px 16px;}
+.sl-room-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.sl-room-stat{background:rgba(255,255,255,.12);border-radius:10px;padding:10px 8px;
+  display:flex;flex-direction:column;gap:2px;}
+.sl-room-stat-label{font-size:.66em;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;color:rgba(255,255,255,.65);}
+.sl-room-stat-n{font-size:1.2em;font-weight:800;color:#fff;}
+/* The room is sitting exactly on a ratio boundary — the next child
+   through the door costs another adult. */
+.sl-room-stat-n.is-edge{color:var(--sun);}
+.sl-room-note{margin:10px 0 0;font-size:.85em;line-height:1.45;color:rgba(255,255,255,.75);}
+.sl-room-note.is-edge{color:var(--sun);font-weight:700;}
+
+.sl-room-extra{margin-top:12px;background:var(--sun-pale);border:1.5px solid var(--sun);
+  border-radius:12px;padding:12px 14px;}
+.sl-room-extra-kicker{font-size:.68em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--mustard-dark);margin-bottom:3px;}
+.sl-room-extra-title{font-size:.95em;font-weight:700;color:var(--navy);line-height:1.35;}
+.sl-room-extra-body{font-size:.85em;color:var(--mustard-dark);line-height:1.45;margin-top:2px;}

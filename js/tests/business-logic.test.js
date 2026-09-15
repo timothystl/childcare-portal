@@ -12,16 +12,30 @@
 // ---- Minimal test runner ----
 
 let _passed = 0, _failed = 0;
+// A test whose body returns a promise is settled before the summary prints —
+// see _pending and the tail of this file. Without this, an async body that
+// REJECTED was counted as a pass, because the try/catch around a synchronous
+// fn() call never sees a rejection that happens a microtask later.
+const _pending = [];
 function describe(label, fn) { console.log(`\n  ${label}`); fn(); }
 function test(label, fn) {
+    let result;
     try {
-        fn();
-        _passed++;
-        console.log(`    ✓ ${label}`);
+        result = fn();
     } catch (err) {
         _failed++;
         console.error(`    ✗ ${label}\n      ${err.message}`);
+        return;
     }
+    if (result && typeof result.then === 'function') {
+        _pending.push(result.then(
+            () => { _passed++; console.log(`    ✓ ${label}`); },
+            (err) => { _failed++; console.error(`    ✗ ${label}\n      ${err && err.message}`); },
+        ));
+        return;
+    }
+    _passed++;
+    console.log(`    ✓ ${label}`);
 }
 function expect(actual) {
     return {
@@ -3350,6 +3364,734 @@ describe('Admin users — only real admins, and all of them', () => {
     });
 });
 
-console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
-if (_failed > 0) process.exitCode = 1;
-if (_failed > 0) process.exit(1);
+// ============================================================
+// FILL THE ROOMS — seat math and funnel
+// (design handoff: Capacity & Fill, turn 1)
+// ============================================================
+// Unlike most of this file, these exercise the REAL shipped functions rather
+// than a stub that mirrors them: admin-fill-rooms.js declares only functions
+// and a couple of consts at the top level — nothing runs on load — so the
+// whole module can be evaluated in a vm sandbox with the browser globals it
+// calls at render time stubbed in. A regression in the seat/at-ratio rule
+// therefore fails here, which a source-text assertion could not catch.
+describe('Fill the Rooms — open seats, at-ratio, and the funnel', () => {
+    const vm = require('vm');
+    // Each describe block in this file scopes its own repoRoot — see the two
+    // above — rather than sharing one, so a block can be moved or removed
+    // without silently breaking its neighbours.
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-fill-rooms.js'), 'utf8');
+
+    // Two rooms with deliberately different ratios, so "at ratio" can be
+    // wrong for one and right for the other in the same week.
+    const stubRooms = [
+        { id: 'turtle', label: '🐢 Turtle Room', capacity: 11, staffRatio: 8, status: 'active', hidden: false },
+        { id: 'goose',  label: '🪿 Goose Room',  capacity: 12, staffRatio: 8, status: 'active', hidden: false },
+    ];
+    const WEEK = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18'];
+
+    // n children booked into `room` on `date`, as the registration shape
+    // allRegistrations actually carries.
+    function regs(spec) {
+        return Object.entries(spec).map(([roomId, byDate]) => ({
+            room_id: roomId,
+            registration_dates: Object.entries(byDate).flatMap(([date, n]) =>
+                Array.from({ length: n }, () => ({ care_date: date, waitlisted: false, day_type: 'full' }))),
+        }));
+    }
+
+    function load({ registrations = [], closures = [], apps = [] } = {}) {
+        const sandbox = {
+            console,
+            apWeekDates: () => WEEK.slice(),
+            apWeekStart: () => WEEK[0],
+            apFmtDayShort: (d) => ({ '2026-09-14': 'Mon 9/14', '2026-09-15': 'Tue 9/15',
+                '2026-09-16': 'Wed 9/16', '2026-09-17': 'Thu 9/17', '2026-09-18': 'Fri 9/18' })[d] || d,
+            getSortedRooms: () => stubRooms,
+            allRegistrations: registrations,
+            allClosureDates: new Set(closures),
+            _allWaitlistApps: apps,
+            TREND_DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+            escHtml: (s) => String(s),
+            wlRoomLabel: (id) => id,
+            wlDaysLabel: () => 'Tue/Thu',
+            wlDeriveRoom: (a) => a.room_id || 'turtle',
+            wlDaysWaiting: () => '10 days',
+            wlpMonths: () => [],
+            wlpRankedKids: () => [],
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        return sandbox;
+    }
+
+    test('open seats are capacity minus booked, per room per day', () => {
+        const m = load({ registrations: regs({ turtle: { '2026-09-14': 4 }, goose: { '2026-09-14': 5 } }) });
+        const week = m._frWeekData(WEEK[0]);
+        const mon = week.byDay[0];
+        // (11 - 4) + (12 - 5) = 14
+        expect(mon.open).toBe(14);
+        expect(mon.booked).toBe(9);
+        expect(mon.capacity).toBe(23);
+    });
+
+    // The whole point of the coral cells: a room sitting exactly on a ratio
+    // boundary is NOT offered for release, however many seats look open.
+    test('a room exactly on a ratio boundary is at-ratio and not releasable', () => {
+        const m = load({ registrations: regs({ turtle: { '2026-09-14': 8 }, goose: { '2026-09-14': 7 } }) });
+        const week = m._frWeekData(WEEK[0]);
+        const turtle = week.rows.find(r => r.room.id === 'turtle').cells[0];
+        const goose  = week.rows.find(r => r.room.id === 'goose').cells[0];
+        expect(turtle.booked).toBe(8);          // 8 % 8 === 0 → the 9th child costs an adult
+        expect(turtle.atRatio).toBe(true);
+        expect(turtle.open).toBe(3);            // three seats open, still not releasable
+        expect(turtle.releasable).toBe(false);
+        expect(goose.atRatio).toBe(false);      // 7 % 8 !== 0
+        expect(goose.releasable).toBe(true);
+    });
+
+    test('an empty room is not at ratio — zero children never costs an adult', () => {
+        const m = load({ registrations: [] });
+        const week = m._frWeekData(WEEK[0]);
+        expect(week.rows[0].cells[0].atRatio).toBe(false);
+        expect(week.rows[0].cells[0].releasable).toBe(true);
+    });
+
+    test('a closure removes the day from both sides of the occupancy fraction', () => {
+        const m = load({
+            registrations: regs({ turtle: { '2026-09-14': 4 }, goose: { '2026-09-14': 4 } }),
+            closures: ['2026-09-16'],
+        });
+        const week = m._frWeekData(WEEK[0]);
+        const wed = week.byDay[2];
+        expect(wed.closed).toBe(true);
+        expect(wed.open).toBe(0);
+        expect(wed.capacity).toBe(0);           // not counted as unsold capacity
+        expect(week.capacity).toBe(23 * 4);     // four open days, not five
+    });
+
+    test('waitlisted rows never count as booked', () => {
+        const m = load({
+            registrations: [{ room_id: 'turtle', registration_dates: [
+                { care_date: '2026-09-14', waitlisted: true,  day_type: 'full' },
+                { care_date: '2026-09-14', waitlisted: false, day_type: 'full' },
+            ] }],
+        });
+        expect(m._frWeekData(WEEK[0]).byDay[0].booked).toBe(1);
+    });
+
+    test('seats-sold percentage and empty seat-days are two views of one number', () => {
+        const m = load({ registrations: regs({ turtle: { '2026-09-14': 11 }, goose: { '2026-09-14': 12 } }) });
+        const week = m._frWeekData(WEEK[0]);
+        expect(week.open + week.booked).toBe(week.capacity);
+        expect(week.soldPct).toBeCloseTo((week.booked / week.capacity) * 100, 6);
+    });
+
+    // "Thursday and Friday carry two-thirds of it" is derived from the week in
+    // front of you, not asserted — a differently shaped week names its own
+    // worst two days.
+    test('the two emptiest open days are picked from the data, not hardcoded', () => {
+        const m = load({ registrations: regs({
+            turtle: { '2026-09-14': 11, '2026-09-15': 11, '2026-09-16': 1, '2026-09-17': 11, '2026-09-18': 2 },
+            goose:  { '2026-09-14': 12, '2026-09-15': 12, '2026-09-16': 1, '2026-09-17': 12, '2026-09-18': 2 },
+        }) });
+        const week = m._frWeekData(WEEK[0]);
+        expect(week.worst.includes('2026-09-16')).toBe(true);
+        expect(week.worst.includes('2026-09-18')).toBe(true);
+        expect(week.worst.includes('2026-09-14')).toBe(false);
+        expect(week.worstShare).toBeGreaterThan(0.9);
+    });
+
+    // The funnel reads waitlist_applications' own columns. Every stage must be
+    // a subset of the one above it, or the bars lie about where families stop.
+    test('funnel stages are monotonic and read real application state', () => {
+        const yr = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const when = `${yr}-08-01T00:00:00Z`;
+        const m = load({ apps: [
+            { applied_at: when, status: 'pending',  tour_status: 'not_scheduled' },
+            { applied_at: when, status: 'pending',  tour_status: 'scheduled', tour_scheduled_at: when },
+            { applied_at: when, status: 'offered',  tour_status: 'completed', offered_at: when },
+            { applied_at: when, status: 'accepted', tour_status: 'completed', paperwork_received: false },
+            { applied_at: when, status: 'enrolled', tour_status: 'completed' },
+        ] });
+        const f = m._frFunnel();
+        const n = f.stages.map(s => s.n);
+        expect(n[0]).toBe(5);                        // inquired
+        expect(n[1]).toBe(4);                        // tour scheduled or beyond
+        expect(n[2]).toBe(3);                        // toured
+        expect(n[3]).toBe(3);                        // offered / accepted / enrolled
+        expect(n[4]).toBe(1);                        // paperwork open
+        expect(n[5]).toBe(1);                        // enrolled
+        for (let i = 1; i < n.length - 2; i++) expect(n[i] <= n[i - 1]).toBe(true);
+    });
+
+    test('applications from before the program year are excluded', () => {
+        const yr = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const m = load({ apps: [
+            { applied_at: `${yr}-08-01T00:00:00Z`, status: 'pending' },
+            { applied_at: `${yr - 1}-08-01T00:00:00Z`, status: 'pending' },
+        ] });
+        expect(m._frFunnel().total).toBe(1);
+    });
+
+    // Both layouts are built from the same data object. A ReferenceError in
+    // either one only shows up when a director opens that density, which is
+    // exactly the kind of thing a source-text assertion cannot catch —
+    // so render both, against data that exercises every panel.
+    test('both layouts render, with no undefined or NaN reaching the markup', () => {
+        const yr = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const when = `${yr}-08-01T00:00:00Z`;
+        const m = load({
+            registrations: regs({
+                turtle: { '2026-09-14': 8, '2026-09-15': 6, '2026-09-16': 5, '2026-09-17': 3, '2026-09-18': 2 },
+                goose:  { '2026-09-14': 10, '2026-09-15': 9, '2026-09-16': 7, '2026-09-17': 4, '2026-09-18': 3 },
+            }),
+            apps: [
+                { id: 1, applied_at: when, status: 'offered', child_name: 'Noah W', parent_name: 'Dana Whitfield',
+                  offered_at: when, offer_deadline: new Date(Date.now() + 86400000).toLocaleDateString('en-CA'),
+                  tour_status: 'completed', room_id: 'turtle' },
+                { id: 2, applied_at: when, status: 'accepted', child_name: 'Camila R', parent_name: 'Ana Ruiz',
+                  offered_at: when, paperwork_received: false, tour_status: 'completed', room_id: 'goose' },
+                { id: 3, applied_at: when, status: 'pending', child_name: 'Arjun B', parent_name: 'Priya Bhatt',
+                  tour_status: 'scheduled', tour_scheduled_at: `${yr}-08-20T00:00:00Z`, room_id: 'turtle' },
+                { id: 4, applied_at: when, status: 'enrolled', child_name: 'Rowan I', parent_name: 'T Ives',
+                  tour_status: 'completed', room_id: 'goose' },
+            ],
+        });
+        const week = m._frWeekData(WEEK[0]);
+        const funnel = m._frFunnel();
+        const placeable = m._frPlaceableNow(null);
+        const data = { week, funnel, alloc: null, placeable,
+            forecast: m._frForecast(null, placeable), actions: m._frActions(week, funnel, null) };
+
+        const dense = m._frDenseHtml(data);
+        const calm  = m._frCalmHtml(data);
+        expect(dense.length).toBeGreaterThan(2000);
+        expect(calm.length).toBeGreaterThan(1000);
+        expect(/undefined|NaN|\[object /.test(dense + calm)).toBe(false);
+        // The queue found the real records, not an empty state.
+        expect(data.actions.length).toBeGreaterThan(2);
+    });
+
+    // A brand-new center, or a week nobody has registered for yet, must render
+    // an empty state rather than dividing by zero.
+    test('an empty week renders without dividing by zero', () => {
+        const m = load({ registrations: [], apps: [] });
+        const week = m._frWeekData(WEEK[0]);
+        const funnel = m._frFunnel();
+        const data = { week, funnel, alloc: null, placeable: [],
+            forecast: m._frForecast(null, []), actions: m._frActions(week, funnel, null) };
+        expect(funnel.total).toBe(0);
+        expect(funnel.stages[0].pct).toBe(100);         // the top of the funnel is always full-width
+        expect(/undefined|NaN/.test(m._frDenseHtml(data) + m._frCalmHtml(data))).toBe(false);
+    });
+
+    // The drop-in release path has no table behind it yet. If someone wires a
+    // button up without wiring the write, this fails.
+    test('every drop-in action is still marked pending, not silently dead', () => {
+        expect(src.includes('is-pending')).toBe(true);
+        expect(/disabled/.test(src)).toBe(true);
+        // No write call may appear in this module until the tables exist.
+        expect(/sbClient\s*\.\s*from\(/.test(src)).toBe(false);
+    });
+});
+
+
+// ============================================================
+// THE AT-RATIO RULE — one rule, three surfaces
+// (design handoff: Capacity & Fill, 1a/1b · 1c · 1d)
+// ============================================================
+// "One more child here costs another adult" is now decided in four places:
+// apStaffing() for the director's staffing requirement, admin-fill-rooms.js
+// for the release grid, parent-dropin.js for which days a parent is offered,
+// and staff-room-head.js for the teacher's headroom line. They are separate
+// bundles and cannot share a helper, so this is the drift guard AGENTS.md
+// asks for over an intentional copy: all four must express the SAME rule, and
+// a fifth copy appearing without a test is exactly what this catches.
+describe('At-ratio — the same boundary on every screen', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    const portal = read('js/admin/admin-portal.js');
+    const fill   = read('js/admin/admin-fill-rooms.js');
+    const parent = read('js/parent/parent-dropin.js');
+    const staff  = read('js/staff/staff-room-head.js');
+    const tour   = read('js/tour.js');
+
+    // All four spell the boundary as "count % ratio === 0, and count > 0".
+    // A room with nobody in it is not on a boundary — zero children have
+    // never required an adult, and `0 % n === 0` is true, so the count>0
+    // guard is the part that actually matters.
+    test('every copy guards on count > 0, not just the modulo', () => {
+        [['apStaffing', portal], ['fill rooms', fill], ['parent drop-in', parent],
+         ['public tour page', tour]].forEach(([name, src]) => {
+            const hit = /(\w+)\s*>\s*0\s*&&\s*\1\s*%\s*\w*[Rr]atio\w*\s*===\s*0/.test(src)
+                     || /(\w+)\s*>\s*0\s*&&\s*\1\s*%\s*(\w+)\s*===\s*0/.test(src);
+            if (!hit) throw new Error(`${name} does not guard the modulo on a positive count`);
+        });
+    });
+
+    // The teacher's screen states the same fact the other way round — how
+    // many more children fit before ceil() steps up — so it must agree at
+    // the boundary rather than repeating the modulo.
+    test('the teacher headroom line agrees with ceil(children / ratio)', () => {
+        const sandbox = {
+            console,
+            ROOMS: [{ id: 'goose', label: '🪿 Goose Room', capacity: 12, staffRatio: 8 }],
+            slRoomId: 'goose',
+            slQueue: [],
+            slEsc: s => String(s),
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(staff, sandbox);
+
+        const kids = n => Array.from({ length: n }, () => ({ attendance_status: 'present' }));
+
+        // 8 present, ratio 8 → one adult, and zero headroom: the 9th child
+        // is the one that costs a second adult.
+        let c = sandbox.srhCounts(kids(8));
+        expect(c.present).toBe(8);
+        expect(c.adults).toBe(1);
+        expect(c.headroom).toBe(0);
+
+        // 9 present → two adults, and seven more fit before a third.
+        c = sandbox.srhCounts(kids(9));
+        expect(c.adults).toBe(2);
+        expect(c.headroom).toBe(7);
+
+        // Nobody in the room is not a boundary.
+        c = sandbox.srhCounts([]);
+        expect(c.adults).toBe(0);
+
+        // ceil(children / ratio) — the same expression apStaffing uses.
+        for (let n = 1; n <= 24; n++) {
+            expect(sandbox.srhCounts(kids(n)).adults).toBe(Math.ceil(n / 8));
+        }
+    });
+
+    // A child who has gone home is not in the ratio. "Out" and "Not in" are
+    // different facts everywhere else in this app (see slRenderRoster's own
+    // note) and the ratio bar must not blend them back together.
+    test('only children actually present count toward the ratio', () => {
+        const sandbox = {
+            console,
+            ROOMS: [{ id: 'goose', capacity: 12, staffRatio: 8 }],
+            slRoomId: 'goose', slQueue: [], slEsc: s => String(s),
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(staff, sandbox);
+        const c = sandbox.srhCounts([
+            { attendance_status: 'present' },
+            { attendance_status: 'present' },
+            { attendance_status: 'left' },
+            { attendance_status: 'not_arrived' },
+        ]);
+        expect(c.present).toBe(2);
+    });
+
+    // The parent card must never offer a day the director's grid would keep
+    // closed, and must never offer a day the child already holds.
+    test('[at-ratio] the parent card offers only days the director would release', () => {
+        const ROOM = { id: 'goose', label: '🪿 Goose Room', capacity: 12, staffRatio: 8, fullDayOnly: false, fullDayRate: 75, halfDayRate: 45 };
+        // Three upcoming weekdays: one with room, one exactly on the ratio
+        // boundary, one the child is already booked for.
+        const FUTURE = [1, 2, 3].map(i => {
+            const d = new Date(Date.now() + i * 86400000);
+            return d.toLocaleDateString('en-CA');
+        });
+        const sandbox = {
+            console,
+            ROOMS: [ROOM],
+            fetchCapacityForDates: async (_room, dates) => {
+                const out = {};
+                dates.forEach((d, i) => { out[d] = [5, 8, 5][i % 3]; });
+                return out;
+            },
+            psDayRate: (room, t) => (t === 'half' ? room.halfDayRate : room.fullDayRate),
+            psSchedule: async () => null,
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(parent, sandbox);
+        // Force a deterministic date list rather than depending on which
+        // weekday the suite happens to run on.
+        sandbox.pdiUpcomingWeekdays = () => FUTURE.slice();
+
+        const child = { id: 7, child_name: 'Ellie Reyes', room_id: 'goose' };
+        const sched = { closures: [], registrations: [{ child_id: 7, dates: [{ care_date: FUTURE[2], waitlisted: false }] }] };
+
+        return sandbox.pdiOpenDaysFor(child, sched).then(days => {
+            const offered = days.map(d => d.date);
+            expect(offered.includes(FUTURE[0])).toBe(true);   // 5 booked of 12, not on a boundary
+            expect(offered.includes(FUTURE[1])).toBe(false);  // 8 booked, 8 % 8 === 0 → held back
+            expect(offered.includes(FUTURE[2])).toBe(false);  // already booked by this child
+        });
+    });
+
+    // Neither the parent card nor the teacher bar may write anything: the
+    // release decision belongs to the office and has no table yet.
+    test('neither the parent card nor the teacher bar writes to the database', () => {
+        [parent, staff].forEach(src => {
+            expect(/sbClient\s*\.\s*from\(/.test(src)).toBe(false);
+            expect(/\.rpc\(/.test(src)).toBe(false);
+        });
+        // The parent card says so in as many words rather than rendering a
+        // disabled submit.
+        expect(parent.includes("Booking isn't open yet")).toBe(true);
+    });
+
+    // ⚠️ The security boundary this whole design turns on. The public submit
+    // RPC's allow-list deliberately excludes tour_*, so a stranger cannot
+    // write themselves onto the tour calendar — the office confirms from the
+    // board instead. If the public page ever tries to set those fields, or
+    // reaches waitlist_applications directly, this fails.
+    test('the public tour page never writes an admin-controlled field', () => {
+        const code = tour
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        // It submits through the allow-listed RPC, not a direct table write.
+        expect(/submitWaitlistApplication\(/.test(code)).toBe(true);
+        expect(/from\('waitlist_applications'\)/.test(code)).toBe(false);
+        // And it never names a field the RPC would silently drop.
+        ['tour_status', 'tour_scheduled_at', 'tour_completed_at', 'offered_at',
+         'offer_deadline', 'paperwork_received', 'deposit_paid', 'applied_at']
+            .forEach(f => {
+                if (new RegExp(f + '\\s*:').test(code))
+                    throw new Error(`tour.js sets ${f}, which submit_waitlist_application() drops`);
+            });
+        // The requested time rides in notes, which IS on the allow-list.
+        expect(/TOUR REQUESTED/.test(code)).toBe(true);
+    });
+
+    // The allow-list itself must stay closed. If someone widens the migration
+    // to let the public set tour_*, this is the test that should make them
+    // stop and think about who the caller is.
+    test('the public submit RPC still excludes every admin-controlled field', () => {
+        const mig = read('supabase/migrations/fix_public_waitlist_submit_APPLIED.sql');
+        const insert = /INSERT INTO waitlist_applications \(([\s\S]*?)\)\s*VALUES/.exec(mig);
+        if (!insert) throw new Error('could not find the allow-list in the migration');
+        const cols = insert[1];
+        ['status', 'tour_status', 'tour_scheduled_at', 'offered_at', 'offer_deadline',
+         'paperwork_received', 'deposit_paid', 'applied_at', 'archived_at']
+            .forEach(f => {
+                if (new RegExp('\\b' + f + '\\b').test(cols))
+                    throw new Error(`${f} is reachable from the public internet`);
+            });
+    });
+});
+
+
+// ============================================================
+// LEADS & TOURS — the board is a view, not a second table
+// (design handoff: Capacity & Fill, turn 2a)
+// ============================================================
+// Every column is a predicate over waitlist_applications columns that already
+// exist. The invariant that matters: the predicates must PARTITION — every
+// active lead lands in exactly one column, so a family can never be in two
+// places or vanish from the board entirely.
+describe('Leads & Tours — column predicates partition every lead', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-leads.js'), 'utf8');
+
+    function load(apps) {
+        const sandbox = {
+            console,
+            _allWaitlistApps: apps || [],
+            escHtml: s => String(s),
+            calcAgeMonths: () => 30,
+            wlDeriveRoom: a => a.room_id || 'turtle',
+            wlRoomLabel: id => id,
+            wlDaysLabel: () => 'Tue/Thu',
+            FR_STALL_DAYS: 5,
+            document: { getElementById: () => null },
+            sbClient: null,
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        return sandbox;
+    }
+
+    const old = new Date(Date.now() - 30 * 86400000).toISOString();
+    const recent = new Date(Date.now() - 1 * 86400000).toISOString();
+    const future = new Date(Date.now() + 2 * 86400000).toISOString();
+    const past   = new Date(Date.now() - 2 * 86400000).toISOString();
+
+    const CASES = [
+        ['new',       { id: 1, status: 'pending',  applied_at: recent }],
+        ['contacted', { id: 2, status: 'pending',  applied_at: old, confirmation_sent_at: old }],
+        ['contacted', { id: 3, status: 'pending',  applied_at: old, reminder_count: 2 }],
+        ['contacted', { id: 4, status: 'pending',  applied_at: old, still_interested_confirmed_at: recent }],
+        ['tour',      { id: 5, status: 'pending',  applied_at: old, tour_status: 'scheduled', tour_scheduled_at: future }],
+        ['toured',    { id: 6, status: 'pending',  applied_at: old, tour_status: 'completed', tour_completed_at: past }],
+        ['offered',   { id: 7, status: 'offered',  applied_at: old, offered_at: old, offer_deadline: '2099-01-01' }],
+        ['offered',   { id: 8, status: 'accepted', applied_at: old, paperwork_received: true }],
+        ['offered',   { id: 9, status: 'enrolled', applied_at: old }],
+    ];
+
+    test('each state lands in the column its own record defines', () => {
+        const m = load([]);
+        CASES.forEach(([expected, app]) => {
+            const got = m.ldColumnFor(app);
+            if (got !== expected) throw new Error(`id ${app.id}: expected ${expected}, got ${got}`);
+        });
+    });
+
+    // A family who has toured AND been offered is Offered, not Toured — the
+    // later state wins, or a card would sit in two columns' worth of truth.
+    test('later states win over earlier ones', () => {
+        const m = load([]);
+        expect(m.ldColumnFor({ status: 'offered', tour_status: 'completed', confirmation_sent_at: old })).toBe('offered');
+        expect(m.ldColumnFor({ status: 'pending', tour_status: 'completed', tour_scheduled_at: past })).toBe('toured');
+        expect(m.ldColumnFor({ status: 'pending', tour_status: 'scheduled', confirmation_sent_at: old })).toBe('tour');
+    });
+
+    test('every active lead lands in exactly one column', () => {
+        const apps = CASES.map(([, a]) => a);
+        const m = load(apps);
+        const buckets = m.ldBuckets(apps);
+        const total = Object.values(buckets).reduce((s, l) => s + l.length, 0);
+        expect(total).toBe(apps.length);
+        // No id appears twice across the five columns.
+        const seen = new Set();
+        Object.values(buckets).forEach(list => list.forEach(a => {
+            if (seen.has(a.id)) throw new Error(`id ${a.id} is in two columns`);
+            seen.add(a.id);
+        }));
+        expect(seen.size).toBe(apps.length);
+    });
+
+    // A declined or archived family is history, not a lead sitting on a board
+    // for someone to chase.
+    test('declined, expired and archived leads are off the board', () => {
+        const apps = [
+            { id: 1, status: 'pending',  applied_at: old },
+            { id: 2, status: 'declined', applied_at: old },
+            { id: 3, status: 'expired',  applied_at: old },
+            { id: 4, status: 'archived', applied_at: old },
+            { id: 5, status: 'pending',  applied_at: old, archived_at: old },
+        ];
+        const m = load(apps);
+        expect(m.ldActive(apps).length).toBe(1);
+        const total = Object.values(m.ldBuckets(apps)).reduce((s, l) => s + l.length, 0);
+        expect(total).toBe(1);
+    });
+
+    // The conversion figure must divide by everyone who toured, including the
+    // ones who toured and went elsewhere — otherwise it only ever reads 100%.
+    test('tour → enrolled divides by everyone who toured, not just the wins', () => {
+        const apps = [
+            { id: 1, status: 'enrolled', applied_at: old, tour_status: 'completed' },
+            { id: 2, status: 'accepted', applied_at: old, tour_status: 'completed' },
+            { id: 3, status: 'declined', applied_at: old, tour_status: 'completed' },
+            { id: 4, status: 'pending',  applied_at: old, tour_status: 'completed' },
+        ];
+        const m = load(apps);
+        const metrics = m.ldMetrics(apps, m.ldBuckets(apps));
+        expect(metrics.everToured.length).toBe(4);   // the declined one still toured
+        expect(metrics.touredEnrolled).toBe(2);
+        expect(metrics.convPct).toBe(50);
+    });
+
+    test('no tours and no leads reads as an empty state, not 0%', () => {
+        const m = load([]);
+        const metrics = m.ldMetrics([], m.ldBuckets([]));
+        expect(metrics.convPct).toBeNull();
+        expect(metrics.newThisWeek).toBe(0);
+    });
+
+    // "Gone quiet" must mean the same number of days here as on Fill the
+    // Rooms — the two screens are describing the same families. The constant
+    // is read off the source rather than the sandbox: a top-level `const` in
+    // a vm script lives in the script's lexical scope and never becomes a
+    // property of the context object (unlike a `function` declaration, which
+    // is how every other module here is reached).
+    test('the stall threshold is shared with Fill the Rooms, not redeclared', () => {
+        const decl = /const\s+LD_STALL_DAYS\s*=([^;]+);/.exec(src);
+        if (!decl) throw new Error('LD_STALL_DAYS is not declared');
+        // It must DERIVE from Fill the Rooms' constant, not restate the number.
+        expect(decl[1].includes('FR_STALL_DAYS')).toBe(true);
+        expect(/\b5\b/.test(decl[1])).toBe(true);   // the fallback, for a bundle without it
+    });
+
+    // Log a call writes a real row, so it must NOT go through the public RPC
+    // whose allow-list exists to constrain the public internet. Comments are
+    // stripped first — the module header discusses that RPC by name, and a
+    // naive source search would match the explanation of why it is not used.
+    test('Log a call inserts directly and never through the public RPC', () => {
+        const code = src
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/from\('waitlist_applications'\)\s*\.insert\(/.test(code)).toBe(true);
+        expect(/submit_waitlist_application/.test(code)).toBe(false);
+        // desired_start_date is NOT NULL on the table — an unknown start must
+        // fall back rather than fail the insert.
+        expect(/desired_start_date:/.test(code)).toBe(true);
+    });
+});
+
+
+// ============================================================
+// PAYROLL OVERVIEW — the three things that block an approval
+// (design handoff: Capacity & Fill, 3a)
+// ============================================================
+// The exception panel is the point of this screen: it is the real reason a
+// period is not ready. A false positive costs the director a phone call to a
+// teacher about a shift that was fine, so each rule is tested at its edge.
+describe('Payroll overview — clock exceptions and the pay calendar', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-payroll-home.js'), 'utf8');
+
+    function load() {
+        const sandbox = { console, escHtml: s => String(s), apInitials: () => 'XX',
+            document: { getElementById: () => null, querySelectorAll: () => [] } };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        return sandbox;
+    }
+
+    const staffById = new Map([[1, { name: 'Kiara Bell' }], [2, { name: 'Amy Mueller' }]]);
+    const P = ['2026-09-01', '2026-09-14'];
+    const ev = (staff_id, work_date, inH, outH) => ({
+        staff_id, work_date,
+        clock_in:  `${work_date}T${String(inH).padStart(2, '0')}:00:00`,
+        clock_out: outH == null ? null : `${work_date}T${String(outH).padStart(2, '0')}:00:00`,
+    });
+
+    test('a shift clocked in and never out, on a day that is over, is flagged', () => {
+        const m = load();
+        const out = m._phExceptions([ev(1, '2026-09-10', 8, null)], [], staffById, ...P);
+        expect(out.length).toBe(1);
+        expect(out[0].kind).toBe('open');
+        expect(out[0].name).toBe('Kiara Bell');
+    });
+
+    // The one false positive that would matter most: somebody who is on shift
+    // right now has not clocked out yet, and that is not an exception.
+    test("a shift still open TODAY is not an exception", () => {
+        const m = load();
+        const today = new Date().toLocaleDateString('en-CA');
+        const out = m._phExceptions([ev(1, today, 8, null)], [], staffById, '2000-01-01', '2099-01-01');
+        expect(out.length).toBe(0);
+    });
+
+    test('two shifts on one day are only flagged when they actually overlap', () => {
+        const m = load();
+        // Touching, not overlapping: out at 1pm, back in at 1pm.
+        const touching = m._phExceptions(
+            [ev(2, '2026-09-09', 8, 13), ev(2, '2026-09-09', 13, 15)], [], staffById, ...P);
+        expect(touching.length).toBe(0);
+        // Genuinely overlapping.
+        const overlap = m._phExceptions(
+            [ev(2, '2026-09-09', 8, 13), ev(2, '2026-09-09', 12, 15)], [], staffById, ...P);
+        expect(overlap.length).toBe(1);
+        expect(overlap[0].kind).toBe('overlap');
+    });
+
+    test('an overlap reports one row per person per day, not one per pair', () => {
+        const m = load();
+        const out = m._phExceptions(
+            [ev(2, '2026-09-09', 8, 13), ev(2, '2026-09-09', 9, 14), ev(2, '2026-09-09', 10, 15)],
+            [], staffById, ...P);
+        expect(out.filter(e => e.kind === 'overlap').length).toBe(1);
+    });
+
+    // A week nobody built a schedule for is ONE missing schedule, not
+    // seventeen exceptions — otherwise the panel is useless the first week.
+    test('unscheduled hours are only flagged on days that have a schedule at all', () => {
+        const m = load();
+        const worked = [ev(1, '2026-09-08', 8, 15)];
+        expect(m._phExceptions(worked, [], staffById, ...P).length).toBe(0);
+        const withSchedule = [{ staff_id: 2, work_date: '2026-09-08', shift: 'AM' }];
+        const out = m._phExceptions(worked, withSchedule, staffById, ...P);
+        expect(out.length).toBe(1);
+        expect(out[0].kind).toBe('unscheduled');
+    });
+
+    test('a scheduled person working their own shift is never flagged', () => {
+        const m = load();
+        const out = m._phExceptions(
+            [ev(1, '2026-09-08', 8, 15)],
+            [{ staff_id: 1, work_date: '2026-09-08', shift: 'AM' }], staffById, ...P);
+        expect(out.length).toBe(0);
+    });
+
+    test('a short cover is not an exception', () => {
+        const m = load();
+        const out = m._phExceptions(
+            [{ staff_id: 1, work_date: '2026-09-08',
+               clock_in: '2026-09-08T08:00:00', clock_out: '2026-09-08T08:40:00' }],
+            [{ staff_id: 2, work_date: '2026-09-08', shift: 'AM' }], staffById, ...P);
+        expect(out.length).toBe(0);
+    });
+
+    test('exceptions outside the period are not this period’s problem', () => {
+        const m = load();
+        const out = m._phExceptions([ev(1, '2026-08-20', 8, null)], [], staffById, ...P);
+        expect(out.length).toBe(0);
+    });
+
+    // Pay day is the Friday after a period closes; the cut-off the Tuesday
+    // before that. Derived, not stored — so it must at least be internally
+    // consistent and always land on those weekdays.
+    test('pay day is always a Friday and the cut-off always the Tuesday before', () => {
+        const m = load();
+        ['2026-09-14', '2026-09-28', '2026-10-12', '2026-12-31', '2027-01-15'].forEach(end => {
+            const pay = new Date(m._phPayDay(end) + 'T00:00:00');
+            const cut = new Date(m._phCutoff(end) + 'T00:00:00');
+            expect(pay.getDay()).toBe(5);                       // Friday
+            expect(cut.getDay()).toBe(2);                       // Tuesday
+            expect(pay > new Date(end + 'T00:00:00')).toBe(true);
+            expect(cut < pay).toBe(true);
+        });
+    });
+
+    // Manual hours are the office's correction; a clock pair for the same
+    // person on the same day must not be added on top of it.
+    test('a manual hours entry replaces the clock pair for that day, never adds to it', () => {
+        const m = load();
+        const hrs = m._phHoursByStaff(
+            [ev(1, '2026-09-08', 8, 15), ev(1, '2026-09-09', 8, 12)],
+            [{ staff_id: 1, work_date: '2026-09-08', hours_worked: '6' }]);
+        // 6 manual for the 8th + 4 clocked on the 9th. NOT 6 + 7 + 4.
+        expect(hrs.get(1)).toBe(10);
+    });
+
+    test('a clock pair under ten minutes is discarded, as in the period report', () => {
+        const m = load();
+        const hrs = m._phHoursByStaff([{ staff_id: 1, work_date: '2026-09-08',
+            clock_in: '2026-09-08T08:00:00', clock_out: '2026-09-08T08:05:00' }], []);
+        expect(hrs.get(1) || 0).toBe(0);
+    });
+
+    test('estimated gross pays salary per period and hourly by the hour', () => {
+        const m = load();
+        const hrs = new Map([[1, 10], [2, 20]]);
+        const gross = m._phEstimatedGross([
+            { id: 1, pay_type: 'hourly', hourly_rate: 15 },
+            { id: 2, pay_type: 'salary', salary_biweekly: 2000, hourly_rate: 0 },
+        ], hrs);
+        expect(gross).toBe(150 + 2000);   // salaried hours do not add to it
+    });
+
+    // Benefits are the church office's, and the handoff is explicit that this
+    // screen must not pretend to administer them.
+    test('the church-office panel links out and never enrolls anyone', () => {
+        expect(src.includes('Handled by the church office')).toBe(true);
+        expect(/enroll/i.test(src.split('ph-church-list')[1] || '')).toBe(false);
+    });
+});
+
+
+// Settle any async test bodies before counting up. Every test() whose body
+// returned a promise is in _pending, already wrapped so it cannot reject here
+// — so this only ever waits, it never throws.
+Promise.all(_pending).then(() => {
+    console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
+    if (_failed > 0) process.exitCode = 1;
+    if (_failed > 0) process.exit(1);
+});

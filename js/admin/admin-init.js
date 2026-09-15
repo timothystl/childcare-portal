@@ -46,6 +46,17 @@ async function initDashboard() {
     // month picker. Its Week/Month sub-views reuse the wiring just above
     // (setupRoomCalendar/initCapacityMonthNav), unchanged.
     if (typeof setupEnrollCapTool === 'function') setupEnrollCapTool();
+    // Fill the Rooms binds one delegated listener on its section (density
+    // toggle + week nav) and restores the saved density. The screen itself
+    // renders lazily, when apOnToolOpened() opens the tool.
+    if (typeof setupFillRoomsTool === 'function') setupFillRoomsTool();
+    // Leads & Tours binds one delegated listener on its section; the board
+    // itself renders lazily when apOnToolOpened() opens the tool.
+    if (typeof setupLeadsTool === 'function') setupLeadsTool();
+    // Payroll's Overview tab binds one delegated listener; the tab itself
+    // renders on every open (apSwitchPayrollTab), since its whole content
+    // is "as of now".
+    if (typeof setupPayrollHomeTool === 'function') setupPayrollHomeTool();
     setupRegFee();
     setupPtoSettings();
     setupStaffDirectory();

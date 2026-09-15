@@ -342,6 +342,10 @@ async function ptSelectChild(childId) {
 
     ptRenderPhotos(childId);
     ptRenderIncidents(childId);
+    // Open drop-in days are per child — their room, and the dates they are
+    // already booked for — so this re-runs on every switch rather than once
+    // per load the way the week card and announcements do.
+    if (typeof pdiRender === 'function') pdiRender(child);
 
     // The print header carries the identifying detail the screen shows in page
     // chrome. On paper the chrome is gone, and an undated sheet about an
@@ -520,6 +524,9 @@ async function ptLoadToday() {
 
     ptEl('ptNoChildren')?.classList.add('hidden');
     ptEl('ptFeed')?.classList.remove('hidden');
+    // Bind the drop-in card's one delegated listener before the first render
+    // puts markup inside it.
+    if (typeof pdiSetup === 'function') pdiSetup();
     await ptSelectChild(ptChildren[0].id);
     ptRenderAnnouncements();
     ptRenderWeek();

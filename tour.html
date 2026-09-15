@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/images/logo/apps/parent/parent-touch-180.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Come and See the Rooms — Timothy Lutheran Church MDO</title>
+  <meta name="description" content="Book a twenty-minute tour of Timothy Lutheran Mother's Day Out, during a normal morning, and see what a real day looks like.">
+  <!-- Shares the public inquiry page's chrome on purpose: these are the two
+       pages a family meets before they have an account, and they should not
+       look like two different organizations. tour.css adds only what this
+       page has that the inquiry form does not. -->
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/inquiry.css">
+  <link rel="stylesheet" href="css/tour.css">
+</head>
+<body class="inquiry-body">
+
+  <div class="inquiry-wrap">
+    <div class="inquiry-card">
+
+      <!-- ══ FORM ════════════════════════════════════════════ -->
+      <div id="tFormScreen">
+        <div class="inquiry-header">
+          <img src="/images/logo/brand-wordmark-on-light.png" alt="myMDO" class="inquiry-logo">
+          <h1>Come and see the rooms</h1>
+          <p>Twenty minutes, during a normal morning, so you see what a real day actually looks like &mdash; not an empty room after hours. Bring your child if you like.</p>
+        </div>
+
+        <form id="tForm" novalidate>
+
+          <div class="wl-section-label">About you</div>
+          <div class="contact-form-grid">
+            <div class="form-group">
+              <label for="tParentName">Your name <span class="req">*</span></label>
+              <input type="text" id="tParentName" placeholder="Sarah Kovalenko" autocomplete="name" required>
+            </div>
+            <div class="form-group">
+              <label for="tParentEmail">Email <span class="req">*</span></label>
+              <input type="email" id="tParentEmail" placeholder="you@example.com" autocomplete="email" required>
+            </div>
+            <div class="form-group">
+              <label for="tParentPhone">Phone</label>
+              <input type="tel" id="tParentPhone" placeholder="(314) 555-0148" autocomplete="tel">
+            </div>
+          </div>
+
+          <div class="wl-section-label">About your child</div>
+          <div class="contact-form-grid">
+            <div class="form-group">
+              <label for="tChildName">Child's name <span class="req">*</span></label>
+              <input type="text" id="tChildName" placeholder="Mila" autocomplete="off" required>
+            </div>
+            <div class="form-group">
+              <label for="tChildDob">Birthday <span class="req">*</span></label>
+              <input type="date" id="tChildDob" required>
+            </div>
+          </div>
+
+          <!-- Filled in by js/tour.js the moment a birthday is entered: the
+               room their age puts them in, and that room's genuinely open
+               days, from the same counts-only capacity_counts RPC the
+               enrolment form uses. -->
+          <div id="tRoomCard" class="t-room-card hidden"></div>
+
+          <div class="form-group">
+            <label>Which days are you hoping for?</label>
+            <div id="tDays" class="t-days">
+              <button type="button" class="t-day" data-day="Mon">M</button>
+              <button type="button" class="t-day" data-day="Tue">T</button>
+              <button type="button" class="t-day" data-day="Wed">W</button>
+              <button type="button" class="t-day" data-day="Thu">Th</button>
+              <button type="button" class="t-day" data-day="Fri">F</button>
+            </div>
+            <small class="t-hint">Optional &mdash; it just helps us show you the right room.</small>
+          </div>
+
+          <div class="wl-section-label">Pick a time</div>
+          <div id="tSlots" class="t-slots"></div>
+
+          <div class="form-group">
+            <label for="tNotes">Anything you'd like us to know?</label>
+            <textarea id="tNotes" rows="3" placeholder="We're moving to the area in November and comparing a few places."></textarea>
+          </div>
+
+          <!-- Said plainly rather than buried: a tour request creates a real
+               record, ordered by the day you asked. That is the point, and a
+               reason to book rather than a surprise afterwards. -->
+          <div class="t-keepsafe">
+            <strong>Booking a tour keeps your place in line from today.</strong>
+            Spots are offered in the order families ask, so this is not a step you lose by taking. We'll confirm your time by email &mdash; usually the same day.
+          </div>
+
+          <p class="t-msg" id="tMsg"></p>
+
+          <button type="submit" class="btn-primary t-submit" id="tSubmit">Book this tour</button>
+
+          <p class="t-alt">Not ready for a tour? <a href="/inquiry">Join the waitlist</a> instead &mdash; you can book a tour any time after.</p>
+        </form>
+      </div>
+
+      <!-- ══ CONFIRMATION ════════════════════════════════════ -->
+      <div id="tDoneScreen" class="hidden"></div>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/error-monitor.min.js"></script>
+    <script src="dist/tour.min.js"></script>
+</body>
+</html>
