@@ -2955,6 +2955,19 @@ function setupAdminPortal() {
         if (flNav) { _flNavCalendar(flNav.dataset.flNavKey, parseInt(flNav.dataset.flNavDelta, 10) || 0); return; }
         const flChangeDays = e.target.closest('[data-fl-change-days]');
         if (flChangeDays) { _flChangeDays(flChangeDays.dataset.flChangeDays); return; }
+        // Daily activity / "Add a day" — see admin-family-lookup.js.
+        const flLogNav = e.target.closest('[data-fl-log-nav]');
+        if (flLogNav) { _flLogNav(flLogNav.dataset.flLogNav, parseInt(flLogNav.dataset.flLogDelta, 10) || 0); return; }
+        const flLogAdd = e.target.closest('[data-fl-log-add]');
+        if (flLogAdd) { _flToggleLogForm(flLogAdd.dataset.flLogAdd); return; }
+        const flLogCancel = e.target.closest('[data-fl-log-cancel]');
+        if (flLogCancel) { _flToggleLogForm(flLogCancel.dataset.flLogCancel); return; }
+        const flLogSubmit = e.target.closest('[data-fl-log-submit]');
+        if (flLogSubmit) {
+            const key = flLogSubmit.dataset.flLogSubmit;
+            _flSubmitLogEntry(key, _flStudentIdForKey(key));
+            return;
+        }
         if (e.target.closest('[data-ap-nav-search-clear]')) { apNavSearchClear(); return; }
     });
 
@@ -2967,6 +2980,7 @@ function setupAdminPortal() {
     });
 
     document.addEventListener('change', e => {
+        if (e.target.matches('[data-fl-log-type]')) { _flLogTypeChanged(e.target.value); return; }
         const check = e.target.closest('[data-ap-check]');
         if (check) {
             apState.done[check.dataset.apCheck] = check.checked;

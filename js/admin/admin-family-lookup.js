@@ -38,6 +38,16 @@ let _flCalCursor  = {};               // same key -> {year, month} (0-indexed), 
 let _flRegsLoading = false;
 let _flRegsLoaded  = false;           // allRegistrations has been fetched (or confirmed already loaded) at least once
 
+// ── Daily activity ("Add a day") ────────────────────────────
+// Families → Child → the child's own child_day_events feed — the same
+// timeline the parent Today tab shows, and the "Add a day" entry form that
+// lets the office fill one in. Keyed by the same `${familyId}:${studentIndex}`
+// as the calendar card above, since only an already-open child ever shows it.
+let _flLogDate    = {};   // key -> 'YYYY-MM-DD' currently in view
+let _flLogEvents  = {};   // key -> { date, events, loading } — cache for that date
+let _flLogFormKey = null; // which child's "Add a day" form is open (one at a time)
+let _flLogDraftType = 'check_in'; // event type selected in the open form
+
 // The center is closed weekends (see CLAUDE.md — staff time-off weekday is
 // constrained 0..4 for the same reason), so the days-of-care calendar is a
 // 5-column Monday–Friday grid, not a 7-column Sun–Sat one. Weekend dates are
@@ -252,6 +262,223 @@ function _flCalendarCardHtml(f, c, idx) {
             <span class="fl-eyebrow">Allergies &amp; care notes</span>
             ${_flAllergyNotesHtml(c)}
         </div>
+        ${c.id ? _flDailyLogHtml(key, c.id) : ''}
+    </div>`;
+}
+
+// ── Daily activity ("Add a day") ─────────────────────────────
+// A read of the same child_day_events table the parent Today tab and the
+// teacher app's quick-log sheet both write — see js/parent/parent-today.js
+// (ptRenderTimeline/PT_EVENT) and js/staff/staff-log.js (SL_ACTIONS). Kept as
+// a separate copy rather than a shared import: admin, parent and staff ship
+// as three independent bundles (scripts/build.js) with no runtime state in
+// common, so "shared" here would mean loading another app's JS for one
+// function.
+const FL_SUPPLY_LABEL = { diapers: 'Diapers', wipes: 'Wipes', clothes: 'Extra clothes', formula: 'Formula/food' };
+
+function _flEventLabel(type, detail) {
+    const d = detail || {};
+    switch (type) {
+        case 'check_in':  return 'Checked in';
+        case 'check_out': return 'Checked out';
+        case 'nap_start': return 'Fell asleep';
+        case 'nap_end':   return 'Woke up';
+        case 'diaper':    return { wet: 'Diaper — wet', bm: 'Diaper — BM', dry: 'Diaper — dry' }[d.kind] || 'Diaper change';
+        case 'bottle':    return d.oz ? `Bottle — ${d.oz} oz` : 'Bottle';
+        case 'meal':      return { none: 'Meal — did not eat', some: 'Meal — ate some',
+                                    most: 'Meal — ate most', all: 'Meal — ate it all' }[d.amount] || 'Meal';
+        case 'note':      return d.text || 'Note';
+        // d.item is new — an older, pre-item "Needs supplies" tap still just
+        // reads as "Supplies needed" rather than throwing.
+        case 'supplies':  return d.item === 'other'
+            ? (d.note ? `Supplies needed — ${d.note}` : 'Supplies needed')
+            : (FL_SUPPLY_LABEL[d.item] ? `Supplies needed — ${FL_SUPPLY_LABEL[d.item]}` : 'Supplies needed');
+        default:          return type;
+    }
+}
+
+function _flEventTime(iso) {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' });
+}
+
+// The center's own timezone, not the browser's — a director working from
+// home in another timezone must still see and add entries under the day the
+// building calls "today" (matches ptToday() in parent-today.js).
+function _flToday() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+}
+
+// ⚠️ Deliberately does NOT call _flRenderResults() before the fetch. This is
+// invoked from inside _flDailyLogHtml, which is itself invoked from inside
+// _flRenderResults() (via _flFamilyRowHtml → _flCalendarCardHtml) — rendering
+// again here, before returning, would re-enter _flRenderResults() while it is
+// still building its own HTML string and repaint the DOM out from under it.
+// The loading state does not need that: _flDailyLogHtml already reads its own
+// (stale, pre-fetch) `cache` local and renders "Loading…" for this same pass.
+async function _flLoadLog(key, studentId, date) {
+    _flLogEvents[key] = { date, events: null, loading: true };
+    let events = [];
+    try {
+        events = await fetchChildDay(studentId, date);
+    } catch (e) {
+        console.warn('daily log:', e);
+    }
+    // Still the date/child in view? A slow fetch must not stomp a nav that
+    // happened while it was in flight.
+    if (_flLogDate[key] === date) {
+        _flLogEvents[key] = { date, events, loading: false };
+        _flRenderResults();
+    }
+}
+
+// Just moves the date and re-renders — _flDailyLogHtml's own cache-miss check
+// is what actually kicks off _flLoadLog for the new date, so there is exactly
+// one fetch path for this data, not two.
+function _flLogNav(key, delta) {
+    const cur = _flLogDate[key] || _flToday();
+    const d = new Date(cur + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    _flLogDate[key] = d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    _flRenderResults();
+}
+
+function _flToggleLogForm(key) {
+    _flLogFormKey = (_flLogFormKey === key) ? null : key;
+    _flLogDraftType = 'check_in';
+    _flRenderResults();
+}
+
+function _flLogTypeChanged(value) {
+    _flLogDraftType = value;
+    _flRenderResults();
+}
+
+async function _flSubmitLogEntry(key, studentId) {
+    const card = document.querySelector(`[data-fl-log-card="${CSS.escape(key)}"]`);
+    if (!card) return;
+    const msg = card.querySelector('[data-fl-log-msg]');
+    const setMsg = t => { if (msg) msg.textContent = t; };
+
+    const type = card.querySelector('[data-fl-log-type]')?.value || _flLogDraftType;
+    const timeVal = card.querySelector('[data-fl-log-time]')?.value;
+    const date = _flLogDate[key] || _flToday();
+    if (!timeVal) { setMsg('Pick a time first.'); return; }
+
+    let detail = {};
+    if (type === 'diaper')  detail = { kind: card.querySelector('[data-fl-log-diaper]')?.value || 'wet' };
+    if (type === 'bottle')  detail = { oz: Number(card.querySelector('[data-fl-log-oz]')?.value || 0) };
+    if (type === 'meal')    detail = { amount: card.querySelector('[data-fl-log-meal]')?.value || 'some' };
+    if (type === 'note') {
+        detail = { text: (card.querySelector('[data-fl-log-note]')?.value || '').trim() };
+        if (!detail.text) { setMsg('Write the note first.'); return; }
+    }
+    if (type === 'supplies') {
+        const item = card.querySelector('[data-fl-log-supply]')?.value || 'diapers';
+        detail = item === 'other'
+            ? { item: 'other', note: (card.querySelector('[data-fl-log-supply-note]')?.value || '').trim() }
+            : { item };
+    }
+
+    const occurredAt = new Date(`${date}T${timeVal}:00`).toISOString();
+    const btn = card.querySelector('[data-fl-log-submit]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    setMsg('');
+    try {
+        const id = await adminLogChildEventDetail(studentId, type, detail, occurredAt, date);
+        if (!id) throw new Error('Not saved — check your admin role.');
+        _flLogFormKey = null;
+        await _flLoadLog(key, studentId, date);
+    } catch (e) {
+        console.warn('add day entry:', e);
+        if (btn) { btn.disabled = false; btn.textContent = 'Log entry'; }
+        setMsg('Could not save: ' + (e.message || e));
+    }
+}
+
+function _flLogFormHtml(key) {
+    const type = _flLogDraftType;
+    // 24-hour HH:MM for <input type=time>, in the center's timezone.
+    const nowTime = new Date().toLocaleTimeString('en-GB',
+        { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' });
+    return `
+    <div class="fl-log-form">
+        <div class="fl-log-form-row">
+            <select data-fl-log-type>
+                <option value="check_in"  ${type === 'check_in'  ? 'selected' : ''}>Check in</option>
+                <option value="check_out" ${type === 'check_out' ? 'selected' : ''}>Check out</option>
+                <option value="nap_start" ${type === 'nap_start' ? 'selected' : ''}>Nap start</option>
+                <option value="nap_end"   ${type === 'nap_end'   ? 'selected' : ''}>Nap end</option>
+                <option value="diaper"    ${type === 'diaper'    ? 'selected' : ''}>Diaper</option>
+                <option value="bottle"    ${type === 'bottle'    ? 'selected' : ''}>Bottle</option>
+                <option value="meal"      ${type === 'meal'      ? 'selected' : ''}>Meal</option>
+                <option value="note"      ${type === 'note'      ? 'selected' : ''}>Note</option>
+                <option value="supplies"  ${type === 'supplies'  ? 'selected' : ''}>Supplies needed</option>
+            </select>
+            <input type="time" data-fl-log-time value="${escHtml(nowTime)}">
+        </div>
+        ${type === 'diaper' ? `
+            <select data-fl-log-diaper>
+                <option value="wet">Wet</option><option value="bm">BM</option><option value="dry">Dry</option>
+            </select>` : ''}
+        ${type === 'bottle' ? `<input type="number" data-fl-log-oz min="0" max="16" step="1" placeholder="oz" style="width:80px">` : ''}
+        ${type === 'meal' ? `
+            <select data-fl-log-meal>
+                <option value="none">Ate none</option><option value="some" selected>Some</option>
+                <option value="most">Most</option><option value="all">All</option>
+            </select>` : ''}
+        ${type === 'note' ? `<input type="text" data-fl-log-note maxlength="300" placeholder="Note for the family">` : ''}
+        ${type === 'supplies' ? `
+            <select data-fl-log-supply>
+                <option value="diapers">Diapers</option><option value="wipes">Wipes</option>
+                <option value="clothes">Extra clothes</option><option value="formula">Formula/food</option>
+                <option value="other">Other…</option>
+            </select>
+            <input type="text" data-fl-log-supply-note maxlength="120" placeholder="If other, what's needed?">` : ''}
+        <p class="fl-log-msg" data-fl-log-msg></p>
+        <div class="fl-log-form-actions">
+            <button type="button" class="fl-btn fl-btn-primary fl-btn-sm" data-fl-log-submit="${escHtml(key)}">Log entry</button>
+            <button type="button" class="fl-btn fl-btn-sm" data-fl-log-cancel="${escHtml(key)}">Cancel</button>
+        </div>
+    </div>`;
+}
+
+function _flDailyLogHtml(key, studentId) {
+    const date = _flLogDate[key] || (_flLogDate[key] = _flToday());
+    const cache = _flLogEvents[key];
+    if (!cache || cache.date !== date) _flLoadLog(key, studentId, date);
+
+    const dateLabel = new Date(date + 'T12:00:00')
+        .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const isToday = date === _flToday();
+    const events = (cache && cache.date === date) ? cache.events : null;
+
+    let body;
+    if (events === null) {
+        body = `<p class="fl-log-empty">Loading…</p>`;
+    } else if (!events.length) {
+        body = `<p class="fl-log-empty">Nothing logged for ${escHtml(dateLabel)}.</p>`;
+    } else {
+        body = `<ul class="fl-log-list">${events.map(e => `
+            <li class="fl-log-row">
+                <span class="fl-log-time">${escHtml(_flEventTime(e.occurred_at))}</span>
+                <span class="fl-log-label">${escHtml(_flEventLabel(e.event_type, e.detail))}</span>
+            </li>`).join('')}</ul>`;
+    }
+
+    return `
+    <div class="fl-info-block fl-daily-log" data-fl-log-card="${escHtml(key)}">
+        <div class="fl-log-head">
+            <span class="fl-eyebrow">Daily activity</span>
+            <div class="fl-cal-nav-pill">
+                <button type="button" class="fl-cal-nav-btn" data-fl-log-nav="${escHtml(key)}" data-fl-log-delta="-1" aria-label="Previous day">‹</button>
+                <span class="fl-cal-nav-label">${escHtml(dateLabel)}${isToday ? ' · Today' : ''}</span>
+                <button type="button" class="fl-cal-nav-btn" data-fl-log-nav="${escHtml(key)}" data-fl-log-delta="1" aria-label="Next day" ${isToday ? 'disabled' : ''}>›</button>
+            </div>
+        </div>
+        ${body}
+        ${_flLogFormKey === key
+            ? _flLogFormHtml(key)
+            : `<button type="button" class="fl-btn fl-btn-sm" data-fl-log-add="${escHtml(key)}">+ Add a day</button>`}
     </div>`;
 }
 
@@ -386,6 +613,20 @@ function _flNavCalendar(key, delta) {
     if (month > 11) { month = 0;  year++; }
     _flCalCursor[key] = { year, month };
     _flRenderResults();
+}
+
+// Resolves a `${familyId}:${studentIndex}` key back to the student's uuid —
+// the daily-log controls carry only the key (same as every other fl-* data
+// attribute), so this is how the click handlers in admin-portal.js get the
+// id fetchChildDay/adminLogChildEventDetail actually need.
+function _flStudentIdForKey(key) {
+    const sep = key.lastIndexOf(':');
+    if (sep < 0) return null;
+    const familyId = key.slice(0, sep);
+    const idx      = parseInt(key.slice(sep + 1), 10);
+    const family   = _flFindFamilyById(familyId);
+    const child    = family && (family.students || [])[idx];
+    return child?.id || null;
 }
 
 function _flChangeDays(key) {
