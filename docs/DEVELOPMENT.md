@@ -84,7 +84,11 @@ the two options above you used to get a target to test against.
 
 ## What you don't need
 
-No local D1/R2/KV — those are `chms`/`website` concepts, not this repo's. No cloud TinyMCE key —
-this repo doesn't embed TinyMCE at all. Stax webhooks can't be delivered to a local Worker at all
-(Stax has no local target); `reconcile-stax-payments` and the shared unit tests around
-`stax-transaction-fields.ts` are the practical way to exercise that logic without a live webhook.
+No local D1/R2/KV — those are `chms`/`website` concepts, not this repo's. No cloud TinyMCE key,
+here or on `chms`/`website` — the newsletter's Text block (Messages tab) uses TinyMCE, but it's
+self-hosted via `scripts/build.js`'s `vendorAssets()` into `vendor/tinymce/`, loaded with
+`license_key: 'gpl'`, never the Tiny Cloud. Run `npm run build` (or `build:watch`) at least once
+before opening the Newsletter tool locally, or `vendor/` won't exist yet. Stax webhooks can't be
+delivered to a local Worker at all (Stax has no local target); `reconcile-stax-payments` and the
+shared unit tests around `stax-transaction-fields.ts` are the practical way to exercise that logic
+without a live webhook.
