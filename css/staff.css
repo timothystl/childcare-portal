@@ -148,26 +148,49 @@
 .sl-empty  { color: #78838f; font-size: .92em; text-align: center; padding: 30px 10px; }
 
 .sl-child {
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 10px;
     background: #fff; border: 1.5px solid #e3e8ed; border-radius: 14px;
-    padding: 15px 16px; cursor: pointer; text-align: left;
-    font-family: inherit; width: 100%; min-height: 56px;
+    padding: 15px 16px; width: 100%;
 }
-.sl-child:active { background: var(--sun-pale); }
+.sl-child-main {
+    display: flex; flex-direction: column; gap: 8px;
+    background: none; border: none; padding: 0; margin: 0;
+    cursor: pointer; text-align: left; font-family: inherit; width: 100%;
+}
+.sl-child-main:active { opacity: .8; }
 .sl-child-top {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 .sl-child-name  { font-weight: 800; color: var(--navy); font-size: 1.05em; }
-.sl-child-state {
-    font-size: .76em; font-weight: 800; letter-spacing: .05em;
-    text-transform: uppercase; color: #78838f;
-    border: 1.5px solid #d7dee5; border-radius: 999px; padding: 3px 10px;
-    flex: none;
+.sl-child-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* The dedicated in/out control — two radio-style buttons right on the
+   roster row, so marking attendance never requires opening the full
+   quick-log sheet. Nap/diaper/meal logging still lives behind a tap on the
+   name above. */
+.sl-child-attend {
+    display: flex; gap: 8px; border-top: 1px solid #eef2f5; padding-top: 10px;
 }
-.sl-child-state.in {
+.sl-attend-btn {
+    flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center;
+    gap: 6px; font-family: inherit; font-size: .88em; font-weight: 800;
+    color: #5a6673; background: #f5f7f9; border: 1.5px solid #d7dee5; border-radius: 10px;
+    cursor: pointer;
+}
+.sl-attend-btn::before { content: '○'; font-size: 1.1em; line-height: 1; }
+.sl-attend-btn.is-active::before { content: '●'; }
+.sl-attend-btn[data-mark="check_in"].is-active {
     color: var(--green-dark); background: var(--green-pale); border-color: var(--green-lt);
 }
-.sl-child-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sl-attend-btn[data-mark="check_out"].is-active {
+    color: #5a6673; background: #eef2f5; border-color: #cbd5dd;
+}
+
+.sl-dropin-badge {
+    font-size: .68em; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--tang-dark); background: var(--tang-pale); border: 1.5px solid var(--tang-soft);
+    border-radius: 999px; padding: 2px 8px;
+}
 
 .sl-chip {
     border-radius: 999px; padding: 3px 10px; font-size: .76em;
@@ -185,6 +208,41 @@
     font-family: inherit; cursor: pointer; min-height: 48px;
     box-shadow: 0 4px 16px rgba(1, 41, 74, .35); z-index: 40;
 }
+
+/* ── Add a walk-in child ──────────────────────────────────── */
+
+.sl-add-dropin-btn { width: 100%; margin-bottom: 12px; font-size: .9em; }
+
+.sl-dropin-search {
+    width: 100%; padding: 12px 14px; border: 1.5px solid #d7dee5; border-radius: 10px;
+    font-family: inherit; font-size: 1em; margin-bottom: 8px;
+}
+.sl-dropin-results { display: grid; gap: 6px; }
+.sl-dropin-result {
+    text-align: left; width: 100%; padding: 10px 12px; border-radius: 10px;
+    border: 1.5px solid #e3e8ed; background: #fff; font-family: inherit;
+    font-size: .92em; cursor: pointer;
+}
+.sl-dropin-result:active { background: var(--sun-pale); }
+.sl-dropin-result strong { color: var(--navy); }
+.sl-dropin-selected {
+    background: var(--green-pale); border: 1.5px solid var(--green-lt);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.sl-dropin-selected p { margin: 0; font-size: .92em; color: var(--green-dark); font-weight: 700; }
+
+.sl-choice-row { display: flex; gap: 8px; }
+.sl-choice-btn {
+    flex: 1; min-height: 44px; font-family: inherit; font-size: .9em; font-weight: 700;
+    color: #5a6673; background: #f5f7f9; border: 1.5px solid #d7dee5; border-radius: 10px;
+    cursor: pointer;
+}
+.sl-choice-btn.is-active {
+    color: var(--navy); background: var(--sun-pale); border-color: var(--sun);
+}
+
+.sl-dropin-error { color: var(--tang-dark); }
 
 /* ── Quick-log sheet ─────────────────────────────────────── */
 
@@ -643,13 +701,6 @@
     margin: 4px 0 18px; font-size: .92em; line-height: 1.45; color: var(--navy);
 }
 .sl-check input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
-
-/* Third attendance state. "Out" and "Not in" are different facts — a child who
-   has gone home is not a child who never arrived, and the head count screen
-   distinguishes them, so the roster must too. */
-.sl-child-state.out {
-    color: #5a6673; background: #eef2f5; border-color: #cbd5dd;
-}
 
 /* ── Incident report ─────────────────────────────────────── */
 /* The longest screen in the app, and the only one someone fills in while

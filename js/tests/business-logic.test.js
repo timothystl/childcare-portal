@@ -4478,6 +4478,125 @@ describe('The door — kiosk and the signature record', () => {
         expect(/setTimeout\(kReset/.test(kiosk)).toBe(true);
     });
 
+    // ── The before/after care check-in, now that it is wired ────
+    //
+    // ⚠️ This is the ONE thing a hallway tablet can write, and everything
+    // that decides whether it may happen lives server-side. These assertions
+    // are the line between "the kiosk asks" and "the kiosk decides".
+    test('the kiosk asks the server; it never decides or prices', () => {
+        const c = code(kiosk);
+        // One call, and it is the PIN-gated RPC.
+        expect(/recordDoorCheckin\(/.test(c)).toBe(true);
+        // It reaches no table directly — not care_charges, not families,
+        // not students. A direct write would bypass the staff PIN entirely.
+        //
+        // ⚠️ Asserted by what the kiosk CANNOT hold rather than by hunting
+        // for verb names: a `.delete(` regex matches kPicked.delete(id), an
+        // ordinary JavaScript Set, and a test that flags that is a test
+        // people learn to edit around. With no client and no query builder
+        // in the file, a direct table write is not expressible.
+        expect(/sbClient/.test(c)).toBe(false);
+        expect(/\.from\(/.test(c)).toBe(false);
+        expect(/\.rpc\(/.test(c)).toBe(false);
+        // And it never sends a price. The rate is read inside the function
+        // from settings.programs; a kiosk that could name an amount is a
+        // kiosk that could name the wrong one.
+        expect(/rate_charged\s*:/.test(c)).toBe(false);
+        const call = c.slice(c.indexOf('recordDoorCheckin({'), c.indexOf('} catch (_) {', c.indexOf('recordDoorCheckin({')));
+        expect(/rate|amount|price/i.test(call)).toBe(false);
+    });
+
+    test('the teacher is identified by name AND pin, not pin alone', () => {
+        const c = code(kiosk);
+        // A four-digit PIN alone is guessable against the whole roster, so
+        // the teacher picks their name first — the same shape as clock-in.
+        //
+        // ⚠️ Asserted on the CALL, not on the file. An earlier version of
+        // this test only checked that the word `staffId` appeared somewhere,
+        // which a declaration satisfies — deleting it from the arguments and
+        // sending the PIN alone passed cleanly. The identity has to reach
+        // the server or it is not an identity check.
+        const call = c.slice(c.indexOf('recordDoorCheckin({'),
+                             c.indexOf('});', c.indexOf('recordDoorCheckin({')));
+        expect(/\bstaffId\b/.test(call)).toBe(true);
+        expect(/\bpin\b/.test(call)).toBe(true);
+        expect(/kDoorStaff/.test(c)).toBe(true);
+        expect(/kDoorPin/.test(c)).toBe(true);
+        // And the helper hands it to the RPC under the server's own name.
+        const sb2 = read('js/supabase.js');
+        const helper = sb2.slice(sb2.indexOf('async function recordDoorCheckin('));
+        expect(/p_staff_id:\s*staffId/.test(helper.slice(0, helper.indexOf('\n}')))).toBe(true);
+        // It is the TEACHER's pin, not the parent's: a parent PIN authorizing
+        // a charge to that same parent is not a control.
+        expect(/fetchStaffForDoor/.test(c)).toBe(true);
+    });
+
+    test('the door form leaves nothing behind for the next parent', () => {
+        const c = code(kiosk);
+        // kReset clears the child's name, the guardian and the phone.
+        const reset = c.slice(c.indexOf('function kReset()'), c.indexOf('// ── Screens'));
+        expect(/kDoorResult\s*=\s*null/.test(reset)).toBe(true);
+        expect(/kDoorMsg\s*=\s*''/.test(reset)).toBe(true);
+        // A wrong PIN clears only the PIN — one field, not a whole form
+        // typed one-handed — but never leaves it sitting on a wall tablet.
+        expect(/pinEl\.value\s*=\s*''/.test(c)).toBe(true);
+        // Still no storage of any kind, door included.
+        expect(/localStorage|sessionStorage|indexedDB/i.test(c)).toBe(false);
+    });
+
+    test('every refusal the RPC can return has a sentence a teacher can act on', () => {
+        // A bare code, or a generic failure, leaves a teacher standing at a
+        // tablet with a parent waiting. The server's codes and the kiosk's
+        // messages must not drift apart.
+        const codes = ['bad_pin', 'bad_program', 'missing_name', 'missing_phone',
+                       'no_rate', 'needs_office'];
+        const mig = readMigration('record_door_checkin_fix_staff_pin_signature');
+        codes.forEach(cd => {
+            expect(`${cd} returned by server: ${mig.includes(`'${cd}'`)}`).toBe(`${cd} returned by server: true`);
+            expect(`${cd} handled by kiosk: ${new RegExp(cd + '\\s*:').test(kiosk)}`).toBe(`${cd} handled by kiosk: true`);
+        });
+        // no_rate is the one that happens on day one, before Programs &
+        // add-ons is ever saved. It must say what fixes it.
+        expect(/no_rate:[^\n]*Programs/.test(kiosk)).toBe(true);
+    });
+
+    test('a provisional family is called out, not buried under "done"', () => {
+        // It is a real billing record with no email behind it. Saying only
+        // "checked in" is how it gets forgotten until month end.
+        expect(/provisional/.test(kiosk)).toBe(true);
+        expect(/Tell the office today/.test(kiosk)).toBe(true);
+    });
+
+    test('a double tap cannot submit twice', () => {
+        // The server also refuses (ON CONFLICT DO NOTHING), but a teacher
+        // holding a child should not be able to fire two requests either.
+        expect(/kDoorBusy/.test(kiosk)).toBe(true);
+        expect(/if \(kDoorBusy\) return;/.test(kiosk)).toBe(true);
+    });
+
+    test('the staff picker asks for no column anon may not see', () => {
+        // The anon grant on `staff` is column-scoped, and widening this
+        // select is how that boundary gets lost. A name is all it needs.
+        const sb = read('js/supabase.js');
+        const fn = sb.slice(sb.indexOf('async function fetchStaffForDoor()'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+        const sel = /\.select\('([^']+)'\)/.exec(body);
+        expect(sel !== null).toBe(true);
+        const allowed = ['id', 'name', 'role', 'has_staff_pin', 'room_id', 'active'];
+        sel[1].split(',').map(x => x.trim()).forEach(col =>
+            expect(`${col} is anon-readable: ${allowed.includes(col)}`).toBe(`${col} is anon-readable: true`));
+        // Only staff who can actually finish a check-in are offered.
+        expect(/has_staff_pin/.test(body)).toBe(true);
+    });
+
+    test('MDO drop-off still says it cannot save, because it still cannot', () => {
+        // Wiring the care check-in must not blur the other half of the door:
+        // there is still no parent-callable check-in and nowhere to put a
+        // signature. A button that looks like it saves would be a lie.
+        expect(kiosk.includes("can't be saved yet")).toBe(true);
+        expect(/toDataURL/.test(code(kiosk))).toBe(false);
+    });
+
     // first check_in / last check_out, from events ordered ascending.
     test('the record takes the first arrival and the last departure', () => {
         const sandbox = {
@@ -4529,6 +4648,118 @@ describe('The door — kiosk and the signature record', () => {
         expect(/With a signature/.test(rec)).toBe(true);
         // It writes nothing at all.
         expect(/\.\s*insert\s*\(|\.\s*update\s*\(|\.\s*upsert\s*\(/.test(code(rec))).toBe(false);
+    });
+});
+
+
+// ============================================================
+// STAFF DEDICATED CHECK-IN FEED — walk-in (drop-in) children
+// ============================================================
+// The Room roster already IS the check-in/out feed (list_room_children +
+// log_child_event). This covers the two things added on top of it: the
+// in/out control living on the roster row itself rather than behind the
+// quick-log sheet, and staff_add_dropin_child — a walk-in with no booking,
+// checked in and folded into the family's current invoice immediately.
+describe('Staff check-in feed — walk-ins', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    const staffLog = read('js/staff/staff-log.js');
+    const sb       = read('js/supabase.js');
+    const mig      = read('supabase/migrations/20260915203139_staff_dropin_checkin.sql');
+    // staff_add_dropin_child's final, live body — a follow-up CREATE OR
+    // REPLACE fixing a gap the sibling door-kiosk RPC (record_door_checkin)
+    // had already caught: photo_release must not default to true for a name
+    // typed at the door.
+    const migFix   = read('supabase/migrations/20260915203911_staff_dropin_child_no_default_photo_release.sql');
+
+    // The In/Out control must not be a button nested inside the row's own
+    // button — that is invalid HTML and, worse, means tapping "In" would
+    // also fire the row's click handler and pop the quick-log sheet open
+    // behind it. They render as siblings, each wired separately.
+    test('the roster row keeps In/Out separate from the sheet-opening control', () => {
+        expect(/class="sl-child-main"/.test(staffLog)).toBe(true);
+        expect(/class="sl-child-attend"/.test(staffLog)).toBe(true);
+        expect(/querySelectorAll\('\.sl-child-main'\)/.test(staffLog)).toBe(true);
+        expect(/querySelectorAll\('\.sl-attend-btn'\)/.test(staffLog)).toBe(true);
+    });
+
+    // slCommit is shared by the quick-log sheet (which has no child argument
+    // and falls back to slOpenChild) and the roster's own In/Out buttons
+    // (which pass the row's child explicitly, since the sheet need not be
+    // open at all).
+    test('slCommit accepts an explicit child instead of requiring the sheet to be open', () => {
+        expect(/function slCommit\(eventType, detail, btnEl, child\)/.test(staffLog)).toBe(true);
+        expect(/child = child \|\| slOpenChild/.test(staffLog)).toBe(true);
+    });
+
+    // The walk-in flow is deliberately synchronous, not queued — see the
+    // header comment in staff-log.js for why (same reasoning as photos and
+    // the injury report).
+    test('adding a walk-in does not go through the offline queue', () => {
+        const block = staffLog.slice(staffLog.indexOf('async function slDropinSubmit'));
+        const body = block.slice(0, block.indexOf('\nasync function') > 0
+            ? block.indexOf('\nasync function', 1) : block.length);
+        expect(/slQueue\.push/.test(body)).toBe(false);
+        expect(/staffAddDropinChild\(/.test(body)).toBe(true);
+    });
+
+    // Client wrappers must call the exact RPC names the migration creates,
+    // with the PIN parsed the same way every other staff RPC call parses it.
+    test('the client calls staff_search_children and staff_add_dropin_child by name', () => {
+        expect(/rpc\('staff_search_children'/.test(sb)).toBe(true);
+        expect(/rpc\('staff_add_dropin_child'/.test(sb)).toBe(true);
+        const block = sb.slice(sb.indexOf('async function staffAddDropinChild'));
+        expect(/p_pin:\s*parseInt\(pin, 10\)/.test(block.slice(0, 800))).toBe(true);
+    });
+
+    // The drop-in fee is a constant the SERVER applies, not an amount the
+    // browser sends — staff choose only whether to apply it. A numeric fee
+    // parameter here would let a compromised or modified client bill
+    // whatever it wants into a family's invoice.
+    test('the drop-in fee is a server-side constant, never a client-supplied amount', () => {
+        expect(/p_apply_dropin_fee boolean/.test(migFix)).toBe(true);
+        expect(/v_fee\s*:?=\s*CASE WHEN p_apply_dropin_fee THEN 5 ELSE 0 END/.test(migFix)).toBe(true);
+        expect(/p_fee\s+numeric/i.test(migFix)).toBe(false);
+        expect(/p_amount/i.test(migFix)).toBe(false);
+    });
+
+    // Same access model as the rest of Phase 1: no table grants to anon, and
+    // every policy/grant names its role explicitly — `TO public` is what
+    // leaked staff wages to a parent once already (see the historical
+    // migration's own warning).
+    test('the new RPCs are PIN-gated and grant no table access to anon', () => {
+        expect(/staff_id_for_pin\(p_staff_id, p_pin\)/.test(mig)).toBe(true);
+        expect(/GRANT\s+EXECUTE ON FUNCTION public\.staff_search_children/.test(mig)).toBe(true);
+        expect(/GRANT\s+EXECUTE ON FUNCTION public\.staff_add_dropin_child/.test(mig)).toBe(true);
+        expect(/GRANT\s+(SELECT|INSERT|UPDATE|DELETE)[^;]*\bTO\s+anon\b/.test(mig)).toBe(false);
+        expect(/TO\s+public\b/i.test(mig)).toBe(false);
+        expect(/TO\s+public\b/i.test(migFix)).toBe(false);
+    });
+
+    // A repeat tap (double submit, or a retry after a slow response) must
+    // check the child in again without adding a second registration_dates
+    // row or a second $5 fee — see the migration's own verification notes.
+    test('a repeat walk-in add cannot duplicate the day or double the fee', () => {
+        const fn = migFix.slice(migFix.indexOf('CREATE OR REPLACE FUNCTION public.staff_add_dropin_child'));
+        expect(/IF NOT EXISTS \(\s*SELECT 1 FROM registration_dates/.test(fn)).toBe(true);
+    });
+
+    // A brand-new registration needs a real age; an existing one already has
+    // one on file and must not be blocked by a missing form field.
+    test('a new registration requires an age; reusing an existing one does not', () => {
+        const fn = migFix.slice(migFix.indexOf('CREATE OR REPLACE FUNCTION public.staff_add_dropin_child'));
+        expect(/IF v_reg_id IS NULL THEN[\s\S]{0,200}IF p_child_age IS NULL THEN RETURN/.test(fn)).toBe(true);
+    });
+
+    // The sibling door-kiosk RPC (record_door_checkin, before/after care)
+    // already found this: photo_release defaults to true on the students
+    // table, which is consent nobody gave for a name typed at the door. A
+    // brand-new walk-in student must not inherit that default.
+    test('a brand-new walk-in student is not photo-released by default', () => {
+        const fn = migFix.slice(migFix.indexOf('CREATE OR REPLACE FUNCTION public.staff_add_dropin_child'));
+        expect(/INSERT INTO students \(family_id, child_name, child_dob, photo_release\)/.test(fn)).toBe(true);
+        expect(/VALUES \(v_family, v_child_name, p_child_dob, false\)/.test(fn)).toBe(true);
     });
 });
 

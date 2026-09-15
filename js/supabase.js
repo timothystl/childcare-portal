@@ -1893,6 +1893,81 @@ async function saveProgramSettings({ programs, fees }) {
 }
 
 // ============================================================
+// THE DOOR — before/after care check-in from the kiosk
+// ============================================================
+// The tablet in the hallway holds no session. These two calls are the whole
+// of what it may do, and both are deliberately narrow.
+
+/**
+ * Active staff who can actually take a child in, for the kiosk's name picker.
+ *
+ * ⚠️ Reads only the columns anon is allowed to see. The anon grant on `staff`
+ * is column-scoped to (active, has_staff_pin, id, name, role, room_id) by
+ * 20260803000639_phase1_narrow_anon_staff_columns, and the row policy is
+ * USING (active = true) — so a wall tablet cannot see wages, a PIN hash, or
+ * anyone who has left. Widening this select is how that boundary gets lost;
+ * ask for nothing more than a name.
+ *
+ * Filtered to staff who HAVE a PIN, because a teacher without one cannot
+ * complete a check-in and offering their name would be a dead end.
+ *
+ * @returns {Promise<Array<{id: string, name: string, role: string}>>}
+ */
+async function fetchStaffForDoor() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('staff')
+        .select('id, name, role, has_staff_pin')
+        .eq('active', true)
+        .order('name');
+    if (error) { console.error('fetchStaffForDoor failed:', error); return []; }
+    return (data || [])
+        .filter(s => s.has_staff_pin)
+        .map(({ id, name, role }) => ({ id, name, role }));
+}
+
+/**
+ * Records a before/after care session at the door, and the charge that
+ * follows it.
+ *
+ * ⚠️ EVERYTHING that matters happens server-side, in record_door_checkin:
+ * the staff PIN is verified there (throttled, via staff_id_for_pin), the rate
+ * is read there from settings.programs, the family is found or created there,
+ * and the charge is written there. The kiosk supplies typed-in text and
+ * receives a verdict. It cannot set a price, cannot reach the tables, and
+ * cannot decide whether a PIN is right.
+ *
+ * Name THEN pin, matching staff clock-in: a four-digit PIN alone is guessable
+ * against a roster of 28, so the teacher identifies themselves first.
+ *
+ * Never throws for an expected refusal — returns { ok:false, code } so the
+ * caller can say something useful to a teacher holding a child. Codes:
+ * bad_pin, bad_program, missing_name, missing_phone, no_rate, needs_office.
+ *
+ * @returns {Promise<{ok: boolean, code?: string, provisional?: boolean,
+ *                    rate_charged?: number, sessions_used?: number}>}
+ */
+async function recordDoorCheckin({ staffId, pin, programId, childName, guardianName, guardianPhone }) {
+    if (!sbClient) return { ok: false, code: 'offline' };
+    const { data, error } = await sbClient.rpc('record_door_checkin', {
+        p_staff_id:       staffId,
+        p_pin:            Number(pin),
+        p_program_id:     programId,
+        p_child_name:     childName,
+        p_guardian_name:  guardianName,
+        p_guardian_phone: guardianPhone,
+    });
+    if (error) {
+        // ⚠️ Deliberately does not include `error` in what the caller shows.
+        // The arguments to this call contain a PIN, and Supabase error bodies
+        // can echo the failing statement.
+        console.error('record_door_checkin failed');
+        return { ok: false, code: 'offline' };
+    }
+    return (data && typeof data === 'object') ? data : { ok: false, code: 'offline' };
+}
+
+// ============================================================
 // SETTINGS — room rates, weekly rates (stored in `settings` table)
 // ============================================================
 
@@ -2647,6 +2722,60 @@ async function logChildEvent(staffId, pin, entry) {
     });
     if (error) throw friendlyError(error);
     return data ?? null;
+}
+
+/**
+ * Finds a child already on file whose name matches, regardless of whether
+ * they're on today's roster — for a walk-in who is a known sibling or past
+ * enrollee, just not scheduled today. Minimal-disclosure by design: no
+ * email, phone, allergy, or family id comes back, just enough to pick the
+ * right child.
+ * @returns {Promise<Array>} [] on a bad PIN, a query under 2 characters, or
+ *   no match.
+ */
+async function staffSearchChildren(staffId, pin, query) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_search_children', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_query: query,
+    });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Checks in a walk-in child who was never booked — either a known child not
+ * on today's roster (pass existingStudentId) or nobody has a record of yet
+ * (pass childName/parentName/parentEmail instead). Marks the child present
+ * through the same log_child_event path every other check-in uses, and
+ * folds the day into the family's CURRENT invoice immediately — a draft,
+ * not a charge; the card is billed on the normal cycle, same as admin's
+ * "+ Add Child to This Day".
+ * @param {object} opts - roomId, careDate (null = today), dayType
+ *   ('full'|'half'), applyDropinFee, childAge (always required), and either
+ *   existingStudentId OR childName/parentName/parentEmail/parentPhone.
+ * @returns {Promise<object|null>} The roster row shape (same as
+ *   listRoomChildren) to push straight into the roster, or null when the
+ *   RPC rejected it (bad PIN, or a new registration with no age given).
+ */
+async function staffAddDropinChild(staffId, pin, opts) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_add_dropin_child', {
+        p_staff_id:            staffId,
+        p_pin:                 parseInt(pin, 10),
+        p_room_id:             opts.roomId,
+        p_care_date:           opts.careDate || null,
+        p_day_type:            opts.dayType || 'full',
+        p_apply_dropin_fee:    opts.applyDropinFee !== false,
+        p_existing_student_id: opts.existingStudentId || null,
+        p_child_name:          opts.childName || null,
+        p_child_age:           opts.childAge ?? null,
+        p_child_dob:           opts.childDob || null,
+        p_parent_name:         opts.parentName || null,
+        p_parent_email:        opts.parentEmail || null,
+        p_parent_phone:        opts.parentPhone || null,
+    });
+    if (error) throw friendlyError(error);
+    return (data && data[0]) || null;
 }
 
 /**

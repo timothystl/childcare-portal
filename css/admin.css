@@ -6993,8 +6993,13 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 #newsletterSection .nl-p-heading{font-family:var(--font-head);font-size:1.3em;
   font-weight:700;color:var(--navy);margin:0;}
-#newsletterSection .nl-p-text{font-size:.92em;color:var(--text);line-height:1.6;margin:0;
-  white-space:pre-wrap;}
+#newsletterSection .nl-p-text{font-size:.92em;color:var(--text);line-height:1.6;margin:0;}
+#newsletterSection .nl-p-text-empty{color:var(--text-muted);font-style:italic;}
+#newsletterSection .nl-p-text p{margin:0 0 8px;}
+#newsletterSection .nl-p-text p:last-child{margin-bottom:0;}
+#newsletterSection .nl-p-text ul,
+#newsletterSection .nl-p-text ol{margin:0 0 8px;padding-left:1.3em;}
+#newsletterSection .nl-p-text a{color:var(--navy);}
 #newsletterSection .nl-p-btnwrap{text-align:center;}
 #newsletterSection .nl-p-btn{display:inline-block;background:var(--sun);color:var(--navy);
   border-radius:6px;padding:11px 26px;font-size:.95em;font-weight:800;

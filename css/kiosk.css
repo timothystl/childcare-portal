@@ -188,6 +188,40 @@
     font-size: .9rem; color: var(--green-text); line-height: 1.55;
 }
 
+/* ── The door check-in (before & after care) ───────────────── */
+/* Two columns on a wall tablet held in landscape, stacked on anything
+   narrower. The teacher's half is visually separated from the child's so
+   nobody types a PIN into the phone-number box. */
+.k-door { display: flex; flex-direction: column; gap: 18px; }
+.k-door-cols {
+    display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+    gap: 18px; align-items: start;
+}
+.k-door-col {
+    display: flex; flex-direction: column; gap: 14px;
+    background: var(--cream); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 20px;
+}
+.k-door-col:last-child { background: #fff; border-color: var(--sun); }
+.k-door-hint {
+    margin: 0; font-size: .88rem; color: var(--text-muted); line-height: 1.55;
+}
+.k-field select {
+    padding: 14px 14px; font-size: 1.05rem; font-family: inherit; font-weight: 600;
+    color: var(--text); background: #fff;
+    border: 2px solid var(--border); border-radius: 11px;
+}
+.k-field select:focus { outline: none; border-color: var(--navy); }
+
+.k-door-done { display: flex; flex-direction: column; gap: 16px; margin-bottom: 18px; }
+.k-door-stat {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    background: var(--cream); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 20px;
+}
+.k-door-stat span { font-size: .95rem; font-weight: 700; color: var(--text-muted); }
+.k-door-stat strong { font-size: 1.9rem; color: var(--navy); }
+
 @media (max-width: 760px) {
     .k-root { padding: 22px 18px 36px; }
     .k-h1 { font-size: 1.6rem; }
@@ -198,4 +232,6 @@
     .k-child { padding: 14px 16px; min-height: 80px; }
     .k-avatar { width: 52px; height: 52px; font-size: 1.35rem; }
     .k-child-name { font-size: 1.15rem; }
+    .k-door-cols { grid-template-columns: minmax(0,1fr); }
+    .k-door-stat { flex-direction: column; gap: 4px; }
 }
