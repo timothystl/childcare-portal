@@ -9,6 +9,12 @@
 
 'use strict';
 
+// Migrations are looked up by NAME, never by filename. A migration's version
+// belongs to whichever tool applied it, so hard-coding it here made correcting
+// a version — the fix for ledger drift — break a dozen unrelated assertions.
+// See scripts/migration-file.js and supabase/migrations/README.md.
+const { readMigration } = require('../../scripts/migration-file.js');
+
 // ---- Minimal test runner ----
 
 let _passed = 0, _failed = 0;
@@ -1490,10 +1496,10 @@ describe('cross-file drift guard — worker.js SSR copies must match js/ source'
 describe('billing invoice integrity guards', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260825040000_billing_invoice_integrity.sql');
+    const migration = readMigration('billing_invoice_integrity');
     const billingUi = read('js/admin/admin-billing.js');
     const billMonth = read('js/admin/admin-bill-month.js');
-    const boundary = read('supabase/migrations/20260909033344_harden_public_registration_billing_boundary.sql');
+    const boundary = readMigration('harden_public_registration_billing_boundary');
     const publicApp = read('js/app.js');
     const supabaseClient = read('js/supabase.js');
     const adminCalendar = read('js/admin/admin-calendar.js');
@@ -1561,8 +1567,8 @@ describe('billing invoice integrity guards', () => {
 describe('Stax payment security guards', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260827225514_harden_stax_payments.sql');
-    const feeTrackingMigration = read('supabase/migrations/20260912150000_track_stax_transaction_fee_and_funding_method.sql');
+    const migration = readMigration('harden_stax_payments');
+    const feeTrackingMigration = readMigration('track_stax_transaction_fee_and_funding_method');
     const chargeFn = read('supabase/functions/charge-stax-payment/index.ts');
     const webhookFn = read('supabase/functions/stax-webhook/index.ts');
 
@@ -1739,7 +1745,7 @@ describe('Stax payment security guards', () => {
 describe('Stax processor fee / card-vs-ACH tracking', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const feeMigration = read('supabase/migrations/20260912150000_track_stax_transaction_fee_and_funding_method.sql');
+    const feeMigration = readMigration('track_stax_transaction_fee_and_funding_method');
     const financeHubJs = read('js/admin/admin-finance-hub.js');
 
     test('billing_payments and payment_charge_locks both gain a processor_fee column', () => {
@@ -1784,7 +1790,7 @@ describe('Stax processor fee / card-vs-ACH tracking', () => {
 describe('Stax card funding type (debit vs. credit) tracking', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const fundingMigration = read('supabase/migrations/20260915120000_track_stax_card_funding_type.sql');
+    const fundingMigration = readMigration('track_stax_card_funding_type');
     const sharedFields = read('supabase/functions/_shared/stax-transaction-fields.ts');
     const financeHubJs = read('js/admin/admin-finance-hub.js');
 
@@ -1832,7 +1838,7 @@ describe('Stax processor fee settlement backfill job', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const backfillFn = read('supabase/functions/backfill-stax-processor-fees/index.ts');
-    const backfillMigration = read('supabase/migrations/20260915130000_stax_processor_fee_backfill.sql');
+    const backfillMigration = readMigration('stax_processor_fee_backfill');
 
     test('reuses the exact same transaction lookup and field extraction every other Stax path trusts', () => {
         expect(backfillFn.includes('import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts"')).toBe(true);
@@ -2178,7 +2184,7 @@ describe('Stax payment reconciliation job', () => {
     });
 
     test('scheduled via cron, service role key never committed to the migration', () => {
-        const schedule = read('supabase/migrations/schedule_stax_reconciliation.sql');
+        const schedule = readMigration('schedule_stax_reconciliation');
         expect(schedule.includes("cron.schedule(\n  'reconcile-stax-payments'")).toBe(true);
         expect(schedule.includes('{SERVICE_ROLE_KEY}')).toBe(true);
         expect(/sb_secret_|sb_[a-z]+_[A-Za-z0-9_-]{20,}/.test(schedule)).toBe(false);
@@ -2253,7 +2259,7 @@ describe('scheduled jobs use a scoped cron credential', () => {
     });
 
     test('replacement cron commands read a scoped Vault secret, not a service-role JWT', () => {
-        const migration = read('supabase/migrations/20260909030842_scope_scheduled_job_credentials.sql');
+        const migration = readMigration('scope_scheduled_job_credentials');
         expect(migration.includes("name = 'mymdo_cron_secret'")).toBe(true);
         expect(migration.includes("'X-Cron-Secret'")).toBe(true);
         expect(migration.includes('SERVICE_ROLE')).toBe(false);
@@ -2495,7 +2501,7 @@ describe('per-child message threads', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 
-    const migration = read('supabase/migrations/per_child_message_threads.sql');
+    const migration = readMigration('per_child_message_threads');
     const portalMsg = read('js/parent/parent-messages.js');
     const supa      = read('js/supabase.js');
 
@@ -2576,7 +2582,7 @@ describe('per-child message threads', () => {
 describe('non-parent sessions are sent to their own app', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/my_app_home_redirect.sql');
+    const migration = readMigration('my_app_home_redirect');
     const auth = read('js/parent/parent-auth.js');
 
     test('parent wins over admin and staff', () => {
@@ -2627,7 +2633,7 @@ describe('non-parent sessions are sent to their own app', () => {
 describe('parent upload of child documents — write-only, own-child-only', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260829143213_parent_upload_child_documents.sql');
+    const migration = readMigration('parent_upload_child_documents');
     const supabaseJs = read('js/supabase.js');
     const portalJs = read('js/parent/parent-documents.js');
     const adminFamiliesJs = read('js/admin/admin-families.js');
@@ -2681,7 +2687,7 @@ describe('Schedule tab shows the invoice\'s own amount, never a second estimate 
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const scheduleJs = read('js/parent/parent-schedule.js');
-    const migration  = read('supabase/migrations/20260829153628_parent_read_public_settings_keys.sql');
+    const migration  = readMigration('parent_read_public_settings_keys');
 
     test('psMonthBlock prints billing_invoices.final_amount whenever an invoice exists', () => {
         const start = scheduleJs.indexOf('function psMonthBlock(');
@@ -2721,7 +2727,7 @@ describe('Schedule tab shows the invoice\'s own amount, never a second estimate 
 describe('TRUNCATE is not a grant any browser role holds', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260829154130_revoke_truncate_from_authenticated.sql');
+    const migration = readMigration('revoke_truncate_from_authenticated');
 
     test('the sweep revokes TRUNCATE from anon, authenticated AND public', () => {
         expect(migration.includes('revoke truncate on %s from anon, authenticated, public')).toBe(true);
@@ -2759,7 +2765,7 @@ describe('TRUNCATE is not a grant any browser role holds', () => {
 describe('childcare statement', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/family_care_statement.sql');
+    const migration = readMigration('family_care_statement');
     const page = read('js/statement-print.js');
 
     test('total paid is money received, never money billed', () => {
@@ -2897,7 +2903,7 @@ describe('Authorize.net is fully retired — one processor, no silent second pat
     });
 
     test('the retired reconciliation cron is unscheduled by a committed migration', () => {
-        const mig = read('supabase/migrations/20260830211423_retire_authorizenet_processor.sql');
+        const mig = readMigration('retire_authorizenet_processor');
         expect(mig.includes("cron.unschedule('reconcile-anet-payments')")).toBe(true);
         // reconcile-stax-payments must not be touched by the same migration.
         expect(mig.includes("unschedule('reconcile-stax-payments')")).toBe(false);
@@ -2964,13 +2970,13 @@ describe('staff credentials', () => {
     // migration file — which a future edit is more likely to touch than the
     // live function — can't drift back to the unsafe form.
     test('admin_list_staff_credentials guards the NULL-admin_role() case', () => {
-        const mig = read('supabase/migrations/20260902030420_add_staff_credentials.sql');
+        const mig = readMigration('add_staff_credentials');
         expect(mig.includes("COALESCE(admin_role(), '') <> 'full'")).toBe(true);
         expect(mig.includes("IF admin_role() <> 'full' THEN")).toBe(false);
     });
 
     test('the table has no anon/authenticated grant — every access is a SECURITY DEFINER RPC', () => {
-        const mig = read('supabase/migrations/20260902030420_add_staff_credentials.sql');
+        const mig = readMigration('add_staff_credentials');
         expect(mig.includes('REVOKE ALL ON staff_credentials FROM anon, authenticated, PUBLIC')).toBe(true);
     });
 
@@ -2990,7 +2996,7 @@ describe('staff credentials', () => {
     });
 
     test('the storage bucket is private and gated to a full admin only', () => {
-        const mig = read('supabase/migrations/20260902030420_add_staff_credentials.sql');
+        const mig = readMigration('add_staff_credentials');
         expect(mig.includes("'staff-credentials', false")).toBe(true);
         expect(mig.includes("public.admin_role() = 'full'")).toBe(true);
     });
@@ -3000,7 +3006,7 @@ describe('staff credentials', () => {
 describe('SECURITY DEFINER critical hotfix', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260908182913_security_definer_critical_hotfix.sql');
+    const migration = readMigration('security_definer_critical_hotfix');
     const uncommented = migration
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*--.*$/gm, '');
@@ -3108,7 +3114,7 @@ describe('payment import duplicate guard and coverage', () => {
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const billing = read('js/admin/admin-billing.js');
     const hub = read('js/admin/admin-finance-hub.js');
-    const coverage = read('supabase/migrations/center_payment_coverage.sql');
+    const coverage = readMigration('center_payment_coverage');
 
     test('a re-imported ProCare row is skipped, not inserted twice', () => {
         // A doubled payment inflates a family's childcare statement, which is
@@ -3229,7 +3235,7 @@ describe('payment import duplicate guard and coverage', () => {
         // The pilot setting lives entirely in admin-finance-hub.js; the
         // statement's own refusal logic must not reference it at all — a
         // real family's real statement must never say a number that's short.
-        const stmtFn = read('supabase/migrations/family_care_statement.sql');
+        const stmtFn = readMigration('family_care_statement');
         expect(stmtFn.includes('billing_coverage_start_month')).toBe(false);
     });
 
@@ -3876,7 +3882,7 @@ describe('At-ratio — the same boundary on every screen', () => {
     // to let the public set tour_*, this is the test that should make them
     // stop and think about who the caller is.
     test('the public submit RPC still excludes every admin-controlled field', () => {
-        const mig = read('supabase/migrations/fix_public_waitlist_submit_APPLIED.sql');
+        const mig = readMigration('fix_public_waitlist_submit');
         const insert = /INSERT INTO waitlist_applications \(([\s\S]*?)\)\s*VALUES/.exec(mig);
         if (!insert) throw new Error('could not find the allow-list in the migration');
         const cols = insert[1];
@@ -4625,6 +4631,99 @@ describe('Before & After Care — the combined afternoon', () => {
         expect(/rpc\(\s*['"`][^'"`]*program_(enrolments|attendance)/.test(code)).toBe(false);
         // It does still tell the reader what to build.
         expect(src.includes('program_enrolments')).toBe(true);
+    });
+});
+
+
+// ============================================================
+// MIGRATION LEDGER HYGIENE
+// ============================================================
+// The drift that broke the Supabase Preview check on every commit to main
+// was invisible for months because nothing in the repo could see it: the
+// filenames said one version, the database had recorded another, and no test
+// compared the two. These assertions are that comparison.
+describe('Migration ledger hygiene', () => {
+    const fsx = require('fs');
+    const pathx = require('path');
+    const repoRoot = pathx.resolve(__dirname, '..', '..');
+    const MIG = pathx.join(repoRoot, 'supabase', 'migrations');
+    const { checkMigrations } = require('../../scripts/check-migrations.js');
+
+    test('every applied version has a file, and every file was applied', () => {
+        const problems = checkMigrations();
+        // The message matters more than the count — a failure here should say
+        // which version drifted, not just that something did.
+        expect(problems.join('\n') || 'clean').toBe('clean');
+    });
+
+    test('the check actually fails when a version drifts', () => {
+        // A guard nobody has watched fail is a guard you are trusting on
+        // faith. Move one real file to a version production never applied and
+        // confirm the checker notices, then put it back.
+        const real = fsx.readdirSync(MIG).find(f => /^\d{14}_/.test(f));
+        const moved = pathx.join(MIG, '29991231235959_drift_canary.sql');
+        fsx.renameSync(pathx.join(MIG, real), moved);
+        try {
+            const problems = checkMigrations();
+            expect(problems.some(p => p.includes('29991231235959'))).toBe(true);
+            expect(problems.some(p => p.includes(real.slice(0, 14)))).toBe(true);
+        } finally {
+            fsx.renameSync(moved, pathx.join(MIG, real));
+        }
+        expect(checkMigrations().length).toBe(0);
+    });
+
+    test('nothing that must not run carries a version prefix', () => {
+        // A version prefix is what makes `supabase db push` try to execute a
+        // file. Proposals, rollbacks and verification queries must never have
+        // one — a PROPOSED_ migration that gained a timestamp would apply
+        // unreviewed schema to a live childcare database.
+        //
+        // HISTORICAL_ is exempt: three of those files carry the timestamp
+        // they were written with in June, before the ledger existed
+        // (HISTORICAL_20260603_add_room_id_to_clock_events.sql). Keeping it is
+        // useful — it dates the file — and the leading word is what disarms
+        // it, because the CLI only recognizes a version at the very start of
+        // the name.
+        for (const f of fsx.readdirSync(MIG)) {
+            if (!f.endsWith('.sql')) continue;
+            if (!/^(PROPOSED|ROLLBACK|VERIFY)_/.test(f)) continue;
+            expect(`${f}: ${/^\w+?_\d{8,14}_/.test(f)}`).toBe(`${f}: false`);
+        }
+        // Whatever the prefix, no file may begin with a bare version unless
+        // that version is one production actually applied — which is the
+        // first assertion in this block.
+        for (const f of fsx.readdirSync(MIG)) {
+            if (!f.endsWith('.sql')) continue;
+            expect(`${f}: ${/^(PROPOSED|ROLLBACK|VERIFY|HISTORICAL)_|^\d{14}_/.test(f)}`)
+                .toBe(`${f}: true`);
+        }
+    });
+
+    test('the snapshot is the committed record, not a guess', () => {
+        const raw = fsx.readFileSync(pathx.join(MIG, 'APPLIED_LEDGER.tsv'), 'utf8');
+        const rows = raw.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+        expect(rows.length > 100).toBe(true);
+        // Every row is version<TAB>name, and versions are unique and sorted —
+        // an unsorted or duplicated ledger means it was hand-edited.
+        const versions = rows.map(r => r.split('\t')[0]);
+        expect(versions.every(v => /^\d{14}$/.test(v))).toBe(true);
+        expect(new Set(versions).size).toBe(versions.length);
+        expect(versions.join()).toBe([...versions].sort().join());
+    });
+
+    test('the purge migration that never ran is applied and recorded', () => {
+        // The one real casualty of the drift: client_error_log promised a
+        // 90-day retention window in its own header and never got the
+        // function that enforces it, because the failure that would have
+        // said so was lost in 114 lines of noise.
+        const sql = readMigration('purge_client_error_log');
+        expect(/CREATE OR REPLACE FUNCTION public\.purge_client_error_log/.test(sql)).toBe(true);
+        expect(/REVOKE EXECUTE[^;]*FROM PUBLIC, anon/.test(sql)).toBe(true);
+        expect(/GRANT\s+EXECUTE[^;]*TO authenticated/.test(sql)).toBe(true);
+        // And it is in the ledger, so it is no longer pending.
+        const ledger = fsx.readFileSync(pathx.join(MIG, 'APPLIED_LEDGER.tsv'), 'utf8');
+        expect(/\tpurge_client_error_log$/m.test(ledger)).toBe(true);
     });
 });
 

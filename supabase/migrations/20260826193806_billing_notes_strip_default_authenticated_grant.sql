@@ -1,0 +1,29 @@
+-- ============================================================
+-- LEDGER PLACEHOLDER — NO STATEMENTS, BY DESIGN
+-- ============================================================
+-- Version : 20260826193806
+-- Name    : billing_notes_strip_default_authenticated_grant
+--
+-- This migration WAS applied to production. Its SQL was never committed
+-- under this version number, so the Supabase CLI reported it as
+-- "Remote migration versions not found in local migrations directory"
+-- and the Supabase Preview check failed on every commit to main.
+--
+-- This file closes that gap HONESTLY: it records that the version exists
+-- and says where its DDL actually lives. It deliberately contains no
+-- executable statements, because inventing SQL to match a schema nobody
+-- captured would be worse than the gap — a rebuild would then differ from
+-- production silently instead of loudly.
+--
+-- ⚠️ THE MIGRATIONS DIRECTORY IS NOT A REBUILD SOURCE. It has not been one
+-- since before the ledger started (see supabase/migrations/README.md).
+-- To reproduce this database, restore a backup; do not replay this folder.
+--
+-- Where the DDL actually lives: NOWHERE IN THIS REPOSITORY.
+--
+-- Applied straight to production — most likely through the Supabase SQL
+-- Editor or dashboard — and never written down here. The live schema is
+-- the only record of what it did. Inspect the objects directly if you
+-- need to know.
+--
+-- ============================================================

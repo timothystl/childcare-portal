@@ -20,7 +20,7 @@ export interface PurgeRpcClient {
 
 /**
  * Calls purge_client_error_log() (see
- * supabase/migrations/20260913160000_purge_client_error_log.sql for the
+ * supabase/migrations/20260915134514_purge_client_error_log.sql for the
  * 90-day retention window and why) and turns the result into an HTTP
  * Response. No CORS headers: this is a server-to-server cron caller, not a
  * browser (see _shared/http.ts's json() doc comment on that distinction).
