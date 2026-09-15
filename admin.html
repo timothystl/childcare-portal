@@ -2244,6 +2244,19 @@
                 </div>
             </section>
 
+            <!-- Aftercare Billing. Records that a specific child attended —
+                 the write path Before & After Care (Classrooms → Daily)
+                 names as missing. Lives in Finance, not Classrooms, because
+                 it writes real charges to a family's invoice — the same
+                 reason ProCare Import and Discounts & Scholarships sit here
+                 rather than in the staff-visible Daily group.
+                 js/admin/admin-aftercare-billing.js. -->
+            <section class="admin-section" id="aftercareBillingSection">
+                <h2>💳 Aftercare billing</h2>
+                <p class="section-desc">Record who attended before or after care today &mdash; a full-day Goose/Turtle/Owl booking is excluded automatically, since that afternoon is already paid for.</p>
+                <div id="acbBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <!-- Kids Discount Pricing Report -->
             <section class="admin-section collapsible-section" id="discountPricingSection">
                 <h2>🏷️ Kids Discount Pricing Report</h2>

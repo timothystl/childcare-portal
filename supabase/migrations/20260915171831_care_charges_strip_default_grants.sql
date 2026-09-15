@@ -1,0 +1,21 @@
+-- ============================================================
+-- APPLIED TO PRODUCTION 2026-09-15 — reconciling ledger drift
+-- ============================================================
+-- See 20260915171800_before_after_care_charges.sql's header for why this
+-- file exists and how it was reconstructed rather than replayed verbatim.
+--
+-- This project's default privileges (`ALTER DEFAULT PRIVILEGES ... GRANT ALL
+-- ON TABLES TO anon, authenticated`, set up at the project level, confirmed
+-- live via pg_default_acl) hand every new table in `public` full CRUD grants
+-- to `anon` the moment `CREATE TABLE` runs — before RLS or any policy exists
+-- to narrow it. `care_charges` names children and sets a dollar amount; an
+-- anon table grant on it, even briefly, is the exact class of mistake this
+-- repo has already paid for once (see the R27 note in
+-- PROPOSED_before_after_care_charges.sql's git history). This migration
+-- closes that window for `care_charges` specifically.
+--
+-- Live state confirmed via information_schema.role_table_grants: anon holds
+-- no privilege at all on care_charges; authenticated keeps full table-level
+-- CRUD, gated down to admin-only by the "admin any role" RLS policy from the
+-- prior migration. Idempotent — safe if ever re-run.
+REVOKE ALL ON public.care_charges FROM anon;

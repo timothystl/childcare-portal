@@ -4664,12 +4664,15 @@ describe('Before & After Care — the combined afternoon', () => {
         expect(/enrolment in a <em>program<\/em>/i.test(ui)).toBe(false);
     });
 
-    // The proposal must stay a proposal: no version prefix, loudly marked,
-    // and no anon policy over a table that names children and sets a price.
-    test('the proposed migration is marked unapplied and opens no anon door', () => {
+    // care_charges shipped to production 2026-09-15 (versions 20260915171800
+    // and 20260915171831 — see supabase/migrations/README.md's "ledger
+    // placeholder" note for why these are reconstructions, not a replay of
+    // the original SQL Editor statements). It must still open no anon door
+    // over a table that names children and sets a price.
+    test('the applied care_charges table opens no anon door', () => {
         const mig = fs.readFileSync(path.join(repoRoot,
-            'supabase/migrations/PROPOSED_before_after_care_charges.sql'), 'utf8');
-        expect(/NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+            'supabase/migrations/20260915171800_before_after_care_charges.sql'), 'utf8');
+        expect(/APPLIED TO PRODUCTION/.test(mig)).toBe(true);
         // Policies name `authenticated`, never `public`/`anon`. Checked
         // against the DDL with comments stripped — the file EXPLAINS why
         // `TO public` is wrong, and a naive search matches that sentence.
@@ -4680,15 +4683,84 @@ describe('Before & After Care — the combined afternoon', () => {
         // One table, and it is a charge. The enrolment table is gone, not
         // renamed — a second table would be the room model wearing a hat.
         expect((ddl.match(/CREATE TABLE/g) || []).length).toBe(1);
-        expect(/program_enrolments/.test(mig)).toBe(true);   // explains what it replaced
-        expect(/CREATE TABLE[^;]*program_enrolments/.test(ddl)).toBe(false);
         // The rate is frozen into the row, and a waiver has to say why.
         expect(/rate_charged/.test(ddl)).toBe(true);
         expect(/waived_reason IS NOT NULL/.test(ddl)).toBe(true);
-        // And nothing shipped DEPENDS on it.
+
+        const grants = fs.readFileSync(path.join(repoRoot,
+            'supabase/migrations/20260915171831_care_charges_strip_default_grants.sql'), 'utf8');
+        expect(/REVOKE ALL ON public\.care_charges FROM anon/.test(grants)).toBe(true);
+
+        // And nothing in the read-only floor screen DEPENDS on it — that
+        // screen states the gap; the write path is its own screen (below).
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
         expect(/from\(\s*['"`]care_charges/.test(code)).toBe(false);
+    });
+});
+
+
+// ============================================================
+// AFTERCARE BILLING — the write path for care_charges
+// ============================================================
+// The proposed migration must stay a proposal until Andrew applies it by
+// hand (AGENTS.md), and every new function it defines must exclude anon —
+// same posture as the table itself.
+describe('Aftercare Billing — recording a charge', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const mig = fs.readFileSync(path.join(repoRoot,
+        'supabase/migrations/PROPOSED_bill_after_care_charges.sql'), 'utf8');
+    const screenSrc = fs.readFileSync(path.join(repoRoot,
+        'js/admin/admin-aftercare-billing.js'), 'utf8');
+    const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+
+    test('the billing migration is marked unapplied and opens no anon door', () => {
+        expect(/PROPOSED — NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+        expect(/GRANT EXECUTE[^;]*TO\s+(public|anon)\b/i.test(ddl)).toBe(false);
+        ['record_care_charge', 'waive_care_charge', 'admin_create_prek_child'].forEach(fn => {
+            const revoke = new RegExp(`REVOKE ALL ON FUNCTION public\\.${fn}\\([^)]*\\) FROM PUBLIC, anon`);
+            const grant  = new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${fn}\\([^)]*\\) TO authenticated`);
+            expect(revoke.test(ddl)).toBe(true);
+            expect(grant.test(ddl)).toBe(true);
+        });
+    });
+
+    // The whole point of this migration: a family with only Pre-K after-care
+    // charges (no MDO registrations at all) must still be billed, and a
+    // child already covered by full-day tuition must never be billed twice.
+    test('the invoice functions exclude a child already covered by full-day tuition', () => {
+        ['compute_family_month_charges', 'compute_family_month_charges_itemized'].forEach(fn => {
+            expect(new RegExp(`CREATE OR REPLACE FUNCTION (public\\.)?${fn}\\(`).test(ddl)).toBe(true);
+        });
+        // The exclusion reads PM_COMBINED_ROOM_IDS's own three rooms, and
+        // must appear once per function (compute + itemized), plus once more
+        // inside record_care_charge()'s own entry-side refusal.
+        const occurrences = (ddl.match(/'goose', 'turtle', 'owl'/g) || []).length;
+        expect(occurrences).toBe(3);
+        // care_charges is billed by its own family_id, never by name-matching
+        // through registrations — that's what makes a Pre-K-only family (no
+        // registrations at all) billable in the first place.
+        expect(/cc\.family_id = p_family_id/.test(ddl)).toBe(true);
+    });
+
+    test('record_care_charge() refuses before inserting, not after', () => {
+        const fnBody = ddl.split('CREATE OR REPLACE FUNCTION public.record_care_charge')[1].split('$$;')[0];
+        const blockIdx = fnBody.indexOf('RAISE EXCEPTION');
+        const insertIdx = fnBody.indexOf('INSERT INTO care_charges');
+        expect(blockIdx).toBeGreaterThan(-1);
+        expect(insertIdx).toBeGreaterThan(-1);
+        expect(blockIdx).toBeLessThan(insertIdx);
+    });
+
+    // The screen itself must never let the office bypass the RPC with a
+    // direct table write — record_care_charge()/waive_care_charge() are the
+    // only path, so the "no anon door" guarantee actually holds in practice.
+    test('the screen writes only through the RPCs, never a direct table write', () => {
+        const code = screenSrc.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/\.from\(\s*['"`]care_charges['"`]\s*\)\s*\.\s*(insert|update|upsert|delete)\s*\(/.test(code)).toBe(false);
+        expect(/recordCareCharge\(/.test(code)).toBe(true);
+        expect(/waiveCareCharge\(/.test(code)).toBe(true);
     });
 });
 

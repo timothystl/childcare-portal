@@ -228,6 +228,15 @@ const AP_TOOLS = [
       blurb: 'Bulk-import payments exported from ProCare. Shows every row for review first, skips rows already recorded, and lets you assign any child it could not match.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
+    // The write half of Before & After Care (Classrooms → Daily): records
+    // that a specific child attended, which bills that child's own family —
+    // see js/admin/admin-aftercare-billing.js. Lives in Finance rather than
+    // next to Before & After Care itself, same reasoning as ProCare Import
+    // and Discounts & Scholarships above: `group: 'Daily'` on the Classrooms
+    // tab is the staff-role's read-only surface (apToolAvailable()'s
+    // `role === 'staff'` gate), and this writes real money.
+    { key: 'aftercareBilling', pane: 'finance', section: 'aftercareBillingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💳', name: 'Aftercare Billing',
+      blurb: 'Record who attended before or after care today, and bill their family for it.' },
 
     // ── Finance · Bookkeeper group — now EMPTY, and that's the point ──
     // Ten tools used to live in this sidebar group across two sessions and
@@ -1103,6 +1112,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'newsletter' && typeof renderNewsletterTool === 'function') renderNewsletterTool();
         if (tool.key === 'signatures' && typeof renderSignatureRecordTool === 'function') renderSignatureRecordTool();
         if (tool.key === 'beforeAfter' && typeof renderBeforeAfterCareTool === 'function') renderBeforeAfterCareTool();
+        if (tool.key === 'aftercareBilling' && typeof renderAftercareBillingTool === 'function') renderAftercareBillingTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

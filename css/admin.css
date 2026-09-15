@@ -7175,3 +7175,58 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 @media (max-width:1100px){
   #beforeAfterCareSection .bac-cols{grid-template-columns:minmax(0,1fr);}
 }
+
+/* ============================================================
+   Aftercare Billing — Finance → Money In
+   The write half of Before & After Care above; same visual language.
+   ============================================================ */
+
+#aftercareBillingSection .acb-toolbar{display:flex;gap:16px;align-items:flex-end;
+  flex-wrap:wrap;margin-bottom:18px;}
+#aftercareBillingSection .acb-ctrl{display:flex;flex-direction:column;gap:4px;
+  font-size:.74em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);}
+#aftercareBillingSection .acb-ctrl input,
+#aftercareBillingSection .acb-ctrl select{font-family:var(--font-body);font-size:1.1em;
+  padding:8px 11px;border:1px solid var(--border);border-radius:8px;
+  background:var(--white);color:var(--text);font-weight:400;text-transform:none;letter-spacing:0;}
+#aftercareBillingSection .acb-day{font-family:var(--font-head);font-size:1.1em;
+  font-weight:700;color:var(--navy);}
+
+#aftercareBillingSection .acb-cols{display:grid;
+  grid-template-columns:minmax(340px,1.2fr) minmax(280px,1fr);gap:20px;align-items:start;}
+#aftercareBillingSection .acb-col{display:flex;flex-direction:column;gap:20px;min-width:0;}
+
+#aftercareBillingSection #acbSearch{width:calc(100% - 44px);margin:0 22px 8px;
+  padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:.92em;}
+
+#aftercareBillingSection .acb-results{padding:0 22px;}
+#aftercareBillingSection .acb-list{padding:6px 22px 16px;}
+#aftercareBillingSection .acb-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;
+  gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ap-border-lt);}
+#aftercareBillingSection .acb-row:last-child{border-bottom:0;}
+#aftercareBillingSection .acb-avatar{width:32px;height:32px;border-radius:50%;
+  background:var(--sun);color:var(--navy);display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-head);font-weight:700;font-size:.85em;flex-shrink:0;}
+#aftercareBillingSection .acb-name{font-size:.88em;font-weight:800;color:var(--navy);
+  display:flex;flex-direction:column;gap:1px;}
+#aftercareBillingSection .acb-name small{font-size:.76em;font-weight:400;color:var(--text-muted);}
+#aftercareBillingSection .acb-program{font-size:.78em;color:var(--text-muted);}
+#aftercareBillingSection .acb-tag{border-radius:999px;padding:2px 9px;font-size:.72em;font-weight:800;white-space:nowrap;}
+#aftercareBillingSection .acb-tag-billed{background:var(--green-pale);color:var(--green-dark);border:1px solid var(--green-lt);}
+#aftercareBillingSection .acb-tag-waived{background:var(--linen);color:var(--text-muted);border:1px solid var(--border);text-decoration:line-through;}
+#aftercareBillingSection .acb-tag-blocked{background:var(--tang-pale);color:var(--tang-dark);border:1px solid var(--tang);}
+
+#aftercareBillingSection .acb-quickadd-wrap{padding:10px 22px 18px;}
+#aftercareBillingSection .acb-quickadd{background:var(--linen);border:1.5px dashed var(--border);
+  border-radius:10px;padding:14px 16px;}
+#aftercareBillingSection .acb-quickadd-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
+#aftercareBillingSection .acb-quickadd label{display:flex;flex-direction:column;gap:4px;
+  font-size:.76em;font-weight:700;color:var(--text-muted);}
+#aftercareBillingSection .acb-quickadd input{font-family:var(--font-body);font-size:.95em;
+  padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-weight:400;color:var(--text);}
+#aftercareBillingSection .acb-quickadd-actions{display:flex;gap:10px;margin-top:12px;}
+
+@media (max-width:1100px){
+  #aftercareBillingSection .acb-cols{grid-template-columns:minmax(0,1fr);}
+  #aftercareBillingSection .acb-quickadd-grid{grid-template-columns:1fr;}
+}

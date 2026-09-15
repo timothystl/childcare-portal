@@ -1905,6 +1905,60 @@ async function saveProgramSettings({ programs, fees }) {
 }
 
 // ============================================================
+// CARE CHARGES — before/after care, billed per attendance (not a room)
+// ============================================================
+
+/** Every care_charges row recorded for one date, newest first. Admin-only via RLS. */
+async function fetchCareCharges(date) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('care_charges')
+        .select('id, student_id, family_id, program_id, care_date, rate_charged, waived, waived_reason, recorded_by, created_at, students(child_name), families(parent_name, parent_email)')
+        .eq('care_date', date)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+/**
+ * Records that a child attended a before/after care session, billing that
+ * child's own family. Refuses (server-side) a child already covered by a
+ * full-day booking in the combined afternoon rooms that date.
+ */
+async function recordCareCharge(studentId, programId, careDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('record_care_charge', {
+        p_student_id: studentId, p_program_id: programId, p_care_date: careDate,
+    });
+    if (error) throw error;
+    return data;
+}
+
+/** Waives a recorded charge in place — it stays visible on the invoice with its reason. */
+async function waiveCareCharge(chargeId, reason) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.rpc('waive_care_charge', {
+        p_charge_id: chargeId, p_reason: reason,
+    });
+    if (error) throw error;
+}
+
+/**
+ * Finds-or-creates a family by parent email, then adds a new child under it —
+ * for a Timothy Lutheran Pre-K child myMDO has never seen before. Returns
+ * { family_id, student_id }.
+ */
+async function adminCreatePrekChild({ parentName, parentEmail, parentPhone, childName, childDob }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_create_prek_child', {
+        p_parent_name: parentName, p_parent_email: parentEmail, p_parent_phone: parentPhone || '',
+        p_child_name: childName, p_child_dob: childDob || null,
+    });
+    if (error) throw error;
+    return data;
+}
+
+// ============================================================
 // SETTINGS — room rates, weekly rates (stored in `settings` table)
 // ============================================================
 
