@@ -4193,6 +4193,79 @@ describe('Payroll overview — clock exceptions and the pay calendar', () => {
 });
 
 
+// ============================================================
+// PROGRAMS — an add-on is not a room
+// (design handoff: Capacity & Fill, 4d)
+// ============================================================
+// The invariant worth protecting: before/after care and camps must never
+// leak into room capacity, the ratio math, the waitlist or the fill
+// forecast. If someone ever "simplifies" this by adding a program to ROOMS,
+// six morning children start appearing in the enrollment numbers and
+// double-counting against the room the same child sits in at 9:01.
+describe('Programs & add-ons — never a room', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const sb = read('js/supabase.js');
+
+    test('no program id is also a ROOMS id', () => {
+        const progIds = [...sb.matchAll(/^\s{8}id:\s*'([a-z_]+)',/gm)].map(m => m[1]);
+        const roomsBlock = sb.slice(sb.indexOf('const ROOMS = ['), sb.indexOf('function getSortedRooms'));
+        const roomIds = [...roomsBlock.matchAll(/id:\s*'([a-z_]+)'/g)].map(m => m[1]);
+        ['before_care', 'after_care', 'camp'].forEach(id => {
+            if (roomIds.includes(id)) throw new Error(`${id} is a room; it must not be`);
+        });
+        // And the program list really does declare them.
+        ['before_care', 'after_care', 'after_care_weekly', 'camp']
+            .forEach(id => expect(progIds.includes(id)).toBe(true));
+    });
+
+    // After care's ratio has exactly one definition. A literal here is the
+    // bug: the staffing grid and the attendance board read
+    // PM_COMBINED_RATIO, and a second editable copy lets them disagree.
+    test('after care derives its ratio from PM_COMBINED_RATIO, never a literal', () => {
+        const block = sb.slice(sb.indexOf("id:        'after_care',"), sb.indexOf("id:        'after_care_weekly'"));
+        expect(/ratio:\s*PM_COMBINED_RATIO/.test(block)).toBe(true);
+        expect(/ratio:\s*\d/.test(block)).toBe(false);
+        expect(/pooledRooms:\s*PM_COMBINED_ROOM_IDS/.test(block)).toBe(true);
+
+        // The Settings screen shows it rather than editing it, and force-sets
+        // it back on save so a hand-edited DOM cannot persist a second value.
+        const admin = read('js/admin/admin-programs.js');
+        expect(/ac\.ratio\s*=\s*PM_COMBINED_RATIO/.test(admin)).toBe(true);
+    });
+
+    // Programs are config, not a table — the whole reason this needs no
+    // migration. If someone reaches for a new table, this fails.
+    test('programs live in the settings key/value document, not a new table', () => {
+        expect(/upsert\(\{\s*key:\s*'programs'/.test(sb)).toBe(true);
+        expect(/from\('programs'\)/.test(sb)).toBe(false);
+        expect(/from\('program_enrollments'\)/.test(sb)).toBe(false);
+    });
+
+    // Neither surface may quote a price of its own — the office sets rates
+    // in one place and both screens read it.
+    test('neither the Settings table nor the parent card hardcodes a rate', () => {
+        const parent = read('js/parent/parent-programs.js');
+        const admin  = read('js/admin/admin-programs.js');
+        [['parent card', parent], ['settings table', admin]].forEach(([name, src]) => {
+            const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+            // No dollar literal anywhere in the rendering code.
+            if (/\$\d/.test(code)) throw new Error(`${name} contains a hardcoded price`);
+            expect(/loadProgramSettings/.test(code)).toBe(true);
+        });
+    });
+
+    // Booking is not wired; the parent card must say so rather than render a
+    // dead submit, the same rule the drop-in card follows.
+    test('the parent card writes nothing and says booking is not open', () => {
+        const parent = read('js/parent/parent-programs.js');
+        expect(/sbClient\s*\.\s*from\(/.test(parent)).toBe(false);
+        expect(parent.includes("isn't switched on yet")).toBe(true);
+    });
+});
+
+
 // Settle any async test bodies before counting up. Every test() whose body
 // returned a promise is in _pending, already wrapped so it cannot reject here
 // — so this only ever waits, it never throws.

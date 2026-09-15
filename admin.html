@@ -1247,6 +1247,23 @@
                         </div>
                     </div>
 
+                    <!-- Programs & add-ons (design handoff: Capacity & Fill,
+                         4d) — the second table the handoff asks for, beside
+                         Rooms & rates rather than inside it. Before/after care
+                         and camps are add-ons to a day, not rooms: children in
+                         one never appear in room capacity, the waitlist or the
+                         fill forecast. Stored in settings.programs, the same
+                         key/value pattern room_rates already uses.
+                         js/admin/admin-programs.js. -->
+                    <div class="ap-panel" id="setProgramsCard">
+                        <div class="ap-panel-head"><h3>Programs &amp; add-ons</h3></div>
+                        <div class="set-card-body">
+                            <div id="programsTableWrap">
+                                <p class="empty-hint">Loading…</p>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- Policies & enrollment forms — re-enabled 2026-08-28 (was

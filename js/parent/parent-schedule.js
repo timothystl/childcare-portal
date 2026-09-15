@@ -159,6 +159,14 @@ function psRender() {
     wrap.querySelectorAll('.ps-switcher .pt-childbtn').forEach(b => {
         b.addEventListener('click', () => { psActiveChild = b.dataset.child; psRender(); });
     });
+
+    // Programs are per child (after care pools only the three older rooms),
+    // so this re-runs on every switch, the same way the Today feed's
+    // drop-in card does.
+    if (typeof ppLoad === 'function') {
+        ppSetup?.();
+        ppLoad(children.find(c => c.child === psActiveChild) || children[0]);
+    }
 }
 
 function psChildCard(child, closed, invoiceByMonth) {

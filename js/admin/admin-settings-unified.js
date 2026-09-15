@@ -29,6 +29,12 @@ function _setEl(id) { return document.getElementById(id); }
 
 async function renderSettingsUnifiedTool() {
     _renderRoomsTable();
+    // Programs & add-ons (design handoff: Capacity & Fill, 4d) — its own
+    // card beside Rooms & rates, over settings.programs. Async and
+    // best-effort: a programs read that fails must not stop the rest of
+    // Settings rendering.
+    if (typeof renderProgramsTable === 'function') renderProgramsTable();
+    if (typeof setupProgramsTable === 'function') setupProgramsTable();
     await _setLoadAuditCaptions();
     _setBindRoomsSave();
     // ChMS Finance API tester — moved here from its own Finance/Bookkeeper

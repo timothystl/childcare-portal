@@ -187,6 +187,10 @@ const ENTRIES = [
                 // psDayRate() for the rate it quotes. Before parent-today.js,
                 // which calls pdiSetup()/pdiRender() as it builds the feed.
                 'js/parent/parent-dropin.js',
+                // After parent-schedule.js, which calls ppSetup()/ppLoad()
+                // once it knows which child is showing. Reads
+                // loadProgramSettings() from js/supabase.js.
+                'js/parent/parent-programs.js',
         'js/parent/parent-today.js',
                 // After parent-today: reuses its PT_EVENT label map, ptEsc/ptTime/
                 // ptToday helpers, and ptChildren/ptActiveId.
@@ -238,6 +242,11 @@ const ENTRIES = [
                 'js/admin/admin-who-owes.js',
                 'js/admin/admin-finance-home.js',
                 'js/admin/admin-finance-hub.js',
+                // After admin-finance-hub.js (uses its _fhMonthLabel) and
+                // admin-reports.js (calls _buildFamilyBillingData) — the
+                // drawer's per-child breakdown. It computes nothing of its
+                // own; see its header.
+                'js/admin/admin-family-transactions.js',
                 'js/admin/admin-finance-bookkeeper.js',
                 'js/admin/admin-staffing.js',
                 // After admin-reports.js (reads _buildPayrollPeriodList,
@@ -248,6 +257,11 @@ const ENTRIES = [
                 'js/admin/admin-payroll-home.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-settings-unified.js',
+                // After admin-settings-unified.js, which calls
+                // renderProgramsTable() as it builds the Settings page.
+                // Reads PROGRAMS/loadProgramSettings and PM_COMBINED_RATIO
+                // from js/supabase.js.
+                'js/admin/admin-programs.js',
                 'js/admin/admin-waitlist.js',
                 // After admin-waitlist.js: Fill the Rooms calls that module's
                 // wlpRunAllocation()/wlpRankedKids()/wlRoomLabel() rather than

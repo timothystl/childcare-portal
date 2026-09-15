@@ -6724,3 +6724,117 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
   #apPayrollTabOverview .ph-run-right{text-align:left;width:100%;}
   #apPayrollTabOverview .ph-exc{flex-wrap:wrap;}
 }
+
+/* ============================================================
+   Family transactions — Finance Hub drawer
+   (design handoff: Capacity & Fill, 4c)
+   ============================================================
+   Lives inside the existing #fhDrawerBody, so it inherits the
+   drawer's own width and padding; only the summary block, the
+   per-child grouping and the line grid are new. */
+
+#fhDrawerBody .ft-summary{background:var(--navy);border-radius:12px;padding:18px 20px;
+  margin-bottom:16px;color:var(--white);display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;}
+#fhDrawerBody .ft-sum-main{flex:1 1 180px;}
+#fhDrawerBody .ft-sum-label{font-size:.68em;font-weight:800;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--sun-lt);}
+#fhDrawerBody .ft-sum-n{font-family:var(--font-head);font-size:2em;font-weight:700;
+  line-height:1.1;margin:4px 0 3px;}
+#fhDrawerBody .ft-sum-sub{font-size:.8em;color:rgba(255,255,255,.75);line-height:1.4;}
+#fhDrawerBody .ft-sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;flex:1 1 200px;}
+#fhDrawerBody .ft-sum-grid span{display:block;font-size:.66em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:rgba(255,255,255,.6);}
+#fhDrawerBody .ft-sum-grid strong{font-size:1.02em;font-weight:800;color:var(--white);margin-top:2px;display:block;}
+
+#fhDrawerBody .ft-hint{font-size:.78em;color:var(--text-muted);line-height:1.5;
+  margin:2px 0 12px;text-wrap:pretty;}
+
+#fhDrawerBody .ft-child{border-top:1px solid var(--ap-border-lt);padding:12px 0 4px;}
+#fhDrawerBody .ft-child:first-of-type{border-top:0;}
+#fhDrawerBody .ft-child-head{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;}
+#fhDrawerBody .ft-child-name{font-size:.92em;font-weight:800;color:var(--navy);}
+#fhDrawerBody .ft-child-room{font-size:.78em;color:var(--text-muted);}
+#fhDrawerBody .ft-child-total{margin-left:auto;font-size:.92em;font-weight:800;color:var(--navy);}
+
+#fhDrawerBody .ft-line{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto 78px;
+  gap:10px;align-items:baseline;padding:7px 0 7px 14px;border-top:1px solid var(--linen);}
+#fhDrawerBody .ft-line-label{font-size:.82em;color:var(--text);}
+#fhDrawerBody .ft-line-why{font-size:.74em;color:var(--text-muted);}
+#fhDrawerBody .ft-line-amt{font-size:.82em;font-weight:700;color:var(--navy);text-align:right;}
+#fhDrawerBody .ft-line-amt.is-credit{color:var(--green-text);}
+#fhDrawerBody .ft-line-none{color:var(--text-muted);font-size:.8em;font-style:italic;
+  display:block;padding-left:14px;}
+
+#fhDrawerBody .ft-badge{display:inline-block;border-radius:999px;padding:2px 8px;
+  font-size:.62em;font-weight:800;text-align:center;white-space:nowrap;}
+#fhDrawerBody .ft-badge.is-ok{background:var(--green-pale);color:var(--green-dark);border:1px solid var(--green-lt);}
+#fhDrawerBody .ft-badge.is-warn{background:var(--tang-pale);color:var(--tang-dark);border:1px solid var(--tang-soft);}
+#fhDrawerBody .ft-badge.is-muted{background:var(--warm-gray);color:var(--text-muted);border:1px solid var(--border);}
+
+#fhDrawerBody .ft-family{margin-top:12px;padding-top:10px;border-top:1.5px solid var(--border);}
+#fhDrawerBody .ft-family-title{font-size:.7em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;}
+
+#fhDrawerBody .ft-note{margin-top:12px;background:var(--linen);border-radius:8px;
+  padding:10px 12px;font-size:.78em;color:var(--text-muted);line-height:1.55;}
+#fhDrawerBody .ft-note strong{color:var(--navy);}
+
+#fhDrawerBody .ft-total{display:flex;justify-content:space-between;align-items:baseline;
+  margin-top:12px;padding-top:11px;border-top:1.5px solid var(--navy);
+  font-size:.88em;font-weight:800;color:var(--navy);}
+#fhDrawerBody .ft-total strong{font-family:var(--font-head);font-size:1.25em;}
+
+@media (max-width:560px){
+  #fhDrawerBody .ft-line{grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:'label amt' 'why badge';}
+  #fhDrawerBody .ft-line-label{grid-area:label;}
+  #fhDrawerBody .ft-line-why{grid-area:why;}
+  #fhDrawerBody .ft-line-amt{grid-area:amt;}
+  #fhDrawerBody .ft-badge{grid-area:badge;justify-self:end;}
+  #fhDrawerBody .ft-sum-grid{grid-template-columns:1fr;}
+}
+
+/* ============================================================
+   Programs & add-ons — Settings
+   (design handoff: Capacity & Fill, 4d)
+   ============================================================
+   Same field-grid shape as the Rooms & rates card beside it (.rf-*),
+   deliberately: they are two tables of the same kind of thing and
+   should not read as two different controls. */
+
+#setProgramsCard .pg-rows{display:flex;flex-direction:column;gap:14px;}
+#setProgramsCard .pg-row{border:1px solid var(--border);border-radius:10px;
+  padding:12px 14px;background:var(--white);}
+#setProgramsCard .pg-row.is-off{opacity:.55;background:var(--linen);}
+#setProgramsCard .pg-row-head{display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;margin-bottom:10px;}
+#setProgramsCard .pg-toggle{display:flex;align-items:center;gap:8px;
+  font-weight:800;color:var(--navy);cursor:pointer;font-size:.95em;}
+#setProgramsCard .pg-toggle input{width:17px;height:17px;cursor:pointer;}
+#setProgramsCard .pg-scope{font-size:.78em;color:var(--text-muted);}
+#setProgramsCard .pg-fields{display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px 14px;}
+#setProgramsCard .pg-field{display:flex;flex-direction:column;gap:3px;min-width:0;}
+#setProgramsCard .pg-label{font-size:.7em;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-muted);}
+#setProgramsCard .pg-input{font-family:var(--font-body);font-size:.95em;
+  padding:7px 9px;border:1px solid var(--border);border-radius:7px;
+  background:var(--white);color:var(--text);width:100%;}
+#setProgramsCard .pg-input:focus{outline:none;border-color:var(--navy);
+  box-shadow:0 0 0 3px rgba(1,41,74,.12);}
+#setProgramsCard .pg-unit{font-size:.7em;color:var(--text-muted);}
+/* A value that belongs to another definition and is shown, not edited. */
+#setProgramsCard .pg-locked{display:inline-block;padding:7px 9px;font-size:.88em;
+  font-weight:700;color:var(--text-muted);background:var(--linen);
+  border:1px dashed var(--border);border-radius:7px;}
+#setProgramsCard .pg-locked-note{font-size:.76em;font-weight:400;}
+#setProgramsCard .pg-note{font-size:.78em;color:var(--text-muted);margin:8px 0 0;line-height:1.5;}
+
+#setProgramsCard .pg-fees{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+#setProgramsCard .pg-fees-title{font-size:.7em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:9px;}
+#setProgramsCard .pg-fee{display:flex;justify-content:space-between;align-items:center;
+  gap:14px;padding:7px 0;font-size:.88em;color:var(--text);}
+#setProgramsCard .pg-fee .pg-input{max-width:110px;}
+#setProgramsCard .pg-actions{display:flex;align-items:center;gap:12px;
+  flex-wrap:wrap;margin-top:14px;}

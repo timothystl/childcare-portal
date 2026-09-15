@@ -1921,3 +1921,45 @@ body.pb-modal-open { overflow: hidden; }
   font-family:var(--font-body);cursor:pointer;box-shadow:0 2px 8px rgba(245,183,49,.35);}
 .pt-dropin .pdi-cta-ghost{background:transparent;border:1.5px solid var(--navy);
   box-shadow:none;font-weight:700;}
+
+/* ============================================================
+   Programs — Schedule tab
+   (design handoff: Capacity & Fill, 4d)
+   ============================================================
+   White card under the booked days, not gold: unlike the drop-in
+   card on Today, this is a standing description of what the center
+   offers rather than a time-limited offer. */
+
+.pt-programs{margin-top:16px;}
+.pt-programs .pp-head h3{font-family:var(--font-head);font-size:1.15em;
+  font-weight:700;color:var(--navy);margin:0;}
+.pt-programs .pp-head p{font-size:.9em;color:var(--text-muted);
+  line-height:1.5;margin:4px 0 14px;text-wrap:pretty;}
+
+.pt-programs .pp-card{border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;margin-bottom:12px;}
+.pt-programs .pp-card-head{display:flex;align-items:center;gap:10px;
+  padding:11px 14px;background:var(--linen);border-bottom:1px solid var(--border);}
+.pt-programs .pp-card-name{font-family:var(--font-head);font-weight:700;
+  color:var(--navy);font-size:1.02em;}
+.pt-programs .pp-card-rate{margin-left:auto;font-size:.92em;font-weight:800;color:var(--navy);}
+.pt-programs .pp-card-body{padding:12px 14px;}
+.pt-programs .pp-card-when{font-size:.9em;color:var(--text-muted);
+  line-height:1.5;margin:0 0 11px;}
+
+.pt-programs .pp-days{display:flex;gap:6px;}
+.pt-programs .pp-day{flex:1;background:var(--white);color:var(--text-muted);
+  border:1.5px solid var(--border);border-radius:9px;padding:11px 0;
+  text-align:center;font-size:.88em;font-weight:800;
+  font-family:var(--font-body);cursor:pointer;}
+.pt-programs .pp-day.is-on{background:var(--navy);border-color:var(--navy);color:var(--white);}
+
+.pt-programs .pp-weekly{background:var(--green-pale);border:1.5px solid var(--green-lt);
+  border-radius:9px;padding:10px 12px;font-size:.85em;color:var(--green-dark);
+  line-height:1.5;margin-top:11px;}
+
+.pt-programs .pp-pending{background:var(--white);
+  border:1.5px dashed var(--ap-neutral-bar,#C9C0A8);border-radius:10px;
+  padding:12px 14px;font-size:.88em;color:var(--text-muted);line-height:1.5;}
+.pt-programs .pp-pending strong{display:block;color:var(--navy);margin-bottom:2px;}
+.pt-programs .pp-fee-note{font-size:.82em;color:var(--text-muted);margin:10px 0 0;}
