@@ -4184,6 +4184,62 @@ describe('Payroll overview — clock exceptions and the pay calendar', () => {
         expect(gross).toBe(150 + 2000);   // salaried hours do not add to it
     });
 
+    // ⚠️ Regression, found live on main. The fetch span ran from the LAST
+    // shown period's start to the FIRST one's end. `shown` is in calendar
+    // order — [just closed, still running] — so that inverts the range, and
+    // every .gte()/.lte() below it matches nothing.
+    //
+    // The failure is silent, which is what makes it worth a test: no error
+    // and no empty state, just a fortnight of real work reading as zero
+    // hours, no clock exceptions and $0 estimated gross, on the one screen
+    // whose job is to say whether a period is ready to approve.
+    test('the fetch span runs forwards, so a real period is not read as empty', async () => {
+        const calls = [];
+        const sandbox = {
+            console, escHtml: s => String(s), apInitials: () => 'XX',
+            // _payrollPeriodLabel is stubbed below, so the module never needs
+            // the real month names — but it reads the global, so it has to exist.
+            MONTH_NAMES: ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                          'August', 'September', 'October', 'November', 'December'],
+            document: { getElementById: () => null, querySelectorAll: () => [] },
+            _buildPayrollPeriodList: () => [
+                { start: '2026-08-18', end: '2026-08-31' },
+                { start: '2026-09-01', end: '2026-09-14' },   // just closed
+                { start: '2026-09-15', end: '2026-09-28' },   // still running
+            ],
+            _payrollPeriodLabel: (a, b) => `${a}-${b}`,
+            fetchAllStaff: async () => [
+                { id: 1, active: true, pay_type: 'hourly', hourly_rate: 15, name: 'Kiara Bell' }],
+            // These behave the way PostgREST does: .gte(start).lte(end) with
+            // start after end matches no rows at all.
+            fetchClockEventsForRange: async (a, b) => {
+                calls.push([a, b]);
+                return a > b ? [] : [
+                    { staff_id: 1, work_date: '2026-09-08',
+                      clock_in: '2026-09-08T08:00:00Z', clock_out: '2026-09-08T15:00:00Z' },
+                    { staff_id: 1, work_date: '2026-09-10',
+                      clock_in: '2026-09-10T08:31:00Z', clock_out: null },
+                ];
+            },
+            fetchStaffHours: async () => [],
+            fetchStaffScheduleRange: async (a, b) => (a > b ? []
+                : [{ staff_id: 1, work_date: '2026-09-08', shift: 'AM' }]),
+            fetchTimeOffRequests: async () => [],
+            fetchMdoPayrollApproval: async () => null,
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+
+        const d = await sandbox._phLoad();
+        expect(calls[0][0] <= calls[0][1]).toBe(true);        // start before end
+
+        const closed = d.rows.find(r => !r.open);
+        expect(closed.hours).toBe(7);                          // 08:00-15:00
+        expect(closed.people).toBe(1);
+        expect(closed.gross).toBe(105);                        // 7h at $15
+        expect(closed.exceptions.length).toBe(1);              // the open clock-out
+    });
+
     // Benefits are the church office's, and the handoff is explicit that this
     // screen must not pretend to administer them.
     test('the church-office panel links out and never enrolls anyone', () => {
