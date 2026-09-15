@@ -309,6 +309,7 @@ serve(async (req) => {
             p_note: "Recovered/confirmed by verified Stax webhook",
             p_processor_fee: staxFields.processorFee,
             p_payment_method: staxFields.paymentMethod,
+            p_card_funding_type: staxFields.cardFundingType,
         });
         if (stateErr) return json({ error: "Could not record processor success" }, 500);
         const { data: finalized, error: finalizeErr } = await admin.rpc("stax_finalize_charge", {

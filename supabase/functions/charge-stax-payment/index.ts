@@ -499,7 +499,7 @@ serve(async (req) => {
             status: "ambiguous" | "processor_succeeded" | "failed",
             transactionId?: string,
             note?: string,
-            fields?: { processorFee: number | null; paymentMethod: "card" | "ach" | null },
+            fields?: { processorFee: number | null; paymentMethod: "card" | "ach" | null; cardFundingType: "debit" | "credit" | null },
         ) => {
             const { error } = await admin.rpc("stax_set_charge_state", {
                 p_lock_id: lockId,
@@ -508,6 +508,7 @@ serve(async (req) => {
                 p_note: note || null,
                 p_processor_fee: fields?.processorFee ?? null,
                 p_payment_method: fields?.paymentMethod ?? null,
+                p_card_funding_type: fields?.cardFundingType ?? null,
             });
             if (error) console.error("charge-stax-payment: could not persist processor state", error.code);
             return !error;
@@ -535,11 +536,6 @@ serve(async (req) => {
                 }),
             });
             chargeData = await chargeRes.json().catch(() => ({}));
-            // TEMPORARY DIAGNOSTIC — logged to Supabase's own function logs only
-            // (never a public endpoint), to confirm Stax's real field names for
-            // fee/funding-method before trusting the shared extractor's guess.
-            // Remove this line once confirmed.
-            console.log("DIAG_RAW_STAX_CHARGE_RESPONSE", JSON.stringify(chargeData));
         } catch (_err) {
             await setState("ambiguous", undefined, "Network failure while awaiting Stax response");
             return json({ error: "We couldn't confirm whether your payment went through. Please wait and contact the office before trying again.", ambiguous: true }, 502, ch);

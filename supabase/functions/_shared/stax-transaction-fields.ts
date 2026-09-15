@@ -20,6 +20,10 @@ export interface StaxPaymentFields {
     processorFee: number | null;
     /** 'card' or 'ach', from Stax's payment_method.method ('card'/'bank'). */
     paymentMethod: "card" | "ach" | null;
+    /** 'debit' or 'credit', from Stax's payment_method.bin_type. Only ever
+     *  meaningful alongside paymentMethod === 'card'; an ACH-funded charge
+     *  has no bin_type and this comes back null. */
+    cardFundingType: "debit" | "credit" | null;
 }
 
 export function extractStaxPaymentFields(transaction: unknown): StaxPaymentFields {
@@ -39,5 +43,8 @@ export function extractStaxPaymentFields(transaction: unknown): StaxPaymentField
     const rawMethod = String(methodInfo?.method || t.method || "").toLowerCase();
     const paymentMethod = rawMethod === "card" ? "card" : rawMethod === "bank" ? "ach" : null;
 
-    return { processorFee, paymentMethod };
+    const rawBinType = String(methodInfo?.bin_type || "").toLowerCase();
+    const cardFundingType = rawBinType === "debit" ? "debit" : rawBinType === "credit" ? "credit" : null;
+
+    return { processorFee, paymentMethod, cardFundingType };
 }

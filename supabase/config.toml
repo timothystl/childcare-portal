@@ -38,6 +38,9 @@ verify_jwt = false
 [functions.reconcile-stax-payments]
 verify_jwt = false
 
+[functions.backfill-stax-processor-fees]
+verify_jwt = false
+
 [functions.send-calendar-reminders]
 verify_jwt = false
 

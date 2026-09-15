@@ -1762,8 +1762,113 @@ describe('Stax processor fee / card-vs-ACH tracking', () => {
 
     test('finance table shows the fee and whether Stax funded from a card or ACH', () => {
         expect(financeHubJs.includes("_fhPaymentsHeaderCell('Fee', 'fee')")).toBe(true);
-        expect(financeHubJs.includes("p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card'")).toBe(true);
+        expect(financeHubJs.includes("if (p.payment_method === 'ach') return 'Stax · ACH';")).toBe(true);
         expect(financeHubJs.includes('p.processor_fee != null ? _fhMoney(p.processor_fee)')).toBe(true);
+    });
+});
+
+describe('Stax card funding type (debit vs. credit) tracking', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const fundingMigration = read('supabase/migrations/20260915120000_track_stax_card_funding_type.sql');
+    const sharedFields = read('supabase/functions/_shared/stax-transaction-fields.ts');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+
+    test('the shared field extractor reads bin_type, unlike payment_method it has no forced default', () => {
+        expect(sharedFields.includes('cardFundingType: "debit" | "credit" | null')).toBe(true);
+        expect(sharedFields.includes('methodInfo?.bin_type')).toBe(true);
+        expect(sharedFields.includes('rawBinType === "debit" ? "debit" : rawBinType === "credit" ? "credit" : null')).toBe(true);
+    });
+
+    test('billing_payments and payment_charge_locks both gain a checked card_funding_type column', () => {
+        expect(/ALTER TABLE public\.billing_payments[\s\S]*?card_funding_type/.test(fundingMigration)).toBe(true);
+        expect(/ALTER TABLE public\.payment_charge_locks[\s\S]*?card_funding_type/.test(fundingMigration)).toBe(true);
+        expect(fundingMigration.includes("card_funding_type IN ('debit', 'credit')")).toBe(true);
+    });
+
+    test('the old 6-arg stax_set_charge_state is dropped, not left behind as an unrevoked overload', () => {
+        expect(fundingMigration.includes(
+            'DROP FUNCTION IF EXISTS public.stax_set_charge_state(bigint, text, text, text, numeric, text);'
+        )).toBe(true);
+        expect(fundingMigration.includes(
+            'GRANT EXECUTE ON FUNCTION public.stax_set_charge_state(bigint, text, text, text, numeric, text, text) TO service_role;'
+        )).toBe(true);
+    });
+
+    test('a refund/void carries the original funding type forward, same as payment_method', () => {
+        expect(fundingMigration.includes('original.card_funding_type')).toBe(true);
+        expect(fundingMigration.includes('v_row.card_funding_type')).toBe(true);
+    });
+
+    for (const fn of ['charge-stax-payment', 'stax-webhook', 'reconcile-stax-payments']) {
+        test(`${fn} records the funding type it read from Stax`, () => {
+            const source = read(`supabase/functions/${fn}/index.ts`);
+            expect(source.includes('p_card_funding_type:')).toBe(true);
+        });
+    }
+
+    test('finance table shows debit/credit for a Stax card payment, ACH unaffected', () => {
+        expect(financeHubJs.includes("if (p.card_funding_type === 'debit') return 'Stax · Debit';")).toBe(true);
+        expect(financeHubJs.includes("if (p.card_funding_type === 'credit') return 'Stax · Credit';")).toBe(true);
+        expect(financeHubJs.includes("return 'Stax · Card';")).toBe(true);
+    });
+});
+
+describe('Stax processor fee settlement backfill job', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const backfillFn = read('supabase/functions/backfill-stax-processor-fees/index.ts');
+    const backfillMigration = read('supabase/migrations/20260915130000_stax_processor_fee_backfill.sql');
+
+    test('reuses the exact same transaction lookup and field extraction every other Stax path trusts', () => {
+        expect(backfillFn.includes('import { extractStaxPaymentFields } from "../_shared/stax-transaction-fields.ts"')).toBe(true);
+        expect(backfillFn.includes('/transaction/${encodeURIComponent(id)}`')).toBe(true);
+        expect(backfillFn.includes('extractStaxPaymentFields(t)')).toBe(true);
+    });
+
+    test('only ever writes a fee through the dedicated backfill RPC, never touches billing_payments directly', () => {
+        expect(backfillFn.includes('admin.rpc("stax_backfill_processor_fee"')).toBe(true);
+        expect(backfillFn.includes('.from("billing_payments")\n            .select(')).toBe(true);
+        expect(/\.from\("billing_payments"\)[\s\S]*?\.update\(/.test(backfillFn)).toBe(false);
+    });
+
+    test('the RPC is idempotent — a row already carrying a fee is excluded from the update loop', () => {
+        const loopStart = backfillMigration.indexOf('FOR v_row IN');
+        const loopBlock = backfillMigration.slice(loopStart, backfillMigration.indexOf('END LOOP', loopStart));
+        expect(loopBlock.includes('AND processor_fee IS NULL')).toBe(true);
+    });
+
+    test('splits a multi-invoice charge\'s fee proportionally, the same math stax_finalize_charge uses', () => {
+        expect(backfillMigration.includes('round(p_processor_fee * v_row.amount / v_total_amount, 2)')).toBe(true);
+    });
+
+    test('only looks back BACKFILL_WINDOW_DAYS, so a transaction Stax never settles doesn\'t get polled forever', () => {
+        expect(backfillFn.includes('BACKFILL_WINDOW_DAYS')).toBe(true);
+        expect(backfillFn.includes('.gte("created_at", windowStart)')).toBe(true);
+    });
+
+    test('tries the oldest pending transactions first so a large backlog can\'t starve them out', () => {
+        expect(backfillFn.includes('earliestByTransaction')).toBe(true);
+        expect(backfillFn.includes('.sort((a, b) => (earliestByTransaction.get(a)! < earliestByTransaction.get(b)! ? -1 : 1))')).toBe(true);
+    });
+
+    test('the RPC is restricted to service_role, same as every other Stax-writing RPC', () => {
+        expect(backfillMigration.includes(
+            'REVOKE ALL ON FUNCTION public.stax_backfill_processor_fee(text, numeric) FROM PUBLIC, anon, authenticated;'
+        )).toBe(true);
+        expect(backfillMigration.includes(
+            'GRANT EXECUTE ON FUNCTION public.stax_backfill_processor_fee(text, numeric) TO service_role;'
+        )).toBe(true);
+    });
+
+    test('scheduled once a day via the same vault-secret cron pattern as the other jobs', () => {
+        expect(backfillMigration.includes("cron.schedule('backfill-stax-processor-fees', '0 12 * * *'")).toBe(true);
+        expect(backfillMigration.includes("vault.decrypted_secrets WHERE name = 'mymdo_cron_secret'")).toBe(true);
+        expect(/sb_secret_|sb_[a-z]+_[A-Za-z0-9_-]{20,}/.test(backfillMigration)).toBe(false);
+    });
+
+    test('authenticates through the shared cron guard, like the other scheduled Stax job', () => {
+        expect(backfillFn.includes('isAuthorizedCronRequest(req)')).toBe(true);
     });
 });
 
@@ -2107,7 +2212,7 @@ describe('scheduled jobs use a scoped cron credential', () => {
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const jobs = [
         'check-missed-clocks', 'send-waitlist-reminders', 'sweep-child-photos',
-        'send-day-summary', 'reconcile-stax-payments',
+        'send-day-summary', 'reconcile-stax-payments', 'backfill-stax-processor-fees',
     ];
 
     test('every scheduled function authenticates through the shared cron guard', () => {
@@ -2703,6 +2808,7 @@ describe('Stax merchant pin — the guard between test money and real money', ()
         'supabase/functions/create-stax-charge/index.ts',
         'supabase/functions/admin-refund-stax-payment/index.ts',
         'supabase/functions/reconcile-stax-payments/index.ts',
+        'supabase/functions/backfill-stax-processor-fees/index.ts',
     ];
 
     test('every function that holds the Stax API key verifies the merchant first', () => {
