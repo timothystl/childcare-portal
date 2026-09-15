@@ -2214,7 +2214,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             const timeOut = d?.timeOut || '';
             const roomId  = d?.roomId  || '';
 
-            const roomOptsManual = getSortedRooms().map(r =>
+            const roomOptsManual = getStaffRoomOptions().map(r =>
                 `<option value="${escHtml(r.id)}"${roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
             ).join('');
 
@@ -2222,7 +2222,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 ? validPairs.map(ev => {
                     const tiVal = isoToHHMM(ev.clockIn);
                     const toVal = isoToHHMM(ev.clockOut);
-                    const evRoomOpts = getSortedRooms().map(r =>
+                    const evRoomOpts = getStaffRoomOptions().map(r =>
                         `<option value="${escHtml(r.id)}"${ev.roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
                     ).join('');
                     return `<div class="payroll-clk-pair" data-event-id="${escHtml(ev.id)}">` +
@@ -2752,7 +2752,7 @@ async function _refreshPayrollDayRow(staffId, workDate) {
                 ? staffEvents.map(ev => {
                     const tiVal = isoToHHMM(ev.clock_in);
                     const toVal = isoToHHMM(ev.clock_out);
-                    const evRoomOpts = getSortedRooms().map(r =>
+                    const evRoomOpts = getStaffRoomOptions().map(r =>
                         `<option value="${escHtml(r.id)}"${ev.room_id === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
                     ).join('');
                     return `<div class="payroll-clk-pair" data-event-id="${escHtml(ev.id)}">` +

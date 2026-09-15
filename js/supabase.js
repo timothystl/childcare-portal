@@ -150,8 +150,10 @@ function getSortedRooms(rooms = ROOMS) {
 // Care never appears there. Add a new one here, never to ROOMS, unless it
 // is meant to be a real classroom children can be enrolled and billed into.
 const STAFF_ONLY_ROOMS = [
-    { id: 'morning_care', label: '🌅 Morning Care' },
-    { id: 'after_care',   label: '🌆 After Care' },
+    { id: 'morning_care',      label: '🌅 Morning Care' },
+    { id: 'after_care',        label: '🌆 After Care' },
+    { id: 'before_after_care', label: '🌅 Before/After Care' },
+    { id: 'office',            label: '🏢 Office' },
 ];
 
 // getSortedRooms() (real classrooms) plus STAFF_ONLY_ROOMS, for any dropdown
