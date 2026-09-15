@@ -274,6 +274,10 @@ const ENTRIES = [
                 // off to _openAdminWlModalForEdit(), and reads FR_STALL_DAYS
                 // so "gone quiet" means the same thing on both screens.
                 'js/admin/admin-leads.js',
+                // After admin-leads.js and admin-calendar.js: reads closures,
+                // the waitlist's tours, announcements, cacfp_menus and the
+                // programs document, and writes none of them.
+                'js/admin/admin-program-calendar.js',
                 'js/admin/admin-attendance.js',
                 'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',

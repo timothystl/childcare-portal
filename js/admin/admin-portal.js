@@ -284,6 +284,13 @@ const AP_TOOLS = [
     { key: 'leadsTours', pane: 'waitlist', section: 'leadsToursSection', tab: 'planning',
       group: 'Getting In', tint: AP_TINT.gold, icon: '🤝', name: 'Leads & Tours',
       blurb: 'Every family who has contacted us and not yet started, from first contact to first paid day.' },
+    // Program calendar (design handoff: Capacity & Fill, 4f) — in "Getting In"
+    // rather than Classrooms because the dates on it are the ones that decide
+    // whether a family can start: closures a parent plans around, tours, the
+    // camp weeks that fill a break. It stores nothing; see its module header.
+    { key: 'programCalendar', pane: 'waitlist', section: 'programCalendarSection', tab: 'planning',
+      group: 'Getting In', tint: AP_TINT.green, icon: '🗓️', name: 'Program Calendar',
+      blurb: 'Closures, tours, announcements, menu weeks and camp — every dated record on one grid.' },
 
     // ── Planning · Waitlist ──
     // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
@@ -1070,6 +1077,7 @@ function apOnToolOpened(tool) {
         // Same story as fillRooms: it awaits the waitlist load itself, so
         // opening it directly works without the Planner having been opened.
         if (tool.key === 'leadsTours' && typeof renderLeadsTool === 'function') renderLeadsTool();
+        if (tool.key === 'programCalendar' && typeof renderProgramCalendarTool === 'function') renderProgramCalendarTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

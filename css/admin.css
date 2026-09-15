@@ -6838,3 +6838,88 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 #setProgramsCard .pg-fee .pg-input{max-width:110px;}
 #setProgramsCard .pg-actions{display:flex;align-items:center;gap:12px;
   flex-wrap:wrap;margin-top:14px;}
+
+/* ============================================================
+   Program calendar — Planning → Getting In
+   (design handoff: Capacity & Fill, 4f)
+   ============================================================ */
+
+#programCalendarSection .pc-toolbar{display:flex;align-items:center;justify-content:space-between;
+  gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+#programCalendarSection .pc-nav{display:flex;align-items:center;gap:8px;}
+#programCalendarSection .pc-month{font-family:var(--font-head);font-size:1.2em;
+  font-weight:700;color:var(--navy);min-width:9ch;text-align:center;}
+#programCalendarSection .pc-counts{display:flex;gap:8px;flex-wrap:wrap;}
+#programCalendarSection .pc-count{border-radius:999px;padding:4px 12px;font-size:.74em;
+  font-weight:800;background:var(--warm-gray);color:var(--text-muted);}
+#programCalendarSection .pc-count.is-closure{background:var(--tang-pale);color:var(--tang-dark);}
+#programCalendarSection .pc-count.is-halfday{background:var(--sun-pale);color:var(--mustard-dark);}
+#programCalendarSection .pc-count.is-tour{background:var(--sun-pale);color:var(--mustard-dark);}
+#programCalendarSection .pc-count.is-camp{background:var(--green-pale);color:var(--green-dark);}
+
+#programCalendarSection .pc-cols{display:grid;
+  grid-template-columns:minmax(420px,1.7fr) minmax(260px,1fr);gap:20px;align-items:start;}
+#programCalendarSection .pc-col-narrow{display:flex;flex-direction:column;gap:20px;min-width:0;}
+
+#programCalendarSection .pc-grid{background:var(--white);border:1px solid var(--border);
+  border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.06);}
+#programCalendarSection .pc-dows,
+#programCalendarSection .pc-cells{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));}
+#programCalendarSection .pc-dow{padding:10px 8px;background:var(--linen);
+  border-bottom:1px solid var(--border);text-align:center;font-size:.7em;
+  font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);}
+#programCalendarSection .pc-cell{min-height:92px;padding:6px 7px;border-right:1px solid var(--ap-border-lt);
+  border-bottom:1px solid var(--ap-border-lt);background:var(--white);text-align:left;
+  font-family:var(--font-body);cursor:pointer;display:flex;flex-direction:column;gap:3px;}
+#programCalendarSection .pc-cell.is-blank{background:var(--linen);cursor:default;}
+#programCalendarSection .pc-cell.is-weekend{background:var(--cream);}
+#programCalendarSection .pc-cell.is-closed{background:var(--tang-pale);}
+#programCalendarSection .pc-cell.is-today .pc-num{background:var(--navy);color:var(--white);
+  border-radius:999px;padding:1px 7px;}
+#programCalendarSection .pc-cell.is-sel{outline:2px solid var(--navy);outline-offset:-2px;}
+#programCalendarSection .pc-cell:hover:not(.is-blank){background:var(--sun-pale);}
+#programCalendarSection .pc-num{font-family:var(--font-head);font-size:.95em;
+  font-weight:700;color:var(--navy);align-self:flex-start;}
+#programCalendarSection .pc-chip{font-size:.66em;font-weight:700;line-height:1.3;
+  border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border-left:3px solid var(--ap-neutral-bar);background:var(--linen);color:var(--text);}
+#programCalendarSection .pc-chip.is-closure{border-left-color:var(--tang);background:var(--tang-pale);color:var(--tang-dark);}
+#programCalendarSection .pc-chip.is-halfday{border-left-color:var(--sun);background:var(--sun-pale);color:var(--mustard-dark);}
+#programCalendarSection .pc-chip.is-tour{border-left-color:var(--sun);background:var(--sun-pale);color:var(--mustard-dark);}
+#programCalendarSection .pc-chip.is-announcement{border-left-color:var(--navy);background:var(--ap-tint-blue,#E4EEF6);color:var(--navy);}
+#programCalendarSection .pc-chip.is-menu{border-left-color:var(--green);background:var(--green-pale);color:var(--green-dark);}
+#programCalendarSection .pc-chip.is-camp{border-left-color:var(--green);background:var(--green-pale);color:var(--green-dark);}
+#programCalendarSection .pc-more{font-size:.64em;color:var(--text-muted);font-weight:700;}
+
+#programCalendarSection .pc-day-list{padding:8px 22px 18px;}
+#programCalendarSection .pc-day-row{display:flex;gap:11px;align-items:flex-start;
+  padding:11px 0;border-bottom:1px solid var(--ap-border-lt);}
+#programCalendarSection .pc-day-row:last-child{border-bottom:0;}
+#programCalendarSection .pc-day-bar{width:4px;align-self:stretch;border-radius:99px;
+  flex:0 0 4px;background:var(--ap-neutral-bar);}
+#programCalendarSection .pc-day-row.is-closure .pc-day-bar{background:var(--tang);}
+#programCalendarSection .pc-day-row.is-halfday .pc-day-bar,
+#programCalendarSection .pc-day-row.is-tour    .pc-day-bar{background:var(--sun);}
+#programCalendarSection .pc-day-row.is-menu    .pc-day-bar,
+#programCalendarSection .pc-day-row.is-camp    .pc-day-bar{background:var(--green);}
+#programCalendarSection .pc-day-row.is-announcement .pc-day-bar{background:var(--navy);}
+#programCalendarSection .pc-day-title{font-size:.88em;font-weight:800;color:var(--navy);}
+#programCalendarSection .pc-day-detail{font-size:.78em;color:var(--text-muted);
+  margin-top:2px;line-height:1.5;}
+
+#programCalendarSection .pc-legend{padding:8px 22px 4px;}
+#programCalendarSection .pc-legend-row{display:flex;align-items:center;gap:9px;
+  padding:6px 0;font-size:.8em;color:var(--text);}
+#programCalendarSection .pc-swatch{width:12px;height:12px;border-radius:3px;flex:none;}
+#programCalendarSection .pc-foot{padding:12px 22px 18px;border-top:1px solid var(--ap-border-lt);}
+#programCalendarSection .pc-foot p{margin:0;font-size:.78em;color:var(--text-muted);
+  line-height:1.55;text-wrap:pretty;}
+#programCalendarSection .pc-gap{border-top:4px solid var(--ap-neutral-bar);}
+
+@media (max-width:1100px){
+  #programCalendarSection .pc-cols{grid-template-columns:minmax(0,1fr);}
+}
+@media (max-width:640px){
+  #programCalendarSection .pc-cell{min-height:70px;}
+  #programCalendarSection .pc-chip{font-size:.58em;}
+}
