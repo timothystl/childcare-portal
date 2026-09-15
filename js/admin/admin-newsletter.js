@@ -7,13 +7,14 @@
 //
 // ── The "pulled from myMDO" blocks are the point ────────────
 // Anyone can drag a text box around. What this does that a generic email
-// tool cannot is fill four of the blocks from the data the letter is
+// tool cannot is fill three of the blocks from the data the letter is
 // ABOUT, so the newsletter cannot contradict the app:
 //
 //   Closures            `closures`, for the month being written about
-//   Menu week           `cacfp_menus` — the same week on the public page
 //   Registration window the real 1st–15th window, honoured by the server
 //   Open days           the same seat/at-ratio rule Fill the Rooms uses
+//
+// No CACFP/meal-menu block — Timothy MDO does not run that program.
 //
 // A dynamic block stores only its TYPE, never its rendered text. The
 // preview resolves it at render time, and the note under each one says so:
@@ -43,9 +44,9 @@ const NL_BLOCKS = [
     { type: 'heading', icon: '✍️', label: 'Heading',   dynamic: false },
     { type: 'text',    icon: '📝', label: 'Text',      dynamic: false },
     { type: 'button',  icon: '🔘', label: 'Button',    dynamic: false },
+    { type: 'image',   icon: '🖼️', label: 'Picture',   dynamic: false },
     { type: 'divider', icon: '➖', label: 'Divider',   dynamic: false },
     { type: 'closures',  icon: '🚪', label: 'Closures',            dynamic: true, from: 'From the calendar' },
-    { type: 'menu',      icon: '🍽️', label: "This week's menu",    dynamic: true, from: 'CACFP menu page' },
     { type: 'regwindow', icon: '🗓️', label: 'Registration window', dynamic: true, from: 'The real window' },
     { type: 'opendays',  icon: '🎟️', label: 'Open days',           dynamic: true, from: 'Live availability' },
 ];
@@ -55,6 +56,22 @@ const NL_DEFAULT = [
     { id: 'b2', type: 'text', text: 'A few things for the month ahead.' },
     { id: 'b3', type: 'closures' },
 ];
+
+// Which fields the inspector shows for each editable block type. 'button'
+// and 'image' need more than one field, so this is a list per type rather
+// than the old one-field-fits-all assumption.
+const NL_EDITABLE_FIELDS = {
+    heading: [{ key: 'text', label: 'Heading', kind: 'text' }],
+    text:    [{ key: 'text', label: 'Text', kind: 'textarea' }],
+    button:  [
+        { key: 'text', label: 'Button label', kind: 'text' },
+        { key: 'url',  label: 'Link — where the button goes', kind: 'text', placeholder: 'https://… (a page, or a file link)' },
+    ],
+    image: [
+        { key: 'url', label: 'Image URL', kind: 'text', placeholder: 'https://…' },
+        { key: 'alt', label: 'Alt text (what the picture shows)', kind: 'text' },
+    ],
+};
 
 let _nlDraft = null;      // { blocks:[...], subject, audience:{...} }
 let _nlBound = false;
@@ -86,16 +103,12 @@ async function _nlResolveLive(monthKey) {
     const start = `${monthKey}-01`;
     const end = new Date(y, m, 0).toLocaleDateString('en-CA');
 
-    const out = { monthKey, closures: [], menu: [], openDays: [], regWindow: null };
+    const out = { monthKey, closures: [], openDays: [], regWindow: null };
 
     try {
         const all = typeof fetchClosures === 'function' ? await fetchClosures() : [];
         out.closures = (all || []).filter(c => c.close_date >= start && c.close_date <= end);
     } catch (_) { /* block renders its own empty state */ }
-
-    try {
-        out.menu = typeof fetchCacfpMenus === 'function' ? await fetchCacfpMenus(start, end) : [];
-    } catch (_) { /* as above */ }
 
     // The registration window is the app's real rule: a month's days are
     // chosen between the 1st and the 15th of the month before.
@@ -108,12 +121,14 @@ async function _nlResolveLive(monthKey) {
     };
 
     // Open days: the same capacity − booked, minus ratio edges, that Fill
-    // the Rooms and the parent card use.
+    // the Rooms and the parent card use — kept as the actual dates, not
+    // just a seat-day total, so the letter can say which days to bring a
+    // child rather than a number a parent cannot act on.
     try {
         const rooms = getSortedRooms().filter(r => !r.hidden && r.status === 'active');
         const closedSet = new Set(out.closures.filter(c => !c.half_day).map(c => c.close_date));
         out.openDays = rooms.map(room => {
-            let open = 0;
+            const dates = [];
             const ratio = Number(room.staffRatio) || 0;
             for (let d = 1; d <= new Date(y, m, 0).getDate(); d++) {
                 const date = `${monthKey}-${String(d).padStart(2, '0')}`;
@@ -128,10 +143,10 @@ async function _nlResolveLive(monthKey) {
                 });
                 const free = Math.max(0, (Number(room.capacity) || 0) - booked);
                 const atRatio = ratio > 0 && booked > 0 && booked % ratio === 0;
-                if (free > 0 && !atRatio) open += free;
+                if (free > 0 && !atRatio) dates.push({ date, free });
             }
-            return { label: room.label, open };
-        }).filter(r => r.open > 0);
+            return { label: room.label, dates };
+        }).filter(r => r.dates.length > 0);
     } catch (_) { /* as above */ }
 
     return out;
@@ -146,7 +161,13 @@ function _nlBlockPreviewHtml(b) {
         case 'text':
             return `<p class="nl-p-text">${escHtml(b.text || 'Write something here.')}</p>`;
         case 'button':
-            return `<div class="nl-p-btnwrap"><span class="nl-p-btn">${escHtml(b.text || 'Register')}</span></div>`;
+            return b.url
+                ? `<div class="nl-p-btnwrap"><a class="nl-p-btn" href="${escHtml(b.url)}" target="_blank" rel="noopener">${escHtml(b.text || 'Register')}</a></div>`
+                : `<div class="nl-p-btnwrap"><span class="nl-p-btn">${escHtml(b.text || 'Register')}</span><div class="nl-p-btn-hint">No link set — add one in the panel on the right.</div></div>`;
+        case 'image':
+            return b.url
+                ? `<div class="nl-p-imgwrap"><img class="nl-p-img" src="${escHtml(b.url)}" alt="${escHtml(b.alt || '')}"></div>`
+                : `<div class="nl-p-dyn-none">Paste an image URL in the panel on the right.</div>`;
         case 'divider':
             return `<hr class="nl-p-divider">`;
         case 'closures': {
@@ -163,15 +184,6 @@ function _nlBlockPreviewHtml(b) {
                 <div class="nl-p-dyn-note">Updates itself if the calendar changes before this sends.</div>
             </div>`;
         }
-        case 'menu': {
-            const days = (live.menu || []).length;
-            return `<div class="nl-p-dyn">
-                <div class="nl-p-dyn-kicker">On the menu</div>
-                ${days ? `<div class="nl-p-dyn-row"><span>${days} ${days === 1 ? 'day' : 'days'} published</span><span>See the full menu →</span></div>`
-                    : '<div class="nl-p-dyn-none">No menu published for this month yet.</div>'}
-                <div class="nl-p-dyn-note">Links to the same CACFP page families already use.</div>
-            </div>`;
-        }
         case 'regwindow': {
             const w = live.regWindow;
             return `<div class="nl-p-dyn">
@@ -184,10 +196,16 @@ function _nlBlockPreviewHtml(b) {
         }
         case 'opendays': {
             const list = live.openDays || [];
+            const fmt = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            const maxDates = 8;
             return `<div class="nl-p-dyn">
                 <div class="nl-p-dyn-kicker">Room for more</div>
                 ${list.length ? list.map(r => `
-                    <div class="nl-p-dyn-row"><span>${escHtml(r.label)}</span><span>${r.open} open seat-days</span></div>`).join('')
+                    <div class="nl-p-dyn-room">${escHtml(r.label)}</div>
+                    ${r.dates.slice(0, maxDates).map(x => `
+                        <div class="nl-p-dyn-row"><span>${escHtml(fmt(x.date))}</span><span>${x.free} ${x.free === 1 ? 'spot' : 'spots'} open</span></div>`).join('')}
+                    ${r.dates.length > maxDates ? `<div class="nl-p-dyn-note">+${r.dates.length - maxDates} more day${r.dates.length - maxDates === 1 ? '' : 's'} this month.</div>` : ''}
+                `).join('')
                 : '<div class="nl-p-dyn-none">Every room is full this month.</div>'}
                 <div class="nl-p-dyn-note">Counts a day as open only when one more child would not need another adult.</div>
             </div>`;
@@ -218,7 +236,7 @@ function _nlCanvasHtml() {
                 <div class="nl-drop" data-nl-drop="${i + 1}"></div>`).join('')}
             ${blocks.length ? '' : '<p class="nl-empty">Drag a block in from the left to start.</p>'}
             <div class="nl-paper-foot">
-                Timothy Lutheran Church · 6001 Tesson Ferry Road, St. Louis<br>
+                Timothy Lutheran Church · 6704 Fyler Ave., St. Louis, MO 63139<br>
                 You're getting this because your family is enrolled at MDO.
             </div>
         </div>`;
@@ -250,18 +268,18 @@ function _nlPaletteHtml() {
 
 function _nlInspectorHtml() {
     const b = (_nlDraft?.blocks || []).find(x => x.id === _nlSel);
-    const editable = b && ['heading', 'text', 'button'].includes(b.type);
+    const fields = b ? NL_EDITABLE_FIELDS[b.type] : null;
     return `
         <div class="ap-panel">
             <div class="ap-panel-head"><h3>${b ? 'Selected block' : 'Nothing selected'}</h3></div>
             <div class="nl-inspector">
-                ${editable ? `
+                ${fields ? fields.map(f => `
                     <label class="nl-field">
-                        <span>${b.type === 'button' ? 'Button label' : 'Text'}</span>
-                        ${b.type === 'text'
-                            ? `<textarea id="nlBlockText" rows="5">${escHtml(b.text || '')}</textarea>`
-                            : `<input type="text" id="nlBlockText" value="${escHtml(b.text || '')}">`}
-                    </label>`
+                        <span>${escHtml(f.label)}</span>
+                        ${f.kind === 'textarea'
+                            ? `<textarea data-nl-field="${f.key}" rows="10" placeholder="${escHtml(f.placeholder || '')}">${escHtml(b[f.key] || '')}</textarea>`
+                            : `<input type="text" data-nl-field="${f.key}" placeholder="${escHtml(f.placeholder || '')}" value="${escHtml(b[f.key] || '')}">`}
+                    </label>`).join('')
                 : b ? `<p class="nl-hint">This block fills itself from myMDO — there is nothing to type. Remove it with the ✕ if you don't want it.</p>`
                     : `<p class="nl-hint">Click a block in the letter to edit it.</p>`}
             </div>
@@ -328,16 +346,15 @@ function _nlRepaint({ keepFocus = false } = {}) {
 }
 
 function _nlBindLive() {
-    const text = _nlEl('nlBlockText');
-    if (text) {
-        text.addEventListener('input', () => {
+    document.querySelectorAll('#nlBody .nl-col-insp [data-nl-field]').forEach(el => {
+        el.addEventListener('input', () => {
             const b = (_nlDraft?.blocks || []).find(x => x.id === _nlSel);
             if (!b) return;
-            b.text = text.value;
+            b[el.dataset.nlField] = el.value;
             const canvas = document.querySelector('#nlBody .nl-col-canvas');
             if (canvas) canvas.innerHTML = _nlCanvasHtml();
         });
-    }
+    });
     _nlEl('nlSaveBtn')?.addEventListener('click', _nlSave);
     _nlEl('nlCopyBtn')?.addEventListener('click', _nlCopy);
 }
@@ -359,7 +376,8 @@ function _nlPlainText() {
     (_nlDraft?.blocks || []).forEach(b => {
         if (b.type === 'heading') lines.push('', (b.text || '').toUpperCase(), '');
         else if (b.type === 'text') lines.push(b.text || '');
-        else if (b.type === 'button') lines.push(`[ ${b.text || 'Register'} ]`);
+        else if (b.type === 'button') lines.push(`[ ${b.text || 'Register'} ]${b.url ? ' — ' + b.url : ''}`);
+        else if (b.type === 'image') { if (b.url) lines.push(`[picture: ${b.alt || b.url}]`); }
         else if (b.type === 'divider') lines.push('—————');
         else if (b.type === 'closures') {
             lines.push('', `CLOSED DAYS IN ${_nlMonthLabel(live.monthKey || '').toUpperCase()}`);
@@ -371,10 +389,12 @@ function _nlPlainText() {
                 `  ${live.regWindow.month} opens ${live.regWindow.opens} and closes ${live.regWindow.closes}.`);
         } else if (b.type === 'opendays') {
             lines.push('', 'ROOM FOR MORE');
-            (live.openDays || []).forEach(r => lines.push(`  ${r.label} — ${r.open} open seat-days`));
+            (live.openDays || []).forEach(r => {
+                lines.push(`  ${r.label}:`);
+                r.dates.forEach(x => lines.push(
+                    `    ${new Date(x.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} — ${x.free} ${x.free === 1 ? 'spot' : 'spots'} open`));
+            });
             if (!(live.openDays || []).length) lines.push('  Every room is full this month.');
-        } else if (b.type === 'menu') {
-            lines.push('', `ON THE MENU — ${(live.menu || []).length} days published. See the menu page.`);
         }
     });
     return lines.join('\n').trim();
