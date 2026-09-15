@@ -1117,7 +1117,13 @@ let selectedStaffId = null;
 const _escOpt = str => String(str ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-async function loadStaffSelect() {
+const _sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Staff sign in from their own phones, not a shared kiosk, so this fires on
+// whatever network happens to be handy the moment the page opens — a cell
+// handoff or a weak signal is common right at page load. A couple of quick
+// retries clear most of those before we ever bother anyone with an error.
+async function loadStaffSelect(attempt = 1) {
     const sel = document.getElementById('staffSelect');
     try {
         const { data, error } = await sb.rpc('list_staff_for_signin');
@@ -1132,7 +1138,12 @@ async function loadStaffSelect() {
                            _escOpt(s.name) + '</option>').join('');
     } catch (e) {
         console.warn('staff list:', e);
-        sel.innerHTML = '<option value="">Could not load the staff list</option>';
+        if (attempt < 3) {
+            await _sleep(attempt * 700);
+            return loadStaffSelect(attempt + 1);
+        }
+        sel.innerHTML = '<option value="">Could not load the staff list</option>' +
+            '<option value="__retry__">↻ Tap to try again</option>';
     }
 }
 
@@ -1147,6 +1158,11 @@ function _resetStaffSelect() {
 // Changing the name mid-entry clears the digits already tapped, so a half-typed
 // PIN can never be submitted against whoever is picked next.
 document.getElementById('staffSelect').addEventListener('change', e => {
+    if (e.target.value === '__retry__') {
+        e.target.innerHTML = '<option value="">Loading…</option>';
+        loadStaffSelect();
+        return;
+    }
     selectedStaffId = e.target.value || null;
     pin = ''; updateDots();
     document.getElementById('pinError').textContent = '';
