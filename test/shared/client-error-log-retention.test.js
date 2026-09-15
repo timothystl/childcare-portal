@@ -14,9 +14,13 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
-const migrationPath = path.resolve(
-  __dirname, '../../supabase/migrations/20260913160000_purge_client_error_log.sql',
-)
+// Looked up by name, not filename: this migration's version changed when it
+// was finally applied (the database assigns its own), and a hard-coded
+// filename would have turned that correction into a test failure.
+// See scripts/migration-file.js.
+const { migrationFile } = require('../../scripts/migration-file.js')
+
+const migrationPath = migrationFile('purge_client_error_log')
 const sql = fs.readFileSync(migrationPath, 'utf8')
 
 test('purge_client_error_log migration', async (t) => {

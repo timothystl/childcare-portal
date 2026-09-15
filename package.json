@@ -2,12 +2,14 @@
   "name": "childcare-portal",
   "version": "2.13.16",
   "private": true,
-  "description": "Timothy Lutheran MDO Registration Portal — build tooling",
+  "description": "Timothy Lutheran MDO Registration Portal \u2014 build tooling",
   "scripts": {
     "bump": "node scripts/bump-patch.js",
     "build": "node scripts/build.js",
     "build:watch": "node scripts/build.js --watch",
-    "test": "node js/tests/business-logic.test.js && node --test test/contracts/*.test.js test/shared/*.test.js"
+    "test": "node scripts/check-migrations.js && node js/tests/business-logic.test.js && node --test test/contracts/*.test.js test/shared/*.test.js",
+    "migrations:check": "node scripts/check-migrations.js",
+    "migrations:snapshot": "node scripts/snapshot-migrations.js"
   },
   "devDependencies": {
     "ajv": "8.20.0",

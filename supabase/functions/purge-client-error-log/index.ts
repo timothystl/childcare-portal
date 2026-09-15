@@ -5,7 +5,7 @@
 // entries auto-deleted after 90 days, then left the actual delete commented
 // out ("Run this as a Supabase scheduled function or manually as needed").
 // Nobody did either, so nothing has ever purged a row. See
-// supabase/migrations/20260913160000_purge_client_error_log.sql for the
+// supabase/migrations/20260915134514_purge_client_error_log.sql for the
 // purge_client_error_log() RPC and the full reasoning behind the 90-day
 // window.
 //

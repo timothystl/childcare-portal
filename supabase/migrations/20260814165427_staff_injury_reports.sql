@@ -1,0 +1,31 @@
+-- ============================================================
+-- LEDGER PLACEHOLDER — NO STATEMENTS, BY DESIGN
+-- ============================================================
+-- Version : 20260814165427
+-- Name    : staff_injury_reports
+--
+-- This migration WAS applied to production. Its SQL was never committed
+-- under this version number, so the Supabase CLI reported it as
+-- "Remote migration versions not found in local migrations directory"
+-- and the Supabase Preview check failed on every commit to main.
+--
+-- This file closes that gap HONESTLY: it records that the version exists
+-- and says where its DDL actually lives. It deliberately contains no
+-- executable statements, because inventing SQL to match a schema nobody
+-- captured would be worse than the gap — a rebuild would then differ from
+-- production silently instead of loudly.
+--
+-- ⚠️ THE MIGRATIONS DIRECTORY IS NOT A REBUILD SOURCE. It has not been one
+-- since before the ledger started (see supabase/migrations/README.md).
+-- To reproduce this database, restore a backup; do not replay this folder.
+--
+-- Where the DDL actually lives:
+--   * 20260902030420_add_staff_credentials.sql
+--   * 20260908162142_harden_mymdo_role_boundaries.sql
+--   * 20260908162245_remove_legacy_mymdo_role_policy_aliases.sql
+--
+-- (Found by searching the folder for this migration's name. The file
+--  above carries the statements; it is simply committed under a
+--  different name than the version the database recorded.)
+--
+-- ============================================================
