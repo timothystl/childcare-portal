@@ -1,21 +1,28 @@
 -- ============================================================
--- APPLIED TO PRODUCTION 2026-09-15 — reconciling ledger drift
+-- Strip the default grants Supabase hands new public tables
 -- ============================================================
--- See 20260915171800_before_after_care_charges.sql's header for why this
--- file exists and how it was reconstructed rather than replayed verbatim.
+-- APPLIED 2026-09-15 as version 20260915171831.
 --
--- This project's default privileges (`ALTER DEFAULT PRIVILEGES ... GRANT ALL
--- ON TABLES TO anon, authenticated`, set up at the project level, confirmed
--- live via pg_default_acl) hand every new table in `public` full CRUD grants
--- to `anon` the moment `CREATE TABLE` runs — before RLS or any policy exists
--- to narrow it. `care_charges` names children and sets a dollar amount; an
--- anon table grant on it, even briefly, is the exact class of mistake this
--- repo has already paid for once (see the R27 note in
--- PROPOSED_before_after_care_charges.sql's git history). This migration
--- closes that window for `care_charges` specifically.
+-- care_charges was created minutes earlier (20260915171800) and arrived with
+-- INSERT, SELECT, UPDATE, DELETE, REFERENCES and TRIGGER granted to `anon` —
+-- not by the migration that created it, but by the ALTER DEFAULT PRIVILEGES
+-- that apply to every new table in `public`.
 --
--- Live state confirmed via information_schema.role_table_grants: anon holds
--- no privilege at all on care_charges; authenticated keeps full table-level
--- CRUD, gated down to admin-only by the "admin any role" RLS policy from the
--- prior migration. Idempotent — safe if ever re-run.
-REVOKE ALL ON public.care_charges FROM anon;
+-- RLS is on and the only policy is admin-only, so nothing could actually be
+-- read or written through those grants. That is exactly why this is worth
+-- fixing rather than shrugging at: the grant is real, it is invisible in the
+-- creating migration, and it becomes live the moment anyone disables RLS or
+-- adds a permissive policy. Defense in depth means the grant should not be
+-- there either.
+--
+-- Found by running VERIFY_door_checkin_boundary.sql immediately after
+-- applying, which is the entire reason that file exists.
+--
+-- Same treatment, same reasoning, as two migrations already in this repo:
+--   20260817042527_finance_tables_strip_default_grants
+--   20260826193806_billing_notes_strip_default_authenticated_grant
+--
+-- `authenticated` keeps its grants: the admin policy is what scopes it, and
+-- that is how every other admin table here works.
+REVOKE ALL ON TABLE public.care_charges FROM anon;
+REVOKE ALL ON SEQUENCE public.care_charges_id_seq FROM anon;

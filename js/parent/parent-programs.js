@@ -24,9 +24,11 @@
 // drop-in days, for the same reason: the office decides what is open, and
 // nothing records that decision yet.
 //
-// The weekly standing rate IS quoted against the daily one, because that
-// arithmetic is real and is the thing a parent actually wants to know:
-// five afternoons at the daily rate versus the weekly price.
+// ⚠️ There is NO weekly after-care rate. An earlier version quoted one
+// against the daily price — five afternoons versus a standing weekly figure
+// — which was invented, not real. Andrew: "no weekly aftercare rate." A
+// price a parent could plan around but not actually buy is worse than no
+// price at all.
 
 let _ppState = null;     // { programs, fees }
 let _ppBound = false;
@@ -76,21 +78,10 @@ function _ppDayChipsHtml(p) {
 
 function _ppCardHtml(p, fees) {
     const daily = Number(p.rate) || 0;
-    const weekly = _ppState.programs.find(x => x.sharesRatioWith === p.id && x.active);
-
-    const savings = weekly && daily
-        ? Math.max(0, daily * 5 - (Number(weekly.rate) || 0))
-        : 0;
 
     const hours = p.startTime && p.endTime
         ? `${ppTime(p.startTime)} – ${ppTime(p.endTime)}`
         : '';
-
-    const weeklyLine = weekly ? `
-        <div class="pp-weekly">
-            Every weekday is cheaper as a standing add-on — <strong>${ppMoney(weekly.rate)} a week</strong>
-            instead of ${ppMoney(daily * 5)}${savings ? `, saving ${ppMoney(savings)}` : ''}.
-        </div>` : '';
 
     return `
         <div class="pp-card" data-pp-id="${ppEsc(p.id)}">
@@ -101,7 +92,6 @@ function _ppCardHtml(p, fees) {
             <div class="pp-card-body">
                 <p class="pp-card-when">${ppEsc(hours)}${p.note ? ` ${ppEsc(p.note)}` : ''}</p>
                 ${_ppDayChipsHtml(p)}
-                ${weeklyLine}
             </div>
         </div>`;
 }
@@ -111,6 +101,9 @@ function ppRender(child) {
     if (!wrap || !_ppState) return;
 
     const roomId = child?.roomId || child?.room_id || null;
+    // kind 'standing' belonged to the weekly rate that no longer exists.
+    // The filter stays: a settings document saved before it was removed could
+    // still carry one, and it must not surface as something a parent can buy.
     const runnable = _ppState.programs.filter(p =>
         p.active && p.kind !== 'standing' && ppAppliesTo(p, roomId));
 

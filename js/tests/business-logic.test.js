@@ -4277,15 +4277,22 @@ describe('Programs & add-ons — never a room', () => {
             if (roomIds.includes(id)) throw new Error(`${id} is a room; it must not be`);
         });
         // And the program list really does declare them.
-        ['before_care', 'after_care', 'after_care_weekly', 'camp']
+        ['before_care', 'after_care', 'camp']
             .forEach(id => expect(progIds.includes(id)).toBe(true));
+        // ⚠️ There is no weekly after-care rate. Andrew: "no weekly
+        // aftercare rate." It was invented, and a price a parent can plan
+        // around but not actually buy is worse than no price at all.
+        expect(progIds.includes('after_care_weekly')).toBe(false);
     });
 
     // After care's ratio has exactly one definition. A literal here is the
     // bug: the staffing grid and the attendance board read
     // PM_COMBINED_RATIO, and a second editable copy lets them disagree.
     test('after care derives its ratio from PM_COMBINED_RATIO, never a literal', () => {
-        const block = sb.slice(sb.indexOf("id:        'after_care',"), sb.indexOf("id:        'after_care_weekly'"));
+        // Sliced to the NEXT program, whatever it is — keying the end of
+        // this block on a specific sibling meant deleting that sibling made
+        // the slice empty and the assertions meaningless rather than failing.
+        const block = sb.slice(sb.indexOf("id:        'after_care',"), sb.indexOf("id:        'camp'"));
         expect(/ratio:\s*PM_COMBINED_RATIO/.test(block)).toBe(true);
         expect(/ratio:\s*\d/.test(block)).toBe(false);
         expect(/pooledRooms:\s*PM_COMBINED_ROOM_IDS/.test(block)).toBe(true);
@@ -4294,6 +4301,25 @@ describe('Programs & add-ons — never a room', () => {
         // it back on save so a hand-edited DOM cannot persist a second value.
         const admin = read('js/admin/admin-programs.js');
         expect(/ac\.ratio\s*=\s*PM_COMBINED_RATIO/.test(admin)).toBe(true);
+    });
+
+    // ⚠️ <input type="time"> accepts ONLY zero-padded HH:MM. Given '7:30' the
+    // browser renders an EMPTY box with no error, and the next Save writes
+    // null over real hours. That shipped: Before care's 7:30–9:00 showed
+    // blank on the settings screen while After care's 15:00 was fine.
+    test('every program hour is zero-padded, and the input normalizes anyway', () => {
+        const block = sb.slice(sb.indexOf('const PROGRAMS = ['), sb.indexOf('const PROGRAM_FEES'));
+        const times = [...block.matchAll(/(?:startTime|endTime):\s*'([^']*)'/g)].map(m => m[1]);
+        expect(times.length > 0).toBe(true);
+        times.forEach(t => expect(`${t} is HH:MM: ${/^\d{2}:\d{2}$/.test(t)}`).toBe(`${t} is HH:MM: true`));
+
+        // And the render normalizes, because the settings document is
+        // admin-editable and may already hold an unpadded value. Losing a
+        // program's hours to a silent format mismatch is the worse failure.
+        const admin = read('js/admin/admin-programs.js');
+        expect(/function _pgTimeValue/.test(admin)).toBe(true);
+        expect(/value="\$\{escHtml\(_pgTimeValue\(p\.startTime\)\)\}"/.test(admin)).toBe(true);
+        expect(/value="\$\{escHtml\(_pgTimeValue\(p\.endTime\)\)\}"/.test(admin)).toBe(true);
     });
 
     // Programs are config, not a table — the whole reason this needs no
@@ -4640,12 +4666,15 @@ describe('Before & After Care — the combined afternoon', () => {
 
     // Nothing records the attendance yet, so the screen must not pretend
     // otherwise or quietly query something that is not there.
-    test('the screen queries no charge table and states the gap', () => {
+    // The table is live now, but this screen still reads nothing from it and
+    // writes nothing: the door RPC is the only writer, and no reader is
+    // wired yet. The screen has to say that rather than imply a roster.
+    test('the screen queries no charge table and says nothing is recorded', () => {
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
         expect(/from\(\s*['"`](care_charges|program_)/.test(code)).toBe(false);
         expect(/\.\s*insert\s*\(|\.\s*upsert\s*\(/.test(code)).toBe(false);
-        expect(src.includes('It is empty because nothing records the attendance')).toBe(true);
+        expect(src.includes('It is empty because nobody has been checked in yet')).toBe(true);
     });
 
     // The screen must say what the thing IS, in Andrew's terms, so the next
@@ -4664,103 +4693,261 @@ describe('Before & After Care — the combined afternoon', () => {
         expect(/enrolment in a <em>program<\/em>/i.test(ui)).toBe(false);
     });
 
-    // care_charges shipped to production 2026-09-15 (versions 20260915171800
-    // and 20260915171831 — see supabase/migrations/README.md's "ledger
-    // placeholder" note for why these are reconstructions, not a replay of
-    // the original SQL Editor statements). It must still open no anon door
-    // over a table that names children and sets a price.
-    test('the applied care_charges table opens no anon door', () => {
-        const mig = fs.readFileSync(path.join(repoRoot,
-            'supabase/migrations/20260915171800_before_after_care_charges.sql'), 'utf8');
-        expect(/APPLIED TO PRODUCTION/.test(mig)).toBe(true);
+    // The proposal must stay a proposal: no version prefix, loudly marked,
+    // and no anon policy over a table that names children and sets a price.
+    test('the applied migration opens no anon door', () => {
+        const mig = readMigration('before_after_care_charges');
+        // Applied 2026-09-15. The file is named for the version the database
+        // assigned, and says so — never a hand-picked timestamp.
+        expect(/APPLIED 2026-09-15 as version 20260915171800/.test(mig)).toBe(true);
+        expect(/PROPOSED|NOT APPLIED/.test(mig.split('\n')[1] || '')).toBe(false);
         // Policies name `authenticated`, never `public`/`anon`. Checked
         // against the DDL with comments stripped — the file EXPLAINS why
         // `TO public` is wrong, and a naive search matches that sentence.
         const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
         expect(/TO\s+authenticated/.test(ddl)).toBe(true);
-        expect(/TO\s+(public|anon)\b/.test(ddl)).toBe(false);
         expect(/CREATE POLICY[^;]*anon/i.test(ddl)).toBe(false);
+        // ⚠️ This used to assert that the word `anon` appeared nowhere at
+        // all. It cannot any more: the door kiosk holds no session, so anon
+        // is what calls record_door_checkin. Blunt is no longer safe, so be
+        // exact — anon may reach that ONE function and nothing else. A
+        // table grant or a policy would bypass the PIN check entirely.
+        const anonGrants = (ddl.match(/GRANT[^;]*?\banon\b[^;]*;/gi) || []);
+        expect(anonGrants.length).toBe(1);
+        expect(/EXECUTE ON FUNCTION public\.record_door_checkin/.test(anonGrants[0])).toBe(true);
+        expect(/GRANT[^;]*ON TABLE[^;]*\banon\b/i.test(ddl)).toBe(false);
+        expect(/GRANT[^;]*\bcare_charges\b[^;]*\banon\b/i.test(ddl)).toBe(false);
+        expect(/TO\s+public\b/i.test(ddl)).toBe(false);
         // One table, and it is a charge. The enrolment table is gone, not
         // renamed — a second table would be the room model wearing a hat.
         expect((ddl.match(/CREATE TABLE/g) || []).length).toBe(1);
+        expect(/program_enrolments/.test(mig)).toBe(true);   // explains what it replaced
+        expect(/CREATE TABLE[^;]*program_enrolments/.test(ddl)).toBe(false);
         // The rate is frozen into the row, and a waiver has to say why.
         expect(/rate_charged/.test(ddl)).toBe(true);
         expect(/waived_reason IS NOT NULL/.test(ddl)).toBe(true);
-
-        const grants = fs.readFileSync(path.join(repoRoot,
-            'supabase/migrations/20260915171831_care_charges_strip_default_grants.sql'), 'utf8');
-        expect(/REVOKE ALL ON public\.care_charges FROM anon/.test(grants)).toBe(true);
-
-        // And nothing in the read-only floor screen DEPENDS on it — that
-        // screen states the gap; the write path is its own screen (below).
+        // And nothing shipped DEPENDS on it.
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
         expect(/from\(\s*['"`]care_charges/.test(code)).toBe(false);
+    });
+
+    // Andrew: "bill each family directly, not the pre-k organization."
+    //
+    // The trap this closes: `students.family_id` is NULLABLE, so a charge
+    // that reached the family only by joining through `students` could be
+    // owed by nobody — never on an invoice, never in a balance, and never an
+    // error. Just a row. So the charge carries its own family_id, NOT NULL.
+    test('every charge names the family it bills, and cannot exist without one', () => {
+        const mig = readMigration('before_after_care_charges');
+        const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+
+        expect(/family_id\s+uuid\s+NOT NULL REFERENCES public\.families\(id\)/.test(ddl)).toBe(true);
+        // RESTRICT, not CASCADE: deleting a family must not silently erase
+        // what it was charged.
+        expect(/REFERENCES public\.families\(id\) ON DELETE RESTRICT/.test(ddl)).toBe(true);
+        expect(/REFERENCES public\.families\(id\) ON DELETE CASCADE/.test(ddl)).toBe(false);
+
+        // No organization payer, no consolidated Pre-K invoice, no second
+        // billing mode — the answer removes a column rather than adding one.
+        expect(/bill_to/.test(ddl)).toBe(false);
+        expect(/'organization'/.test(ddl)).toBe(false);
+        // The decision is written down where the next reader will find it.
+        expect(/bill each family directly, not the pre-k organization/i.test(mig)).toBe(true);
+
+        // And the screen says so too, rather than leaving it open.
+        expect(/Every family is billed directly/.test(src)).toBe(true);
+    });
+});
+
+// ============================================================
+// THE DOOR KIOSK — an unauthenticated tablet writing billing rows
+// ============================================================
+// Andrew: "the kiosk creates a provisional family record at the door."
+//
+// This is the sharpest thing in the proposal. A wall tablet in a hallway,
+// signed in as nobody, creates a row that billing, statements, balances and
+// payments all read. These assertions are the boundary around that hole.
+describe('The door kiosk creates a provisional family', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot,
+        'js/admin/admin-before-after-care.js'), 'utf8');
+    const mig = readMigration('before_after_care_charges');
+    const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+
+    // ⚠️ The RPC is asserted against the CORRECTING migration, not the one
+    // that created the table. The original shipped a call to
+    // staff_id_for_pin(p_pin) — a signature production has not had in
+    // months — which compiled fine and failed on the first real call. That
+    // broken text is still in the applied file, left as it ran, so a test
+    // reading THAT file would happily lock the bug in. Read what is live.
+    const fix = readMigration('record_door_checkin_fix_staff_pin_signature');
+    const fixDdl = fix.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+    const rpc = fixDdl.slice(fixDdl.indexOf('FUNCTION public.record_door_checkin'));
+
+    test('anon reaches exactly one function, and that function checks a staff PIN', () => {
+        // The kiosk holds no session, so `anon` is the real caller. It may
+        // call this and nothing else — and the function itself is the gate,
+        // not a policy, because a policy cannot verify a PIN.
+        expect(/GRANT EXECUTE ON FUNCTION public\.record_door_checkin\(uuid, integer[\s\S]{0,140}TO anon/.test(fixDdl)).toBe(true);
+        // Name THEN pin — a PIN alone was guessable across the whole roster,
+        // which is why staff_signin_name_then_pin replaced the one-arg form.
+        expect(/staff_id_for_pin\(p_staff_id, p_pin\)/.test(rpc)).toBe(true);
+        expect(/staff_id_for_pin\(p_pin\)/.test(rpc)).toBe(false);
+        // And the dead one-argument overload is dropped, not left beside it.
+        expect(/DROP FUNCTION IF EXISTS public\.record_door_checkin\(integer,/.test(fixDdl)).toBe(true);
+        expect(/SECURITY DEFINER/.test(rpc)).toBe(true);
+        // A bad PIN returns; it does not fall through to the writes below.
+        expect(/v_staff_id IS NULL THEN[\s\S]{0,90}bad_pin/.test(rpc)).toBe(true);
+        // And no table is opened to anon anywhere in the file.
+        expect(/GRANT[^;]*ON TABLE[^;]*anon/i.test(ddl)).toBe(false);
+        expect(/CREATE POLICY[^;]*TO\s+anon/i.test(ddl)).toBe(false);
+        // ⚠️ Not granting is not enough. Supabase's ALTER DEFAULT PRIVILEGES
+        // handed this table INSERT/SELECT/UPDATE/DELETE to anon the moment it
+        // was created — invisible in the creating migration, masked by RLS,
+        // and live the instant anyone adds a permissive policy. Caught by
+        // running VERIFY_door_checkin_boundary.sql straight after applying.
+        const strip = readMigration('care_charges_strip_default_grants');
+        expect(/REVOKE ALL ON TABLE public\.care_charges FROM anon/.test(strip)).toBe(true);
+        expect(/REVOKE ALL ON SEQUENCE public\.care_charges_id_seq FROM anon/.test(strip)).toBe(true);
+    });
+
+    test('a door record is unfinished, cannot multiply, and cannot run forever', () => {
+        // Visibly provisional, so it is never mistaken for a real family
+        // that merely happens to have no email address.
+        expect(/provisional_at\s+timestamptz/.test(ddl)).toBe(true);
+        // One live provisional family per phone: the same walk-in on Tuesday
+        // joins Monday's record instead of splitting the month across two
+        // invoices, neither of which would be right.
+        expect(/UNIQUE INDEX[\s\S]{0,220}families_provisional_one_per_phone/.test(ddl)).toBe(true);
+        // A hard cap, counted across ALL of that family's charges — not per
+        // program and not per month, either of which would reset its way
+        // into being permanent.
+        expect(/PROVISIONAL_MAX_SESSIONS/.test(rpc)).toBe(true);
+        expect(/count\(\*\) INTO v_used FROM care_charges WHERE family_id/.test(rpc)).toBe(true);
+        expect(/needs_office/.test(rpc)).toBe(true);
+    });
+
+    test('the two defaults that would harm the child are overridden', () => {
+        // ⚠️ SAFETY, not billing. students.allergies defaults to '[]', which
+        // reads exactly like "reviewed, no allergies" — a claim nobody made
+        // about a child whose parent has just walked out. And photo_release
+        // defaults to TRUE, a consent nobody gave.
+        expect(/INSERT INTO students \(family_id, child_name, photo_release\)/.test(rpc)).toBe(true);
+        expect(/VALUES \(v_family_id, btrim\(p_child_name\), false\)/.test(rpc)).toBe(true);
+        // allergies_reviewed_at is never stamped here, so every existing
+        // allergy surface keeps treating this child as unreviewed.
+        expect(/allergies_reviewed_at/.test(rpc)).toBe(false);
+    });
+
+    test('a repeated tap does not bill the family twice', () => {
+        // A teacher with a child on one hip taps the tile again. The unique
+        // constraint is the guard, and the repeat is a no-op rather than an
+        // error the kiosk would have to explain to someone holding a bag.
+        expect(/ON CONFLICT \(student_id, program_id, care_date\) DO NOTHING/.test(rpc)).toBe(true);
+    });
+
+    test('the rate is read once at the door and frozen onto the charge', () => {
+        expect(/INTO v_rate[\s\S]{0,220}FROM settings/.test(rpc)).toBe(true);
+        expect(/rate_charged, recorded_by\)[\s\S]{0,200}v_rate/.test(rpc)).toBe(true);
+    });
+
+    test('a walk-in is not charged a joining fee by accident', () => {
+        // Checked against the live gate rather than assumed: the new-family
+        // fee needs a CONFIRMED REGISTRATION to establish a first care
+        // month, and a provisional family has none.
+        const gate = readMigration('annual_fee_single_month_gate');
+        expect(/not f\.new_family_fee_charged/.test(gate)).toBe(true);
+        expect(/from registrations r2/.test(gate)).toBe(true);
+        expect(/r2\.status = 'confirmed'/.test(gate)).toBe(true);
+        expect(/new-family fee cannot/.test(mig)).toBe(true);   // and the file says so
+    });
+
+    test('there is a written, read-only way to check the boundary held', () => {
+        const v = fs.readFileSync(path.join(repoRoot,
+            'supabase/migrations/VERIFY_door_checkin_boundary.sql'), 'utf8');
+        // A VERIFY file that mutates would be a migration in disguise, and
+        // nothing prefixed VERIFY_ gets reviewed as one.
+        const stmts = v.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+        expect(/^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE)\b/im.test(stmts)).toBe(false);
+        // It checks the things that actually hurt: anon's reach, children
+        // whose allergies nobody asked about, and uncollectable charges.
+        expect(/grantee = 'anon'/.test(v)).toBe(true);
+        expect(/allergies_reviewed_at IS NULL/.test(v)).toBe(true);
+        expect(/parent_email/.test(v)).toBe(true);
+    });
+
+    test('the screen tells the director what a door record is', () => {
+        expect(/provisional family from a staff PIN/.test(src)).toBe(true);
+        expect(/allergies are <em>unknown<\/em>/.test(src)).toBe(true);
     });
 });
 
 
 // ============================================================
-// AFTERCARE BILLING — the write path for care_charges
+// BILLING care_charges, AND GUARDING THE FULL-DAY EXCLUSION
 // ============================================================
-// The proposed migration must stay a proposal until Andrew applies it by
-// hand (AGENTS.md), and every new function it defines must exclude anon —
-// same posture as the table itself.
-describe('Aftercare Billing — recording a charge', () => {
-    const repoRoot = path.resolve(__dirname, '..', '..');
-    const mig = fs.readFileSync(path.join(repoRoot,
-        'supabase/migrations/PROPOSED_bill_after_care_charges.sql'), 'utf8');
-    const screenSrc = fs.readFileSync(path.join(repoRoot,
-        'js/admin/admin-aftercare-billing.js'), 'utf8');
+// The door kiosk and the provisional-family design are live, but nothing
+// bills a recorded charge yet, and nothing stops the kiosk from charging a
+// child who already paid for that afternoon as part of full-day tuition.
+// This is that wiring, proposed rather than applied — see the migration's
+// own header for why both halves belong in one change.
+describe('Billing care_charges without double-charging a full-day booking', () => {
+    const mig = readMigration('bill_care_charges_and_guard_full_day');
     const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
 
-    test('the billing migration is marked unapplied and opens no anon door', () => {
+    test('the migration is marked unapplied', () => {
         expect(/PROPOSED — NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
-        expect(/GRANT EXECUTE[^;]*TO\s+(public|anon)\b/i.test(ddl)).toBe(false);
-        ['record_care_charge', 'waive_care_charge', 'admin_create_prek_child'].forEach(fn => {
-            const revoke = new RegExp(`REVOKE ALL ON FUNCTION public\\.${fn}\\([^)]*\\) FROM PUBLIC, anon`);
-            const grant  = new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${fn}\\([^)]*\\) TO authenticated`);
-            expect(revoke.test(ddl)).toBe(true);
-            expect(grant.test(ddl)).toBe(true);
-        });
     });
 
-    // The whole point of this migration: a family with only Pre-K after-care
-    // charges (no MDO registrations at all) must still be billed, and a
+    // The whole point: a Pre-K-only family (no MDO registrations at all)
+    // must still be billed, straight off the charge's own family_id, and a
     // child already covered by full-day tuition must never be billed twice.
-    test('the invoice functions exclude a child already covered by full-day tuition', () => {
-        ['compute_family_month_charges', 'compute_family_month_charges_itemized'].forEach(fn => {
-            expect(new RegExp(`CREATE OR REPLACE FUNCTION (public\\.)?${fn}\\(`).test(ddl)).toBe(true);
-        });
-        // The exclusion reads PM_COMBINED_ROOM_IDS's own three rooms, and
-        // must appear once per function (compute + itemized), plus once more
-        // inside record_care_charge()'s own entry-side refusal.
-        const occurrences = (ddl.match(/'goose', 'turtle', 'owl'/g) || []).length;
-        expect(occurrences).toBe(3);
-        // care_charges is billed by its own family_id, never by name-matching
-        // through registrations — that's what makes a Pre-K-only family (no
-        // registrations at all) billable in the first place.
+    test('compute_family_month_charges() and its itemized twin bill by family_id, excluding an already-covered full day', () => {
+        expect(/CREATE OR REPLACE FUNCTION public\.compute_family_month_charges\(/.test(ddl)).toBe(true);
+        expect(/CREATE OR REPLACE FUNCTION compute_family_month_charges_itemized\(/.test(ddl)).toBe(true);
+        // Billed by the charge's OWN family_id — never by joining through
+        // students, which is nullable and would let an unbillable charge
+        // through silently.
         expect(/cc\.family_id = p_family_id/.test(ddl)).toBe(true);
+        // The exclusion reads PM_COMBINED_ROOM_IDS's own three rooms, once
+        // per invoice function (compute + itemized), plus once more inside
+        // record_door_checkin()'s own entry-side refusal below.
+        expect((ddl.match(/'goose', 'turtle', 'owl'/g) || []).length).toBe(3);
+        // Only unwaived charges count, and each is its own itemized line —
+        // never blended into a child's tuition row.
+        expect(/cc\.waived = false/.test(ddl)).toBe(true);
+        expect(/' — After care'/.test(ddl)).toBe(true);
     });
 
-    test('record_care_charge() refuses before inserting, not after', () => {
-        const fnBody = ddl.split('CREATE OR REPLACE FUNCTION public.record_care_charge')[1].split('$$;')[0];
-        const blockIdx = fnBody.indexOf('RAISE EXCEPTION');
+    // record_door_checkin() must refuse BEFORE writing anything, and only
+    // for a real (non-provisional) family — a brand-new walk-in cannot
+    // possibly already have an MDO registration, since it has no email yet.
+    test('record_door_checkin() refuses an already-covered full day before inserting', () => {
+        const fnBody = ddl.split('CREATE OR REPLACE FUNCTION public.record_door_checkin')[1].split('$fn$;')[0];
+        expect(fnBody).toBeTruthy();
+        const guardIdx  = fnBody.indexOf('already_full_day');
         const insertIdx = fnBody.indexOf('INSERT INTO care_charges');
-        expect(blockIdx).toBeGreaterThan(-1);
+        expect(guardIdx).toBeGreaterThan(-1);
         expect(insertIdx).toBeGreaterThan(-1);
-        expect(blockIdx).toBeLessThan(insertIdx);
+        expect(guardIdx).toBeLessThan(insertIdx);
+        expect(/p_program_id = 'after_care' AND NOT v_provisional/.test(fnBody)).toBe(true);
+        // Same signature as the live function — this replaces its body, not
+        // its contract, so nothing that already calls it needs to change.
+        expect(/p_staff_id\s+uuid,\s*\n\s*p_pin\s+integer/.test(fnBody)).toBe(true);
     });
 
-    // The screen itself must never let the office bypass the RPC with a
-    // direct table write — record_care_charge()/waive_care_charge() are the
-    // only path, so the "no anon door" guarantee actually holds in practice.
-    test('the screen writes only through the RPCs, never a direct table write', () => {
-        const code = screenSrc.replace(/\/\*[\s\S]*?\*\//g, '')
-            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
-        expect(/\.from\(\s*['"`]care_charges['"`]\s*\)\s*\.\s*(insert|update|upsert|delete)\s*\(/.test(code)).toBe(false);
-        expect(/recordCareCharge\(/.test(code)).toBe(true);
-        expect(/waiveCareCharge\(/.test(code)).toBe(true);
+    test('anon still reaches only record_door_checkin, never care_charges directly', () => {
+        const anonGrants = (ddl.match(/GRANT[^;]*?\banon\b[^;]*;/gi) || []);
+        expect(anonGrants.length).toBe(1);
+        expect(/EXECUTE ON FUNCTION public\.record_door_checkin/.test(anonGrants[0])).toBe(true);
+        expect(/GRANT[^;]*\bcare_charges\b[^;]*\banon\b/i.test(ddl)).toBe(false);
+        // The two invoice functions stay admin/authenticated-only, same as
+        // every other billing computation in this file.
+        expect(/REVOKE EXECUTE ON FUNCTION public\.compute_family_month_charges\(UUID, TEXT\) FROM PUBLIC, anon, authenticated/.test(ddl)).toBe(true);
+        expect(/REVOKE ALL ON FUNCTION compute_family_month_charges_itemized\(uuid, text\) FROM PUBLIC, anon, authenticated/.test(ddl)).toBe(true);
     });
 });
 

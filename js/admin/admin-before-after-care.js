@@ -40,16 +40,20 @@
 // here, and the daily programs no longer carry one: a seat you cannot
 // reserve is not a seat.
 //
-// ── ⚠️ THE CHARGE HAS NOWHERE TO LAND YET ───────────────────
-// A charge needs a record that a child attended, and myMDO has no such
-// record for before or after care. Billing runs off `registration_dates` —
-// a day BOOKED in a room — and nobody books a morning at 7:30.
+// ── WHERE THE CHARGE LANDS ──────────────────────────────────
+// `care_charges` — one row per child per program per day, applied
+// 2026-09-15 (20260915171800). Billing elsewhere runs off
+// `registration_dates`, a day BOOKED in a room, and nobody books a morning
+// at 7:30 — so this table is the only record that a session happened.
 //
-// So the missing piece is exactly one table: this child, this program,
-// this date, this rate. The proposed shape is written up as a migration
-// source file (supabase/migrations/PROPOSED_before_after_care_charges.sql)
-// which is NOT applied — per AGENTS.md, migrations there are source records
-// applied by hand, and a schema change needs Andrew's explicit approval.
+// The door kiosk writes through record_door_checkin(), a SECURITY DEFINER
+// RPC that verifies a teacher's name and PIN; nothing writes this table
+// directly from a browser. See 20260915171936 for the live signature.
+//
+// ⚠️ NOTHING READS IT ON THIS SCREEN YET. The table is live and empty, and
+// no rate exists until Settings → Programs & add-ons is saved once — until
+// then the RPC refuses with `no_rate`, which is the correct fail-closed
+// behavior and not a bug.
 //
 // Pre-K children need nothing more than that table plus a `students` row.
 // They have no registration, so room capacity, the ratio math for a room,
@@ -57,8 +61,9 @@
 // and `registration_dates` — correctly never see them. Nothing has to
 // remember to exclude them.
 //
-// Until then this screen shows the MDO afternoon truthfully and names the
-// gap, rather than rendering charges nobody has recorded.
+// So this screen still shows the MDO afternoon truthfully and says plainly
+// that no session has been recorded, rather than rendering charges nobody
+// has made.
 
 let _bacDate  = null;
 let _bacBound = false;
@@ -207,8 +212,8 @@ function _bacPrekHtml() {
                 <p>Before and after care is not a room and nobody enrolls in it. A child attends, and a charge follows. This is the register of that &mdash; including the Timothy Lutheran Pre-K children who use the care and never the MDO program.</p>
             </div>
             <div class="bac-gap">
-                <strong>It is empty because nothing records the attendance.</strong>
-                Billing here runs off a day <em>booked</em> in a room, and nobody books a morning at 7:30. There is no table that says a child was here, so there is nothing to charge from &mdash; for MDO children or Pre-K ones.
+                <strong>It is empty because nobody has been checked in yet.</strong>
+                The table that records a session is live, and the door kiosk writes to it through a staff-PIN check. Nothing has been recorded so far &mdash; and no rate is set until Settings → Programs &amp; add-ons is saved once, so the door will politely refuse until then.
             </div>
             <div class="bac-spec">
                 <div class="bac-spec-title">What it needs, precisely</div>
@@ -217,8 +222,9 @@ function _bacPrekHtml() {
                     <li><strong>The rate copied in, not looked up later.</strong> A price change in October must not silently re-price September.</li>
                     <li><strong>A waived session stays visible</strong>, with its reason, rather than vanishing. A charge that disappears is one nobody can ask about later.</li>
                 </ul>
-                <p class="bac-spec-note">A Pre-K child needs that table and a child record &mdash; nothing else. With no registration, room capacity, a room's ratio math, the waitlist and the fill forecast never see them, because every one of those reads registrations.</p>
-                <p class="bac-spec-note">The shape is written up in <code>supabase/migrations/PROPOSED_before_after_care_charges.sql</code>. It is <strong>not applied</strong> &mdash; per <code>AGENTS.md</code>, migrations in that folder are source records applied by hand, and a schema change on a live childcare system needs Andrew's explicit approval first.</p>
+                <p class="bac-spec-note">A Pre-K child needs that table, a child record and a family to bill &mdash; nothing else. With no registration, room capacity, a room's ratio math, the waitlist and the fill forecast never see them, because every one of those reads registrations. And because every family is billed directly, a Pre-K family goes through the same statements, balances and payment screens as everyone else &mdash; there is no second billing mode to build or maintain.</p>
+                <p class="bac-spec-note"><strong>A child nobody has on file can still be taken in.</strong> The door kiosk creates a provisional family from a staff PIN &mdash; the teacher's, not the parent's &mdash; so the charge has somewhere to land immediately. That record is deliberately unfinished: no email, no login, and a cap of two sessions before the kiosk stops and sends the family to the office. Two of its details are safety rather than billing, and the office owns both &mdash; the child's allergies are <em>unknown</em>, not &ldquo;none&rdquo;, and photo release is set to no until somebody actually asks.</p>
+                <p class="bac-spec-note"><strong>Applied 2026-09-15.</strong> The table, the door check-in RPC and the provisional-family columns are live. Two follow-ups went with it: one stripping the table grants Supabase hands every new table to <code>anon</code>, and one correcting the staff-PIN call to the name-then-PIN signature the rest of the system uses. Run <code>VERIFY_door_checkin_boundary.sql</code> to re-check the boundary, and weekly to see which provisional families still need finishing.</p>
             </div>
         </div>`;
 }
@@ -230,7 +236,7 @@ function _bacInvoiceHtml(f) {
         <div class="ap-panel">
             <div class="ap-panel-head">
                 <h3>Month-end invoices</h3>
-                <p>One invoice per family, counted straight off the check-in record — so there is no "billed versus booked" gap to reconcile.</p>
+                <p><strong>Every family is billed directly</strong> &mdash; Pre-K families included, on their own invoice, not one consolidated bill to the Pre-K office. Charges are added up from what was actually recorded, so there is no "billed versus booked" gap to reconcile.</p>
             </div>
             <div class="bac-rows">
                 <div class="bac-stat"><span>Afternoon rate</span><strong>$${p?.rate ?? '—'}</strong></div>

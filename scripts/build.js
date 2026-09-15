@@ -238,10 +238,6 @@ const ENTRIES = [
                 // loadProgramSettings() from js/supabase.js, and the same
                 // registrations every capacity screen reads. Writes nothing.
                 'js/admin/admin-before-after-care.js',
-                // Next to admin-before-after-care.js, which it is the write
-                // half of. Reads fetchAllFamilies()/PM_COMBINED_ROOM_IDS from
-                // js/supabase.js and the same allRegistrations global.
-                'js/admin/admin-aftercare-billing.js',
                 // After admin-calendar.js: reuses showDayRosterDetail(),
                 // renderCapacityOverview() and renderRoomSchedule() as the
                 // Enrollment & Capacity tool's Day/Month/Week sub-views.

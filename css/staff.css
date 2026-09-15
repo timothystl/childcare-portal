@@ -236,6 +236,14 @@
 }
 .sl-act-row, .sl-bottle-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
+.sl-supply-other-row { display: flex; gap: 8px; margin-top: 8px; }
+.sl-supply-other-row input {
+    flex: 1 1 auto; min-height: 48px; padding: 0 12px;
+    border: 1.5px solid #d7dee5; border-radius: 12px;
+    font-size: .96em; font-family: inherit;
+}
+.sl-supply-other-row .sl-act { flex: 0 0 auto; min-width: auto; }
+
 .sl-act {
     flex: 1 1 auto; min-width: 88px; min-height: 48px;
     background: #fff; border: 1.5px solid #d7dee5; border-radius: 12px;

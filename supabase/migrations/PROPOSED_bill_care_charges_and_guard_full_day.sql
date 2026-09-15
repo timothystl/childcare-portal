@@ -1,18 +1,17 @@
 -- ============================================================
 -- PROPOSED — NOT APPLIED, NOT APPROVED
 -- ============================================================
--- Bills `care_charges` rows (20260915171800_before_after_care_charges.sql)
--- for the first time, and gives the office a safe way to write them.
+-- Turns a recorded care_charges row into money on an invoice, for the first
+-- time, and closes a gap left open by 20260915171800/171831/171936: nothing
+-- stops a full-day Goose/Turtle/Owl child from being charged for after care
+-- they already paid for as part of tuition.
 --
 -- ⚠️ READ THIS BEFORE RUNNING ANYTHING BELOW.
 --
--- Per AGENTS.md: a schema/RLS change on a live childcare and payment system
--- needs Andrew's explicit approval for this specific operation, staged and
--- smoke-tested before it touches production. Nothing that ships today reads
--- `care_charges`, so nothing currently charges anyone for before or after
--- care — this migration is what turns a recorded attendance row into money
--- on an actual invoice, for the first time. Treat it with the same care as
--- any other change to compute_family_month_charges().
+-- Per AGENTS.md: a change to compute_family_month_charges() and
+-- record_door_checkin() on a live childcare and payment system needs
+-- Andrew's explicit approval for this specific operation, staged and
+-- smoke-tested before it touches production.
 --
 -- ── The scenario this was built for ─────────────────────────
 -- Goose, Turtle and Owl combine into one supervised group from 1:00p
@@ -22,34 +21,46 @@
 -- from the Pre-K school who are NOT in the MDO program join the same floor,
 -- and THOSE children are the ones after care actually bills.
 --
+-- care_charges, the door kiosk (record_door_checkin) and the provisional-
+-- family design are already live (20260915171800, 20260915171831,
+-- 20260915171936) — "bill each family directly" is already answered there.
+-- Two things are still missing, and this migration is exactly those two:
+--
+--   1. NOBODY BILLS IT YET. compute_family_month_charges() and its itemized
+--      twin still only read `registrations`/`registration_dates`. Every
+--      care_charges row recorded by the kiosk so far sits there unbilled —
+--      the applied migration's own closing line still says so: "Only then
+--      deploy code that reads it. Nothing does today."
+--
+--   2. NOTHING GUARDS THE KIOSK AGAINST THE EXACT SCENARIO THIS FEATURE
+--      EXISTS TO PREVENT. record_door_checkin() takes whatever child name a
+--      teacher types and writes a charge — it never checks whether that
+--      child already has a full-day booking in the combined rooms that
+--      date. Today that is latent, not harmful, because nothing bills the
+--      row it creates; the moment (1) ships, it becomes a real double
+--      charge on a family who already paid.
+--
 -- ── Where the exclusion lives, and why it lives twice ───────
--- record_care_charge() below REFUSES to create a charge for a child who
--- already has a full-day PM_COMBINED_ROOM_IDS booking that date — the office
--- sees the reason immediately instead of a mysterious $0 later.
+-- record_door_checkin() below REFUSES to write a charge for a child who
+-- already has a full-day PM_COMBINED_ROOM_IDS booking that date — the
+-- teacher sees `already_full_day` immediately instead of a silent
+-- double-bill three weeks later.
 --
 -- compute_family_month_charges() / _itemized() below apply the SAME
 -- exclusion again, independently, when summing what a family owes. This is
--- deliberate, not redundant: the entry point is a courtesy that can be
--- bypassed (a direct insert, a bug, a future caller nobody has written yet),
--- but the invoice total must be correct regardless of how a bad row got in.
--- The bill, not the form, is the one place that has to be right — the same
+-- deliberate, not redundant: the kiosk guard is a courtesy that can be
+-- bypassed (a bug, a future caller, a row written some other way), but the
+-- invoice total must be correct regardless of how a bad row got in. The
+-- bill, not the kiosk, is the one place that has to be right — the same
 -- reasoning AGENTS.md states plainly: "Never trust client-supplied ...
 -- claims when the server can derive or re-read them."
---
--- ── Design decisions this closes ────────────────────────────
--- Who receives a Pre-K invoice, left open in the table's own migration:
--- settled directly with Andrew as "the child's own family in myMDO, billed
--- the same as any other family" — which is also why `care_charges` already
--- carries its own `family_id` rather than only `student_id`.
 --
 -- A charge is always billed as its OWN itemized line ("<child> — After
 -- care"), never blended into that child's tuition row, even for a child who
 -- has both (e.g. a half-day MDO booking that stays for after care — a half
 -- day goes home before the rooms combine, so that afternoon was never paid
 -- for). A blended dollar figure next to "3 full days" would misstate what
--- the full-day rate actually buys; two visible lines is the honest version
--- of "a waived session stays on the invoice, not vanish" this whole feature
--- already lives by for waived charges.
+-- the full-day rate actually buys.
 -- ============================================================
 
 -- ── compute_family_month_charges(): the real total a family owes ──
@@ -229,7 +240,7 @@ BEGIN
     -- booking. A student already covered by a full-day booking in the pooled
     -- afternoon rooms (PM_COMBINED_ROOM_IDS: goose, turtle, owl — must stay
     -- in sync with js/supabase.js) that same date is excluded here too, on
-    -- top of record_care_charge() refusing to create that row in the first
+    -- top of record_door_checkin() refusing to create that row in the first
     -- place — see this file's header for why the check lives in both places.
     care_rows AS (
         SELECT cc.rate_charged
@@ -498,162 +509,155 @@ $function$;
 
 REVOKE ALL ON FUNCTION compute_family_month_charges_itemized(uuid, text) FROM PUBLIC, anon, authenticated;
 
--- ── record_care_charge(): the office's one write path ──
--- Refuses a child already covered by full-day tuition in the pooled
--- afternoon rooms (see header). Copies the rate in at write time, same as
--- the table's own design — a later rate change must not re-price this row.
-CREATE OR REPLACE FUNCTION public.record_care_charge(
-    p_student_id uuid,
-    p_program_id text,
-    p_care_date  date
-) RETURNS bigint
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
+-- ── record_door_checkin(): guard against an already-covered full day ──
+-- Same body as 20260915171936, plus one new refusal. Diff against that file
+-- if reviewing: everything before "-- ⚠️ NEW:" is unchanged.
+CREATE OR REPLACE FUNCTION public.record_door_checkin(
+    p_staff_id      uuid,
+    p_pin           integer,
+    p_program_id    text,
+    p_child_name    text,
+    p_guardian_name text,
+    p_guardian_phone text,
+    p_care_date     date DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public','extensions' AS $fn$
 DECLARE
-    v_family_id  uuid;
-    v_child_name text;
-    v_programs   jsonb;
-    v_rate       numeric;
-    v_id         bigint;
-    v_blocked    boolean;
+    PROVISIONAL_MAX_SESSIONS constant integer := 2;
+
+    v_staff_id  uuid;
+    v_date      date;
+    v_phone     text;
+    v_rate      numeric(10,2);
+    v_family_id uuid;
+    v_student_id uuid;
+    v_used      integer;
+    v_provisional boolean;
+    v_already_full_day boolean;
 BEGIN
-    IF NOT public.is_admin() THEN RAISE EXCEPTION 'Admin access required'; END IF;
+    v_staff_id := staff_id_for_pin(p_staff_id, p_pin);
+    IF v_staff_id IS NULL THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'bad_pin');
+    END IF;
+
     IF p_program_id NOT IN ('before_care', 'after_care') THEN
-        RAISE EXCEPTION 'Unknown care program: %', p_program_id;
+        RETURN jsonb_build_object('ok', false, 'code', 'bad_program');
     END IF;
 
-    SELECT family_id, child_name INTO v_family_id, v_child_name
-      FROM students WHERE id = p_student_id;
+    IF coalesce(btrim(p_child_name), '') = ''
+       OR coalesce(btrim(p_guardian_name), '') = '' THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'missing_name');
+    END IF;
+
+    v_phone := regexp_replace(coalesce(p_guardian_phone, ''), '\D', '', 'g');
+    IF length(v_phone) < 10 THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'missing_phone');
+    END IF;
+
+    v_date := coalesce(p_care_date, (now() AT TIME ZONE 'America/Chicago')::date);
+
+    BEGIN
+        SELECT (p->>'rate')::numeric INTO v_rate
+          FROM settings s,
+               jsonb_array_elements(
+                   coalesce(s.value::jsonb -> 'programs', '[]'::jsonb)) p
+         WHERE s.key = 'programs' AND p->>'id' = p_program_id;
+    EXCEPTION WHEN others THEN
+        v_rate := NULL;
+    END;
+    IF v_rate IS NULL THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'no_rate');
+    END IF;
+
+    SELECT id, provisional_at IS NOT NULL AND completed_at IS NULL
+      INTO v_family_id, v_provisional
+      FROM families
+     WHERE regexp_replace(coalesce(parent_phone, ''), '\D', '', 'g') = v_phone
+        OR regexp_replace(coalesce(parent2_phone, ''), '\D', '', 'g') = v_phone
+     ORDER BY provisional_at NULLS FIRST
+     LIMIT 1;
+
     IF v_family_id IS NULL THEN
-        RAISE EXCEPTION 'That child has no family on record to bill';
+        INSERT INTO families (parent_name, parent_phone, parent_email,
+                              provisional_at, provisional_by)
+        VALUES (btrim(p_guardian_name), btrim(p_guardian_phone), '',
+                now(), v_staff_id)
+        RETURNING id INTO v_family_id;
+        v_provisional := true;
     END IF;
 
-    IF p_program_id = 'after_care' THEN
+    IF v_provisional THEN
+        SELECT count(*) INTO v_used FROM care_charges WHERE family_id = v_family_id;
+        IF v_used >= PROVISIONAL_MAX_SESSIONS THEN
+            RETURN jsonb_build_object(
+                'ok', false, 'code', 'needs_office',
+                'family_id', v_family_id, 'sessions_used', v_used);
+        END IF;
+    END IF;
+
+    SELECT id INTO v_student_id
+      FROM students
+     WHERE family_id = v_family_id
+       AND lower(btrim(child_name)) = lower(btrim(p_child_name))
+     LIMIT 1;
+
+    IF v_student_id IS NULL THEN
+        INSERT INTO students (family_id, child_name, photo_release)
+        VALUES (v_family_id, btrim(p_child_name), false)
+        RETURNING id INTO v_student_id;
+    END IF;
+
+    -- ⚠️ NEW: a brand-new or still-provisional family cannot possibly have an
+    -- existing MDO registration (it has no email yet), so this only ever
+    -- fires for a REAL family the phone match found — exactly the case that
+    -- matters: an existing MDO parent's child, already booked a full day in
+    -- the combined rooms today, walking up to the same kiosk under
+    -- after_care. Checked by name + the family's own email(s), the same key
+    -- every registration match in this codebase uses, since a walk-in gives
+    -- no registration_id to join on directly.
+    IF p_program_id = 'after_care' AND NOT v_provisional THEN
         SELECT EXISTS (
             SELECT 1
-              FROM registration_dates rd
-              JOIN registrations r ON r.id = rd.registration_id
-             WHERE r.status = 'confirmed'
-               AND lower(trim(r.child_name)) = lower(trim(v_child_name))
-               AND rd.care_date = p_care_date
+              FROM families f
+              JOIN registrations r
+                ON lower(trim(r.parent_email)) = lower(trim(f.parent_email))
+                OR (coalesce(f.parent2_email, '') <> ''
+                    AND lower(trim(r.parent_email)) = lower(trim(f.parent2_email)))
+              JOIN registration_dates rd ON rd.registration_id = r.id
+             WHERE f.id = v_family_id
+               AND r.status = 'confirmed'
+               AND lower(trim(r.child_name)) = lower(trim(p_child_name))
+               AND rd.care_date = v_date
                AND COALESCE(rd.waitlisted, false) = false
                AND COALESCE(rd.day_type, 'full') = 'full'
                -- PM_COMBINED_ROOM_IDS — must stay in sync with js/supabase.js
                AND COALESCE(rd.room_id, r.room_id) IN ('goose', 'turtle', 'owl')
-        ) INTO v_blocked;
-        IF v_blocked THEN
-            RAISE EXCEPTION 'This child already has a full-day MDO booking in the combined afternoon rooms on % — after care that day is already included in tuition.', p_care_date;
+        ) INTO v_already_full_day;
+        IF v_already_full_day THEN
+            RETURN jsonb_build_object(
+                'ok', false, 'code', 'already_full_day',
+                'family_id', v_family_id, 'student_id', v_student_id);
         END IF;
     END IF;
 
-    SELECT COALESCE(value::jsonb, '{}'::jsonb) INTO v_programs
-      FROM settings WHERE key = 'programs';
-    SELECT (p ->> 'rate')::numeric INTO v_rate
-      FROM jsonb_array_elements(COALESCE(v_programs -> 'programs', '[]'::jsonb)) p
-     WHERE p ->> 'id' = p_program_id;
-    -- Falls back to the PROGRAMS defaults in js/supabase.js if the office
-    -- has never saved Settings → Programs & add-ons.
-    v_rate := COALESCE(v_rate, CASE p_program_id WHEN 'before_care' THEN 8 WHEN 'after_care' THEN 12 END);
+    INSERT INTO care_charges (student_id, family_id, program_id, care_date,
+                              rate_charged, recorded_by)
+    VALUES (v_student_id, v_family_id, p_program_id, v_date,
+            v_rate, v_staff_id::text)
+    ON CONFLICT (student_id, program_id, care_date) DO NOTHING;
 
-    INSERT INTO care_charges (student_id, family_id, program_id, care_date, rate_charged, recorded_by)
-    VALUES (p_student_id, v_family_id, p_program_id, p_care_date, v_rate, COALESCE(auth.email(), 'admin'))
-    RETURNING id INTO v_id;
-
-    PERFORM public._reconcile_billing_invoice_internal(v_family_id, to_char(p_care_date, 'YYYY-MM'));
-
-    RETURN v_id;
+    RETURN jsonb_build_object(
+        'ok', true,
+        'family_id', v_family_id,
+        'student_id', v_student_id,
+        'provisional', coalesce(v_provisional, false),
+        'rate_charged', v_rate);
 END;
-$$;
+$fn$;
 
-REVOKE ALL ON FUNCTION public.record_care_charge(uuid, text, date) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.record_care_charge(uuid, text, date) TO authenticated;
-
--- ── waive_care_charge(): keep the row, zero the amount, require a reason ──
-CREATE OR REPLACE FUNCTION public.waive_care_charge(
-    p_charge_id bigint,
-    p_reason    text
-) RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_family_id uuid;
-    v_care_date date;
-BEGIN
-    IF NOT public.is_admin() THEN RAISE EXCEPTION 'Admin access required'; END IF;
-    IF coalesce(trim(p_reason), '') = '' THEN
-        RAISE EXCEPTION 'A waived charge needs a reason';
-    END IF;
-
-    UPDATE care_charges
-       SET waived = true, waived_reason = p_reason
-     WHERE id = p_charge_id
-    RETURNING family_id, care_date INTO v_family_id, v_care_date;
-
-    IF v_family_id IS NULL THEN
-        RAISE EXCEPTION 'Charge % not found', p_charge_id;
-    END IF;
-
-    PERFORM public._reconcile_billing_invoice_internal(v_family_id, to_char(v_care_date, 'YYYY-MM'));
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.waive_care_charge(bigint, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.waive_care_charge(bigint, text) TO authenticated;
-
--- ── admin_create_prek_child(): quick-add for a family myMDO has never seen ──
--- Finds an existing family by parent email first, so recording a second
--- Pre-K sibling never creates a duplicate family row. Only myMDO's own
--- families/students tables are touched — this never creates a registration,
--- because a Pre-K child has none.
-CREATE OR REPLACE FUNCTION public.admin_create_prek_child(
-    p_parent_name  text,
-    p_parent_email text,
-    p_parent_phone text,
-    p_child_name   text,
-    p_child_dob    date
-) RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_family_id  uuid;
-    v_student_id uuid;
-    v_email      text := lower(trim(coalesce(p_parent_email, '')));
-BEGIN
-    IF NOT public.is_admin() THEN RAISE EXCEPTION 'Admin access required'; END IF;
-    IF coalesce(trim(p_child_name), '') = '' THEN
-        RAISE EXCEPTION 'Child name is required';
-    END IF;
-    IF v_email = '' THEN
-        RAISE EXCEPTION 'A parent email is required to bill this family';
-    END IF;
-
-    SELECT id INTO v_family_id FROM families
-     WHERE lower(trim(parent_email)) = v_email
-        OR lower(trim(COALESCE(parent2_email, ''))) = v_email
-     LIMIT 1;
-
-    IF v_family_id IS NULL THEN
-        INSERT INTO families (parent_name, parent_email, parent_phone)
-        VALUES (COALESCE(NULLIF(trim(p_parent_name), ''), 'Unknown'), v_email, COALESCE(p_parent_phone, ''))
-        RETURNING id INTO v_family_id;
-    END IF;
-
-    INSERT INTO students (family_id, child_name, child_dob)
-    VALUES (v_family_id, trim(p_child_name), p_child_dob)
-    RETURNING id INTO v_student_id;
-
-    RETURN jsonb_build_object('family_id', v_family_id, 'student_id', v_student_id);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.admin_create_prek_child(text, text, text, text, date) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admin_create_prek_child(text, text, text, text, date) TO authenticated;
+REVOKE ALL ON FUNCTION public.record_door_checkin(uuid, integer, text, text, text, text, date) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.record_door_checkin(uuid, integer, text, text, text, text, date)
+    TO anon, authenticated;
 
 -- ============================================================
 -- VERIFY (run after applying, before trusting a real invoice to it)
@@ -668,12 +672,14 @@ GRANT EXECUTE ON FUNCTION public.admin_create_prek_child(text, text, text, text,
 --      for that charge (the exclusion held) — confirm the itemized row for
 --      "<child> — After care" is either absent or nets to 0 for that date.
 --
---   -- 3. record_care_charge() rejects the same scenario at the source:
---   SELECT record_care_charge('<student_id_booked_full_day_that_date>', 'after_care', '<that_date>');
---   -- must raise, not insert.
+--   -- 3. record_door_checkin() rejects the same scenario at the source:
+--   SELECT record_door_checkin('<staff_id>', <pin>, 'after_care',
+--       '<name of a child booked full-day today in goose/turtle/owl>',
+--       '<that family''s guardian name>', '<that family''s phone>');
+--   -- must return {"ok": false, "code": "already_full_day", ...}, not insert.
 --
---   -- 4. anon still cannot touch any of this:
+--   -- 4. anon still cannot touch care_charges directly, only through the RPC:
 --   SET ROLE anon;
---   SELECT record_care_charge('00000000-0000-0000-0000-000000000000', 'after_care', now()::date); -- must fail
+--   SELECT * FROM care_charges; -- must fail
 --   RESET ROLE;
 -- ============================================================

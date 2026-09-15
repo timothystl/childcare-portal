@@ -158,3 +158,4 @@
 20260915134514	purge_client_error_log
 20260915171800	before_after_care_charges
 20260915171831	care_charges_strip_default_grants
+20260915171936	record_door_checkin_fix_staff_pin_signature

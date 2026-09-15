@@ -228,15 +228,6 @@ const AP_TOOLS = [
       blurb: 'Bulk-import payments exported from ProCare. Shows every row for review first, skips rows already recorded, and lets you assign any child it could not match.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
-    // The write half of Before & After Care (Classrooms → Daily): records
-    // that a specific child attended, which bills that child's own family —
-    // see js/admin/admin-aftercare-billing.js. Lives in Finance rather than
-    // next to Before & After Care itself, same reasoning as ProCare Import
-    // and Discounts & Scholarships above: `group: 'Daily'` on the Classrooms
-    // tab is the staff-role's read-only surface (apToolAvailable()'s
-    // `role === 'staff'` gate), and this writes real money.
-    { key: 'aftercareBilling', pane: 'finance', section: 'aftercareBillingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💳', name: 'Aftercare Billing',
-      blurb: 'Record who attended before or after care today, and bill their family for it.' },
 
     // ── Finance · Bookkeeper group — now EMPTY, and that's the point ──
     // Ten tools used to live in this sidebar group across two sessions and
@@ -1112,7 +1103,6 @@ function apOnToolOpened(tool) {
         if (tool.key === 'newsletter' && typeof renderNewsletterTool === 'function') renderNewsletterTool();
         if (tool.key === 'signatures' && typeof renderSignatureRecordTool === 'function') renderSignatureRecordTool();
         if (tool.key === 'beforeAfter' && typeof renderBeforeAfterCareTool === 'function') renderBeforeAfterCareTool();
-        if (tool.key === 'aftercareBilling' && typeof renderAftercareBillingTool === 'function') renderAftercareBillingTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
@@ -2965,6 +2955,19 @@ function setupAdminPortal() {
         if (flNav) { _flNavCalendar(flNav.dataset.flNavKey, parseInt(flNav.dataset.flNavDelta, 10) || 0); return; }
         const flChangeDays = e.target.closest('[data-fl-change-days]');
         if (flChangeDays) { _flChangeDays(flChangeDays.dataset.flChangeDays); return; }
+        // Daily activity / "Add a day" — see admin-family-lookup.js.
+        const flLogNav = e.target.closest('[data-fl-log-nav]');
+        if (flLogNav) { _flLogNav(flLogNav.dataset.flLogNav, parseInt(flLogNav.dataset.flLogDelta, 10) || 0); return; }
+        const flLogAdd = e.target.closest('[data-fl-log-add]');
+        if (flLogAdd) { _flToggleLogForm(flLogAdd.dataset.flLogAdd); return; }
+        const flLogCancel = e.target.closest('[data-fl-log-cancel]');
+        if (flLogCancel) { _flToggleLogForm(flLogCancel.dataset.flLogCancel); return; }
+        const flLogSubmit = e.target.closest('[data-fl-log-submit]');
+        if (flLogSubmit) {
+            const key = flLogSubmit.dataset.flLogSubmit;
+            _flSubmitLogEntry(key, _flStudentIdForKey(key));
+            return;
+        }
         if (e.target.closest('[data-ap-nav-search-clear]')) { apNavSearchClear(); return; }
     });
 
@@ -2977,6 +2980,7 @@ function setupAdminPortal() {
     });
 
     document.addEventListener('change', e => {
+        if (e.target.matches('[data-fl-log-type]')) { _flLogTypeChanged(e.target.value); return; }
         const check = e.target.closest('[data-ap-check]');
         if (check) {
             apState.done[check.dataset.apCheck] = check.checked;

@@ -1801,12 +1801,16 @@ const PROGRAMS = [
         label:     '🌅 Before care',
         kind:      'daily',            // billed per morning/afternoon attended
         scope:     'All rooms, combined',
-        startTime: '7:30',
-        endTime:   '9:00',
+        // ⚠️ ZERO-PADDED ON PURPOSE. <input type="time"> accepts only
+        // HH:MM; given '7:30' the browser silently renders an EMPTY box, and
+        // the next Save writes null over real hours. That is exactly what
+        // happened here — Before care showed blank Starts/Ends on the
+        // settings screen while After care ('15:00') was fine.
+        startTime: '07:30',
+        endTime:   '09:00',
         rate:      8,
         ratio:     6,
         active:    true,
-        note:      'Breakfast included.',
     },
     {
         id:        'after_care',
@@ -1824,27 +1828,11 @@ const PROGRAMS = [
         note:      'The three older rooms combine into one supervised group.',
     },
     {
-        id:        'after_care_weekly',
-        label:     '🌆 After care · weekly',
-        kind:      'standing',         // a weekly add-on, billed monthly
-        scope:     'Standing add-on, billed monthly',
-        startTime: '15:00',
-        endTime:   '17:00',
-        rate:      48,                 // per week
-        // The weekly rate buys the SAME afternoon at a cheaper price; it is
-        // not a second group. So it rides after care's ratio rather than
-        // carrying one, and it has no capacity for the same reason after
-        // care has none.
-        sharesRatioWith: 'after_care',
-        active:    true,
-        note:      'Cheaper than five single afternoons.',
-    },
-    {
         id:        'camp',
         label:     '🏕️ Camp',
         kind:      'camp',             // date-bounded, booked ahead, so it DOES fill
         scope:     'School breaks and summer',
-        startTime: '9:00',
+        startTime: '09:00',        // zero-padded — see before_care above
         endTime:   '15:00',
         rate:      38,                 // per day
         capacity:  24,
@@ -1902,60 +1890,6 @@ async function saveProgramSettings({ programs, fees }) {
         .upsert({ key: 'programs', value: { programs: programs || [], fees: fees || {} } },
                 { onConflict: 'key' });
     if (error) throw error;
-}
-
-// ============================================================
-// CARE CHARGES — before/after care, billed per attendance (not a room)
-// ============================================================
-
-/** Every care_charges row recorded for one date, newest first. Admin-only via RLS. */
-async function fetchCareCharges(date) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('care_charges')
-        .select('id, student_id, family_id, program_id, care_date, rate_charged, waived, waived_reason, recorded_by, created_at, students(child_name), families(parent_name, parent_email)')
-        .eq('care_date', date)
-        .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
-}
-
-/**
- * Records that a child attended a before/after care session, billing that
- * child's own family. Refuses (server-side) a child already covered by a
- * full-day booking in the combined afternoon rooms that date.
- */
-async function recordCareCharge(studentId, programId, careDate) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient.rpc('record_care_charge', {
-        p_student_id: studentId, p_program_id: programId, p_care_date: careDate,
-    });
-    if (error) throw error;
-    return data;
-}
-
-/** Waives a recorded charge in place — it stays visible on the invoice with its reason. */
-async function waiveCareCharge(chargeId, reason) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { error } = await sbClient.rpc('waive_care_charge', {
-        p_charge_id: chargeId, p_reason: reason,
-    });
-    if (error) throw error;
-}
-
-/**
- * Finds-or-creates a family by parent email, then adds a new child under it —
- * for a Timothy Lutheran Pre-K child myMDO has never seen before. Returns
- * { family_id, student_id }.
- */
-async function adminCreatePrekChild({ parentName, parentEmail, parentPhone, childName, childDob }) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient.rpc('admin_create_prek_child', {
-        p_parent_name: parentName, p_parent_email: parentEmail, p_parent_phone: parentPhone || '',
-        p_child_name: childName, p_child_dob: childDob || null,
-    });
-    if (error) throw error;
-    return data;
 }
 
 // ============================================================
@@ -2728,6 +2662,29 @@ async function adminLogChildEvent(studentId, eventType, occurredAt = null, careD
     const { data, error } = await sbClient.rpc('admin_log_child_event', {
         p_student_id:  studentId,
         p_event_type:  eventType,
+        p_occurred_at: occurredAt,
+        p_care_date:   careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * Families → Child → "Add a day" (admin-family-lookup.js): the office logging
+ * a full day's activity — naps, diapers, meals, bottles, notes, supplies —
+ * not just the Attendance Board's narrower check-in/check-out mark above.
+ * Writes into the same child_day_events table the teacher app and the Board
+ * both use, via admin_log_child_event_detail (PROPOSED_admin_child_daily_log.sql
+ * — not live until that migration is applied by hand).
+ * @returns {Promise<number|null>} New event id, or null if the caller's admin
+ *   role isn't 'full'/'restricted' or event_type was rejected.
+ */
+async function adminLogChildEventDetail(studentId, eventType, detail = {}, occurredAt = null, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_log_child_event_detail', {
+        p_student_id:  studentId,
+        p_event_type:  eventType,
+        p_detail:      detail || {},
         p_occurred_at: occurredAt,
         p_care_date:   careDate,
     });

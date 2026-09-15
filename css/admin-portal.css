@@ -2348,6 +2348,27 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fl-allergy-line { font-size: .82em; color: var(--text); font-weight: 500; margin: 6px 0 0; }
 .fl-allergy-line.fl-none { color: var(--text-muted); margin-top: 0; }
 
+/* Daily activity / "Add a day" — see admin-family-lookup.js _flDailyLogHtml.
+   Reuses .fl-eyebrow / .fl-cal-nav-* / .fl-btn* from the calendar card above
+   rather than inventing a second visual language for the same panel. */
+.fl-log-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.fl-log-empty { font-size: .82em; color: var(--text-muted); margin: 8px 0 0; }
+.fl-log-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.fl-log-row { display: flex; gap: 10px; font-size: .82em; padding: 3px 0; border-bottom: 1px solid var(--ap-border-lt); }
+.fl-log-row:last-child { border-bottom: none; }
+.fl-log-time { color: var(--text-muted); min-width: 64px; font-weight: 700; }
+.fl-log-label { color: var(--navy); font-weight: 600; }
+button[data-fl-log-add] { margin-top: 10px; }
+
+.fl-log-form { margin-top: 10px; padding: 10px; background: var(--linen); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.fl-log-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.fl-log-form select, .fl-log-form input[type="text"], .fl-log-form input[type="number"], .fl-log-form input[type="time"] {
+    padding: 6px 8px; border: 1.5px solid var(--ap-border-lt); border-radius: 8px; font-size: .84em; font-family: inherit;
+}
+.fl-log-form input[type="text"] { flex: 1 1 160px; }
+.fl-log-form-actions { display: flex; gap: 8px; }
+.fl-log-msg { font-size: .78em; color: var(--tang-dark); margin: 0; min-height: 1em; }
+
 @media (max-width: 640px) {
     .fl-actions { width: 100%; justify-content: flex-start; }
     .fl-btn, .fl-actions .fm-edit-btn, .fl-actions .fm-cal-btn { flex: 1 1 auto; justify-content: center; }
