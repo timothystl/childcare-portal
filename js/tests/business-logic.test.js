@@ -4445,6 +4445,134 @@ describe('The door — kiosk and the signature record', () => {
 });
 
 
+// ============================================================
+// BEFORE & AFTER CARE — the pooled afternoon floor
+// (design handoff: Capacity & Fill, 5a)
+// ============================================================
+// The afternoon group is the one part of turn 5 with real data behind it:
+// Goose, Turtle and Owl combine from 1:00p, so a FULL-DAY booking in one of
+// those rooms is a child on that floor. The rule has to match apStaffing()'s
+// pooled After Care row exactly, or the director's staffing grid and this
+// screen disagree about the same afternoon.
+describe('Before & After Care — the combined afternoon', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-before-after-care.js'), 'utf8');
+
+    const DATE = '2026-09-15';
+    function load({ registrations = [], closures = [], capacity = 20 } = {}) {
+        const sandbox = {
+            console, escHtml: s => String(s),
+            PM_COMBINED_ROOM_IDS: ['goose', 'turtle', 'owl'],
+            PM_COMBINED_RATIO: 8,
+            ROOMS: [
+                { id: 'goose',  label: 'Goose' }, { id: 'turtle', label: 'Turtle' },
+                { id: 'owl',    label: 'Owl' },   { id: 'bee',    label: 'Bee' },
+            ],
+            allRegistrations: registrations,
+            allClosureDates: new Set(closures),
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        // ⚠️ The module's `_bacPrograms` is a top-level `let`, which in a vm
+        // script is a LEXICAL binding — it never becomes a property of the
+        // context, so assigning sandbox._bacPrograms would be ignored.
+        // `_bacProgram()` is a function declaration and IS on the context,
+        // so overriding the lookup is what actually injects a program.
+        sandbox._bacProgram = (id) => (id === 'after_care'
+            ? { id, label: 'After care', capacity, ratio: 8, rate: 12,
+                startTime: '15:00', endTime: '17:00' }
+            : null);
+        return sandbox;
+    }
+
+    const reg = (room, n, dayType = 'full') => ({
+        room_id: room,
+        registration_dates: Array.from({ length: n }, (_, i) => ({
+            care_date: DATE, waitlisted: false, day_type: dayType,
+        })),
+        child_name: `Child ${room}`,
+    });
+
+    // The rule that matters: half days have gone home before the rooms
+    // combine, and a room outside the pool is not on this floor at all.
+    test('only full-day children in the three combining rooms are on the floor', () => {
+        const m = load({ registrations: [
+            reg('goose', 3),                 // on the floor
+            reg('turtle', 2),                // on the floor
+            reg('owl', 1, 'half'),           // gone by 1:00p
+            reg('bee', 5),                   // not one of the three
+        ] });
+        const f = m._bacAfternoonFloor(DATE);
+        expect(f.present).toBe(5);
+    });
+
+    // Adults needed must be ceil(present / PM_COMBINED_RATIO) — the same
+    // expression apStaffing's pooled row uses.
+    test('adults needed matches the pooled ratio, and headroom names the next child', () => {
+        const at = n => load({ registrations: [reg('goose', n)] })._bacAfternoonFloor(DATE);
+
+        expect(at(8).adults).toBe(1);
+        expect(at(8).beforeNextAdult).toBe(0);      // the 9th costs an adult
+        expect(at(9).adults).toBe(2);
+        expect(at(9).beforeNextAdult).toBe(7);
+        expect(at(0).adults).toBe(0);               // nobody is not a boundary
+
+        for (let n = 1; n <= 24; n++) expect(at(n).adults).toBe(Math.ceil(n / 8));
+    });
+
+    test('seats left comes from the program capacity, never below zero', () => {
+        const m = load({ registrations: [reg('goose', 12), reg('turtle', 11)], capacity: 20 });
+        const f = m._bacAfternoonFloor(DATE);
+        expect(f.present).toBe(23);
+        expect(f.seatsLeft).toBe(0);                // not −3
+    });
+
+    test('a closed day has no floor at all', () => {
+        const m = load({ registrations: [reg('goose', 6)], closures: [DATE] });
+        const f = m._bacAfternoonFloor(DATE);
+        expect(f.closed).toBe(true);
+        expect(f.present).toBe(0);
+    });
+
+    // The Pre-K half has no table, and the screen must not pretend otherwise
+    // or quietly query something that is not there.
+    test('the screen queries no program table and states the gap', () => {
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/from\('program_enrolments'\)|from\('program_attendance'\)/.test(code)).toBe(false);
+        expect(/\.\s*insert\s*\(|\.\s*upsert\s*\(/.test(code)).toBe(false);
+        expect(src.includes('nowhere to put them')).toBe(true);
+    });
+
+    // The proposed migration must stay a proposal: unprefixed by a
+    // timestamp, loudly marked, and with no anon policy over a table that
+    // names children.
+    test('the proposed migration is marked unapplied and opens no anon door', () => {
+        const mig = fs.readFileSync(path.join(repoRoot,
+            'supabase/migrations/PROPOSED_program_enrolments_and_attendance.sql'), 'utf8');
+        expect(/NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+        // Policies name `authenticated`, never `public`/`anon`. Checked
+        // against the DDL with comments stripped — the file EXPLAINS why
+        // `TO public` is wrong, and a naive search matches that sentence.
+        const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+        expect(/TO\s+authenticated/.test(ddl)).toBe(true);
+        expect(/TO\s+(public|anon)\b/.test(ddl)).toBe(false);
+        expect(/CREATE POLICY[^;]*anon/i.test(ddl)).toBe(false);
+        // And nothing in the shipped code DEPENDS on it. The screen names
+        // both tables on purpose — it tells the director exactly what is
+        // missing — so this checks for a query, not for the words.
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/from\(\s*['"`]program_/.test(code)).toBe(false);
+        expect(/rpc\(\s*['"`][^'"`]*program_(enrolments|attendance)/.test(code)).toBe(false);
+        // It does still tell the reader what to build.
+        expect(src.includes('program_enrolments')).toBe(true);
+    });
+});
+
+
 // Settle any async test bodies before counting up. Every test() whose body
 // returned a promise is in _pending, already wrapped so it cannot reject here
 // — so this only ever waits, it never throws.

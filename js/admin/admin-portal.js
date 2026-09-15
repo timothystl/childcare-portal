@@ -155,6 +155,13 @@ const AP_TOOLS = [
     // of the same licensing artifact, and today the paper one is still the
     // record — see the module header for why the signature column is empty
     // rather than placeholdered.
+    // Before & After Care (design handoff: Capacity & Fill, 5a). In Daily
+    // because it is a today screen — who is on the floor this afternoon and
+    // whether one more child costs an adult. The afternoon is real (the
+    // pooled Goose/Turtle/Owl group); the Pre-K roster is the gap, and the
+    // screen states it rather than drawing invented children.
+    { key: 'beforeAfter', pane: 'daily',    section: 'beforeAfterCareSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.gold, icon: '🌆', name: 'Before & After Care',
+      blurb: 'The combined afternoon floor, its ratio headroom, and what the program still needs to bill Pre-K.' },
     { key: 'signatures',  pane: 'daily',    section: 'signatureRecordSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '✍️', name: 'Sign-in & Sign-out Record',
       blurb: 'Who arrived, when they left, and who signed for them — the record licensing asks to see.' },
     { key: 'roster',      pane: 'daily',    section: 'dailyRosterSection',      tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
@@ -1095,6 +1102,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'programCalendar' && typeof renderProgramCalendarTool === 'function') renderProgramCalendarTool();
         if (tool.key === 'newsletter' && typeof renderNewsletterTool === 'function') renderNewsletterTool();
         if (tool.key === 'signatures' && typeof renderSignatureRecordTool === 'function') renderSignatureRecordTool();
+        if (tool.key === 'beforeAfter' && typeof renderBeforeAfterCareTool === 'function') renderBeforeAfterCareTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

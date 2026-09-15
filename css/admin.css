@@ -7101,3 +7101,77 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
   #signatureRecordSection .sr-room{grid-area:room;text-align:right;}
   #signatureRecordSection .sr-sig{grid-area:sig;}
 }
+
+/* ============================================================
+   Before & After Care — Classrooms → Daily
+   (design handoff: Capacity & Fill, 5a)
+   ============================================================ */
+
+#beforeAfterCareSection .bac-toolbar{display:flex;gap:16px;align-items:flex-end;
+  flex-wrap:wrap;margin-bottom:18px;}
+#beforeAfterCareSection .bac-ctrl{display:flex;flex-direction:column;gap:4px;
+  font-size:.74em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);}
+#beforeAfterCareSection .bac-ctrl input{font-family:var(--font-body);font-size:1.1em;
+  padding:8px 11px;border:1px solid var(--border);border-radius:8px;
+  background:var(--white);color:var(--text);font-weight:400;text-transform:none;letter-spacing:0;}
+#beforeAfterCareSection .bac-day{font-family:var(--font-head);font-size:1.1em;
+  font-weight:700;color:var(--navy);}
+
+#beforeAfterCareSection .bac-cols{display:grid;
+  grid-template-columns:minmax(340px,1.55fr) minmax(280px,1fr);gap:20px;align-items:start;}
+#beforeAfterCareSection .bac-col{display:flex;flex-direction:column;gap:20px;min-width:0;}
+
+#beforeAfterCareSection .bac-list{padding:6px 22px 16px;}
+#beforeAfterCareSection .bac-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;
+  gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ap-border-lt);}
+#beforeAfterCareSection .bac-row:last-child{border-bottom:0;}
+#beforeAfterCareSection .bac-avatar{width:32px;height:32px;border-radius:50%;
+  background:var(--sun);color:var(--navy);display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-head);font-weight:700;font-size:.85em;}
+#beforeAfterCareSection .bac-name{font-size:.88em;font-weight:800;color:var(--navy);}
+#beforeAfterCareSection .bac-room{font-size:.8em;color:var(--text-muted);}
+#beforeAfterCareSection .bac-tag{background:var(--green-pale);color:var(--green-dark);
+  border:1px solid var(--green-lt);border-radius:999px;padding:2px 9px;
+  font-size:.66em;font-weight:800;}
+
+#beforeAfterCareSection .bac-rows{padding:12px 22px 6px;}
+#beforeAfterCareSection .bac-stat{display:flex;justify-content:space-between;
+  align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--ap-border-lt);}
+#beforeAfterCareSection .bac-stat:last-child{border-bottom:0;}
+#beforeAfterCareSection .bac-stat span{font-size:.84em;color:var(--text);}
+#beforeAfterCareSection .bac-stat strong{font-size:.92em;font-weight:800;color:var(--navy);}
+#beforeAfterCareSection .bac-stat strong.is-ok{color:var(--green-text);}
+#beforeAfterCareSection .bac-stat strong.is-warn{color:var(--ap-deep-tang);}
+#beforeAfterCareSection .bac-edge{border-top:4px solid var(--sun);}
+#beforeAfterCareSection .bac-note{margin:6px 22px 18px;background:var(--green-pale);
+  border:1.5px solid var(--green-lt);border-radius:9px;padding:10px 12px;
+  font-size:.82em;color:var(--green-dark);line-height:1.5;}
+#beforeAfterCareSection .bac-note.is-edge{background:var(--sun-pale);
+  border-color:var(--sun);color:var(--mustard-dark);font-weight:700;}
+
+/* The gap panels. Deliberately loud on the Pre-K one and quiet on the
+   softer two: "there is nowhere to put these children" is a different
+   size of problem from "the morning register isn't built". */
+#beforeAfterCareSection .bac-gap{margin:4px 22px 16px;background:var(--tang-pale);
+  border:1.5px solid var(--tang);border-radius:12px;padding:14px 16px;
+  font-size:.85em;color:var(--tang-dark);line-height:1.6;}
+#beforeAfterCareSection .bac-gap strong{display:block;color:var(--navy);
+  font-size:1.05em;margin-bottom:3px;}
+#beforeAfterCareSection .bac-gap-soft{background:var(--linen);
+  border-color:var(--border);border-style:dashed;color:var(--text-muted);}
+#beforeAfterCareSection .bac-prek{border-top:4px solid var(--tang);}
+
+#beforeAfterCareSection .bac-spec{padding:0 22px 18px;}
+#beforeAfterCareSection .bac-spec-title{font-size:.7em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;}
+#beforeAfterCareSection .bac-spec-list{margin:0;padding-left:20px;
+  display:flex;flex-direction:column;gap:9px;}
+#beforeAfterCareSection .bac-spec-list li{font-size:.82em;color:var(--text);line-height:1.55;}
+#beforeAfterCareSection .bac-spec-list strong{color:var(--navy);font-family:ui-monospace,Menlo,monospace;font-size:.95em;}
+#beforeAfterCareSection .bac-spec-note{margin:14px 0 0;padding-top:11px;
+  border-top:1px solid var(--ap-border-lt);font-size:.78em;color:var(--text-muted);line-height:1.6;}
+#beforeAfterCareSection .bac-spec-note code{background:var(--linen);border-radius:4px;padding:1px 5px;}
+
+@media (max-width:1100px){
+  #beforeAfterCareSection .bac-cols{grid-template-columns:minmax(0,1fr);}
+}

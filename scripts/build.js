@@ -234,6 +234,10 @@ const ENTRIES = [
                 // Reads centerHeadcountAdmin() and the day's child_day_events;
                 // writes nothing.
                 'js/admin/admin-signature-record.js',
+                // Reads PM_COMBINED_ROOM_IDS/PM_COMBINED_RATIO and
+                // loadProgramSettings() from js/supabase.js, and the same
+                // registrations every capacity screen reads. Writes nothing.
+                'js/admin/admin-before-after-care.js',
                 // After admin-calendar.js: reuses showDayRosterDetail(),
                 // renderCapacityOverview() and renderRoomSchedule() as the
                 // Enrollment & Capacity tool's Day/Month/Week sub-views.
