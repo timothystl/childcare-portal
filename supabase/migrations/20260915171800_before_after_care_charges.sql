@@ -1,18 +1,27 @@
 -- ============================================================
--- PROPOSED — NOT APPLIED, NOT APPROVED
+-- APPLIED 2026-09-15 as version 20260915171800
 -- ============================================================
 -- Before and after care charges. Design handoff: Capacity & Fill, turn 5.
 --
--- ⚠️ READ THIS BEFORE RUNNING ANYTHING BELOW.
+-- Andrew approved applying this. It was PROPOSED_ until then; the file is
+-- now named for the version the database assigned, per
+-- supabase/migrations/README.md — never invent a timestamp.
 --
--- This file is a PROPOSAL. It is deliberately named PROPOSED_ rather than
--- with a version prefix so it cannot be mistaken for part of the applied
--- sequence and nothing tries to run it. See supabase/migrations/README.md.
+-- ⚠️ TWO FOLLOW-UP MIGRATIONS BELONG WITH THIS ONE. Applying this file alone
+-- reproduces a schema that is wrong in one way and insecure in another:
 --
--- Per AGENTS.md: migrations here are source records, applied by hand, and a
--- schema, RLS or data-ownership change on a live childcare system needs
--- Andrew's explicit approval for that specific operation. Nothing that ships
--- today depends on this table existing.
+--   20260915171831_care_charges_strip_default_grants
+--       This table arrived with INSERT/SELECT/UPDATE/DELETE granted to
+--       `anon` — not from anything below, but from the ALTER DEFAULT
+--       PRIVILEGES that apply to every new table in `public`. RLS masked it,
+--       which is exactly why it was worth stripping.
+--
+--   20260915171936_record_door_checkin_fix_staff_pin_signature
+--       The RPC below originally called staff_id_for_pin(p_pin). That is a
+--       signature production has not had in months; the live one is
+--       staff_id_for_pin(p_staff_id, p_pin) — name THEN pin. It compiled
+--       fine and failed at RUNTIME on the first call. The corrected
+--       definition lives in that migration; this one is left as it ran.
 --
 -- ── What this replaces, and why ─────────────────────────────
 -- An earlier draft of this file proposed TWO tables: `program_enrolments`
@@ -299,10 +308,27 @@ BEGIN
 
     -- 2. The rate, read ONCE here and copied onto the charge. Never read
     --    back at invoice time — see decision 2 at the top of this file.
-    SELECT (p->>'rate')::numeric INTO v_rate
-      FROM settings s,
-           jsonb_array_elements(coalesce(s.value->'programs', '[]'::jsonb)) p
-     WHERE s.key = 'programs' AND p->>'id' = p_program_id;
+    -- ⚠️ settings.value is TEXT, not jsonb — the whole settings table is
+    -- key/text, and every reader casts. `s.value->'programs'` looks right
+    -- and fails at RUNTIME inside plpgsql, where nothing catches it at
+    -- deploy time; the same trap log_child_event's header records.
+    -- compute_family_month_charges_itemized casts the same way.
+    -- Wrapped, because settings.value is admin-editable TEXT: a malformed
+    -- document would raise inside the function and show a Postgres error on
+    -- a wall tablet to a teacher holding a child. Fail closed instead — the
+    -- kiosk already knows how to say "see the office" for no_rate, and
+    -- refusing to charge is always safer than guessing a price.
+    BEGIN
+        SELECT (p->>'rate')::numeric INTO v_rate
+          FROM settings s,
+               jsonb_array_elements(
+                   coalesce(s.value::jsonb -> 'programs', '[]'::jsonb)) p
+         WHERE s.key = 'programs' AND p->>'id' = p_program_id;
+    EXCEPTION WHEN others THEN
+        v_rate := NULL;
+    END;
+    -- Also covers the case today: the `programs` settings row does not exist
+    -- until someone saves Settings → Programs & add-ons once.
     IF v_rate IS NULL THEN
         RETURN jsonb_build_object('ok', false, 'code', 'no_rate');
     END IF;
@@ -387,7 +413,7 @@ GRANT EXECUTE ON FUNCTION public.record_door_checkin(integer, text, text, text, 
 
 COMMIT;
 
--- ── After applying, by hand ─────────────────────────────────
+-- ── Applied, and verified ───────────────────────────────────
 -- 1. Verify live schema state (AGENTS.md):  \d care_charges
 -- 2. Check the anon role really cannot see it:
 --      SET ROLE anon; SELECT * FROM care_charges;  -- must fail

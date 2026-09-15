@@ -4640,12 +4640,15 @@ describe('Before & After Care — the combined afternoon', () => {
 
     // Nothing records the attendance yet, so the screen must not pretend
     // otherwise or quietly query something that is not there.
-    test('the screen queries no charge table and states the gap', () => {
+    // The table is live now, but this screen still reads nothing from it and
+    // writes nothing: the door RPC is the only writer, and no reader is
+    // wired yet. The screen has to say that rather than imply a roster.
+    test('the screen queries no charge table and says nothing is recorded', () => {
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
         expect(/from\(\s*['"`](care_charges|program_)/.test(code)).toBe(false);
         expect(/\.\s*insert\s*\(|\.\s*upsert\s*\(/.test(code)).toBe(false);
-        expect(src.includes('It is empty because nothing records the attendance')).toBe(true);
+        expect(src.includes('It is empty because nobody has been checked in yet')).toBe(true);
     });
 
     // The screen must say what the thing IS, in Andrew's terms, so the next
@@ -4666,10 +4669,12 @@ describe('Before & After Care — the combined afternoon', () => {
 
     // The proposal must stay a proposal: no version prefix, loudly marked,
     // and no anon policy over a table that names children and sets a price.
-    test('the proposed migration is marked unapplied and opens no anon door', () => {
-        const mig = fs.readFileSync(path.join(repoRoot,
-            'supabase/migrations/PROPOSED_before_after_care_charges.sql'), 'utf8');
-        expect(/NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+    test('the applied migration opens no anon door', () => {
+        const mig = readMigration('before_after_care_charges');
+        // Applied 2026-09-15. The file is named for the version the database
+        // assigned, and says so — never a hand-picked timestamp.
+        expect(/APPLIED 2026-09-15 as version 20260915171800/.test(mig)).toBe(true);
+        expect(/PROPOSED|NOT APPLIED/.test(mig.split('\n')[1] || '')).toBe(false);
         // Policies name `authenticated`, never `public`/`anon`. Checked
         // against the DDL with comments stripped — the file EXPLAINS why
         // `TO public` is wrong, and a naive search matches that sentence.
@@ -4708,8 +4713,7 @@ describe('Before & After Care — the combined afternoon', () => {
     // owed by nobody — never on an invoice, never in a balance, and never an
     // error. Just a row. So the charge carries its own family_id, NOT NULL.
     test('every charge names the family it bills, and cannot exist without one', () => {
-        const mig = fs.readFileSync(path.join(repoRoot,
-            'supabase/migrations/PROPOSED_before_after_care_charges.sql'), 'utf8');
+        const mig = readMigration('before_after_care_charges');
         const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
 
         expect(/family_id\s+uuid\s+NOT NULL REFERENCES public\.families\(id\)/.test(ddl)).toBe(true);
@@ -4744,23 +4748,44 @@ describe('The door kiosk creates a provisional family', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const src = fs.readFileSync(path.join(repoRoot,
         'js/admin/admin-before-after-care.js'), 'utf8');
-    const mig = fs.readFileSync(path.join(repoRoot,
-        'supabase/migrations/PROPOSED_before_after_care_charges.sql'), 'utf8');
+    const mig = readMigration('before_after_care_charges');
     const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
-    const rpc = ddl.slice(ddl.indexOf('FUNCTION public.record_door_checkin'));
+
+    // ⚠️ The RPC is asserted against the CORRECTING migration, not the one
+    // that created the table. The original shipped a call to
+    // staff_id_for_pin(p_pin) — a signature production has not had in
+    // months — which compiled fine and failed on the first real call. That
+    // broken text is still in the applied file, left as it ran, so a test
+    // reading THAT file would happily lock the bug in. Read what is live.
+    const fix = readMigration('record_door_checkin_fix_staff_pin_signature');
+    const fixDdl = fix.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+    const rpc = fixDdl.slice(fixDdl.indexOf('FUNCTION public.record_door_checkin'));
 
     test('anon reaches exactly one function, and that function checks a staff PIN', () => {
         // The kiosk holds no session, so `anon` is the real caller. It may
         // call this and nothing else — and the function itself is the gate,
         // not a policy, because a policy cannot verify a PIN.
-        expect(/GRANT EXECUTE ON FUNCTION public\.record_door_checkin[\s\S]{0,140}TO anon/.test(ddl)).toBe(true);
-        expect(/staff_id_for_pin\(p_pin\)/.test(rpc)).toBe(true);
+        expect(/GRANT EXECUTE ON FUNCTION public\.record_door_checkin\(uuid, integer[\s\S]{0,140}TO anon/.test(fixDdl)).toBe(true);
+        // Name THEN pin — a PIN alone was guessable across the whole roster,
+        // which is why staff_signin_name_then_pin replaced the one-arg form.
+        expect(/staff_id_for_pin\(p_staff_id, p_pin\)/.test(rpc)).toBe(true);
+        expect(/staff_id_for_pin\(p_pin\)/.test(rpc)).toBe(false);
+        // And the dead one-argument overload is dropped, not left beside it.
+        expect(/DROP FUNCTION IF EXISTS public\.record_door_checkin\(integer,/.test(fixDdl)).toBe(true);
         expect(/SECURITY DEFINER/.test(rpc)).toBe(true);
         // A bad PIN returns; it does not fall through to the writes below.
         expect(/v_staff_id IS NULL THEN[\s\S]{0,90}bad_pin/.test(rpc)).toBe(true);
         // And no table is opened to anon anywhere in the file.
         expect(/GRANT[^;]*ON TABLE[^;]*anon/i.test(ddl)).toBe(false);
         expect(/CREATE POLICY[^;]*TO\s+anon/i.test(ddl)).toBe(false);
+        // ⚠️ Not granting is not enough. Supabase's ALTER DEFAULT PRIVILEGES
+        // handed this table INSERT/SELECT/UPDATE/DELETE to anon the moment it
+        // was created — invisible in the creating migration, masked by RLS,
+        // and live the instant anyone adds a permissive policy. Caught by
+        // running VERIFY_door_checkin_boundary.sql straight after applying.
+        const strip = readMigration('care_charges_strip_default_grants');
+        expect(/REVOKE ALL ON TABLE public\.care_charges FROM anon/.test(strip)).toBe(true);
+        expect(/REVOKE ALL ON SEQUENCE public\.care_charges_id_seq FROM anon/.test(strip)).toBe(true);
     });
 
     test('a door record is unfinished, cannot multiply, and cannot run forever', () => {
