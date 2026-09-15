@@ -4927,7 +4927,7 @@ describe('Billing care_charges without double-charging a full-day booking', () =
     // possibly already have an MDO registration, since it has no email yet.
     test('record_door_checkin() refuses an already-covered full day before inserting', () => {
         const fnBody = ddl.split('CREATE OR REPLACE FUNCTION public.record_door_checkin')[1].split('$fn$;')[0];
-        expect(fnBody).toBeTruthy();
+        expect(!!fnBody).toBe(true);
         const guardIdx  = fnBody.indexOf('already_full_day');
         const insertIdx = fnBody.indexOf('INSERT INTO care_charges');
         expect(guardIdx).toBeGreaterThan(-1);
