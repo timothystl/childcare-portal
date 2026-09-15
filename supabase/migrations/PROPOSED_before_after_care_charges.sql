@@ -25,10 +25,15 @@
 -- attends.** Nothing more.
 --
 -- That correction removes a whole table and everything that came with it —
--- start and end dates, a live-enrolment constraint, a cohort, a provisional
--- flag that had to be cleared before the record was "real." None of it was
+-- start and end dates, a live-enrolment constraint, a cohort. None of it was
 -- describing the business. It was describing a room, because a room was the
 -- only shape the schema already had.
+--
+-- One idea from that draft survives, but moved and changed meaning. The old
+-- "provisional" flag marked an ENROLMENT that was not yet real. It now marks
+-- a FAMILY that exists but is unfinished — see the kiosk section below. The
+-- difference matters: an unfinished family is a live billing record from the
+-- moment it is written, which is a much sharper thing to get right.
 --
 -- What is left is the one fact that matters: this child was here on this
 -- day, so this much is owed.
@@ -51,16 +56,68 @@
 --    `students` row and no registration, so every one of those screens
 --    correctly never sees them. Nothing has to remember to exclude them.
 --
--- ── Still to decide before this is worth applying ───────────
--- Andrew's correction settles the shape but not the billing route, and
--- these two are genuinely open:
+-- ── ANSWERED: the kiosk creates a provisional family ────────
+-- Andrew: "the kiosk creates a provisional family record at the door."
 --
---   * A name taken at the door, before the office has a family record: is
---     that a `students` row created on the spot, or a note the office turns
---     into one later? A charge needs someone to bill, so this is the thing
---     that blocks the kiosk half of the design, not a detail. Andrew's
---     answer below makes this sharper rather than softer: there is now no
---     such thing as a charge without a family behind it.
+-- So a walk-in produces a real `families` row and a real `students` row on
+-- the spot, and the charge has something to point at immediately. The
+-- office completes the file afterwards.
+--
+-- ⚠️ THIS IS THE MOST DANGEROUS THING IN THIS FILE, and the reason the RPC
+-- below is written the way it is. A wall tablet in a hallway, signed in as
+-- nobody, would be creating a row in the table that BILLING, STATEMENTS,
+-- BALANCES and PAYMENTS all read. The mitigations, each for a specific way
+-- this goes wrong:
+--
+--   1. NO ANON WRITE, EVER. The kiosk calls one SECURITY DEFINER RPC that
+--      verifies a STAFF PIN — the teacher taking the child in, not the
+--      parent. `staff_id_for_pin()` already throttles internally (see
+--      20260812210730_throttle_staff_pin_attempts.sql), so a PIN-guessing
+--      loop from the hallway is already handled. No policy anywhere grants
+--      anon anything.
+--
+--   2. A PROVISIONAL FAMILY IS VISIBLY UNFINISHED, not quietly normal.
+--      `provisional_at` is NOT NULL until the office clears it. Without a
+--      flag, a door-created family is indistinguishable from a real one and
+--      differs only by having no email — which surfaces as an invoice that
+--      silently goes nowhere, months later.
+--
+--   3. IT CANNOT ACCRUE FOREVER. After PROVISIONAL_MAX_SESSIONS charges the
+--      RPC refuses and tells the kiosk to send the family to the office. A
+--      provisional record is a bridge across one or two mornings, not a way
+--      to be a customer indefinitely without ever giving the center an
+--      email address.
+--
+--   4. IT CANNOT SPAWN A DUPLICATE EVERY MORNING. The same walk-in on
+--      Tuesday must not create a second family, or the month splits across
+--      two invoices and neither is right. The RPC matches an existing
+--      provisional family on the guardian's normalized phone first.
+--
+--   5. TWO DEFAULTS ON THESE TABLES ARE WRONG FOR A DOOR RECORD, and both
+--      are wrong in the direction that hurts a child rather than the
+--      center, which is why they are handled explicitly below.
+--
+--      ALLERGIES ARE NOT "NONE", THEY ARE UNKNOWN. `students.allergies` is
+--      NOT NULL and would default to an empty list, which reads exactly
+--      like "reviewed, no allergies" — a claim nobody made, about a child
+--      whose parent is walking out the door. The RPC leaves
+--      `allergies_reviewed_at` NULL, which every existing allergy surface
+--      already treats as unreviewed (student_allergies_reviewed_stamp.sql).
+--
+--      PHOTO RELEASE DEFAULTS TO TRUE, which is correct for a parent who
+--      filled in an enrolment form and said yes. It is a consent nobody
+--      gave when the child's name was typed at a door, so the RPC sets it
+--      false and lets the office ask.
+--
+--      Neither of these is a billing property. They are the two places
+--      where an unfinished record could quietly harm the child it describes.
+--
+-- ✔ ALREADY SAFE, checked rather than assumed: the new-family fee cannot
+--   fire for a provisional family. Its gate in
+--   20260910235429_annual_fee_single_month_gate.sql requires a CONFIRMED
+--   REGISTRATION to establish the family's first care month, and a
+--   provisional family has no registration, so the subquery is NULL and the
+--   condition is false. A walk-in is not accidentally charged a joining fee.
 --
 -- ── ANSWERED: each family is billed directly ────────────────
 -- Andrew: "bill each family directly, not the pre-k organization."
@@ -157,6 +214,176 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- A parent seeing their own child's charges would be a separate, narrower
 -- policy keyed on the family behind student_id. Also not written here, for
 -- the same reason.
+
+-- ── The provisional family, marked as such ──────────────────
+-- Additive and nullable, so every existing row and every existing query is
+-- unaffected: NULL provisional_at means an ordinary, complete family, which
+-- is every row that exists today.
+ALTER TABLE public.families
+    ADD COLUMN IF NOT EXISTS provisional_at timestamptz,
+    ADD COLUMN IF NOT EXISTS provisional_by uuid REFERENCES public.staff(id),
+    ADD COLUMN IF NOT EXISTS completed_at   timestamptz,
+    ADD COLUMN IF NOT EXISTS completed_by   text;
+
+COMMENT ON COLUMN public.families.provisional_at IS
+    'Set when this family was created at the door kiosk from a staff PIN. '
+    'NULL means a complete, office-entered family. While set, the family has '
+    'no email and no PIN: never email it, and show it as unfinished.';
+
+-- One live provisional family per phone number, so the same walk-in on
+-- Tuesday joins Monday's record instead of splitting the month across two
+-- invoices. Partial, so it constrains nothing about real families.
+CREATE UNIQUE INDEX IF NOT EXISTS families_provisional_one_per_phone
+    ON public.families (regexp_replace(coalesce(parent_phone, ''), '\D', '', 'g'))
+    WHERE provisional_at IS NOT NULL AND completed_at IS NULL;
+
+-- The office's worklist: who still has to be turned into a real record.
+CREATE INDEX IF NOT EXISTS families_provisional_open_idx
+    ON public.families (provisional_at)
+    WHERE provisional_at IS NOT NULL AND completed_at IS NULL;
+
+-- ── The door check-in ───────────────────────────────────────
+-- ONE entry point for the kiosk. It verifies a staff PIN, finds or creates
+-- the provisional family and child, and writes the charge — atomically, so
+-- a half-written walk-in cannot exist.
+--
+-- Returns a jsonb envelope rather than raising, because the caller is a wall
+-- tablet held by someone with a child on one hip: every outcome has to be a
+-- sentence a teacher can act on, not a Postgres error.
+CREATE OR REPLACE FUNCTION public.record_door_checkin(
+    p_pin           integer,
+    p_program_id    text,
+    p_child_name    text,
+    p_guardian_name text,
+    p_guardian_phone text,
+    p_care_date     date DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public','extensions' AS $fn$
+DECLARE
+    -- A bridge across a morning or two, not a way to stay a customer
+    -- forever without ever giving the center an email address.
+    PROVISIONAL_MAX_SESSIONS constant integer := 2;
+
+    v_staff_id  uuid;
+    v_date      date;
+    v_phone     text;
+    v_rate      numeric(10,2);
+    v_family_id uuid;
+    v_student_id uuid;
+    v_used      integer;
+    v_provisional boolean;
+BEGIN
+    -- 1. The teacher, not the parent. Throttled inside staff_id_for_pin().
+    v_staff_id := staff_id_for_pin(p_pin);
+    IF v_staff_id IS NULL THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'bad_pin');
+    END IF;
+
+    IF p_program_id NOT IN ('before_care', 'after_care') THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'bad_program');
+    END IF;
+
+    IF coalesce(btrim(p_child_name), '') = ''
+       OR coalesce(btrim(p_guardian_name), '') = '' THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'missing_name');
+    END IF;
+
+    -- A phone is the only way to find this family again tomorrow, and the
+    -- only way to reach them if the child is still here at closing time.
+    v_phone := regexp_replace(coalesce(p_guardian_phone, ''), '\D', '', 'g');
+    IF length(v_phone) < 10 THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'missing_phone');
+    END IF;
+
+    v_date := coalesce(p_care_date, (now() AT TIME ZONE 'America/Chicago')::date);
+
+    -- 2. The rate, read ONCE here and copied onto the charge. Never read
+    --    back at invoice time — see decision 2 at the top of this file.
+    SELECT (p->>'rate')::numeric INTO v_rate
+      FROM settings s,
+           jsonb_array_elements(coalesce(s.value->'programs', '[]'::jsonb)) p
+     WHERE s.key = 'programs' AND p->>'id' = p_program_id;
+    IF v_rate IS NULL THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'no_rate');
+    END IF;
+
+    -- 3. Find the family. A real, completed family first — a walk-in is
+    --    often an existing MDO parent whose child is simply staying late,
+    --    and billing them as a stranger would be wrong twice over.
+    SELECT id, provisional_at IS NOT NULL AND completed_at IS NULL
+      INTO v_family_id, v_provisional
+      FROM families
+     WHERE regexp_replace(coalesce(parent_phone, ''), '\D', '', 'g') = v_phone
+        OR regexp_replace(coalesce(parent2_phone, ''), '\D', '', 'g') = v_phone
+     ORDER BY provisional_at NULLS FIRST
+     LIMIT 1;
+
+    IF v_family_id IS NULL THEN
+        INSERT INTO families (parent_name, parent_phone, parent_email,
+                              provisional_at, provisional_by)
+        VALUES (btrim(p_guardian_name), btrim(p_guardian_phone), '',
+                now(), v_staff_id)
+        RETURNING id INTO v_family_id;
+        v_provisional := true;
+    END IF;
+
+    -- 4. The cap, counted across everything this provisional family has
+    --    ever been charged — not per program and not per month, or it would
+    --    reset its way into being permanent.
+    IF v_provisional THEN
+        SELECT count(*) INTO v_used FROM care_charges WHERE family_id = v_family_id;
+        IF v_used >= PROVISIONAL_MAX_SESSIONS THEN
+            RETURN jsonb_build_object(
+                'ok', false, 'code', 'needs_office',
+                'family_id', v_family_id, 'sessions_used', v_used);
+        END IF;
+    END IF;
+
+    -- 5. The child. allergies_reviewed_at stays NULL on purpose: an empty
+    --    allergy list here means UNKNOWN, not "reviewed, none". Every
+    --    existing allergy surface already reads it that way.
+    SELECT id INTO v_student_id
+      FROM students
+     WHERE family_id = v_family_id
+       AND lower(btrim(child_name)) = lower(btrim(p_child_name))
+     LIMIT 1;
+
+    IF v_student_id IS NULL THEN
+        -- ⚠️ photo_release DEFAULTS TO TRUE on this table, which is right for
+        -- a child whose parent filled in an enrolment form and said so. It is
+        -- wrong for a name typed at a door: that would grant a consent nobody
+        -- gave, about someone else's child. Set false explicitly and let the
+        -- office ask.
+        INSERT INTO students (family_id, child_name, photo_release)
+        VALUES (v_family_id, btrim(p_child_name), false)
+        RETURNING id INTO v_student_id;
+    END IF;
+
+    -- 6. The charge. ON CONFLICT DO NOTHING because a teacher tapping the
+    --    tile twice must not bill the family twice — the unique constraint
+    --    is the guard, and a repeat tap is a no-op, not an error.
+    INSERT INTO care_charges (student_id, family_id, program_id, care_date,
+                              rate_charged, recorded_by)
+    VALUES (v_student_id, v_family_id, p_program_id, v_date,
+            v_rate, v_staff_id::text)
+    ON CONFLICT (student_id, program_id, care_date) DO NOTHING;
+
+    RETURN jsonb_build_object(
+        'ok', true,
+        'family_id', v_family_id,
+        'student_id', v_student_id,
+        'provisional', coalesce(v_provisional, false),
+        'rate_charged', v_rate);
+END;
+$fn$;
+
+-- ⚠️ The kiosk holds no session, so `anon` is what actually calls this. That
+-- is the ONLY thing anon may do here, and it may do it only by presenting a
+-- staff PIN the function itself verifies. Nothing else is reachable: the
+-- tables above carry admin-only policies and no anon grant.
+REVOKE ALL ON FUNCTION public.record_door_checkin(integer, text, text, text, text, date) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.record_door_checkin(integer, text, text, text, text, date)
+    TO anon, authenticated;
 
 COMMIT;
 
