@@ -1801,12 +1801,16 @@ const PROGRAMS = [
         label:     '🌅 Before care',
         kind:      'daily',            // billed per morning/afternoon attended
         scope:     'All rooms, combined',
-        startTime: '7:30',
-        endTime:   '9:00',
+        // ⚠️ ZERO-PADDED ON PURPOSE. <input type="time"> accepts only
+        // HH:MM; given '7:30' the browser silently renders an EMPTY box, and
+        // the next Save writes null over real hours. That is exactly what
+        // happened here — Before care showed blank Starts/Ends on the
+        // settings screen while After care ('15:00') was fine.
+        startTime: '07:30',
+        endTime:   '09:00',
         rate:      8,
         ratio:     6,
         active:    true,
-        note:      'Breakfast included.',
     },
     {
         id:        'after_care',
@@ -1824,27 +1828,11 @@ const PROGRAMS = [
         note:      'The three older rooms combine into one supervised group.',
     },
     {
-        id:        'after_care_weekly',
-        label:     '🌆 After care · weekly',
-        kind:      'standing',         // a weekly add-on, billed monthly
-        scope:     'Standing add-on, billed monthly',
-        startTime: '15:00',
-        endTime:   '17:00',
-        rate:      48,                 // per week
-        // The weekly rate buys the SAME afternoon at a cheaper price; it is
-        // not a second group. So it rides after care's ratio rather than
-        // carrying one, and it has no capacity for the same reason after
-        // care has none.
-        sharesRatioWith: 'after_care',
-        active:    true,
-        note:      'Cheaper than five single afternoons.',
-    },
-    {
         id:        'camp',
         label:     '🏕️ Camp',
         kind:      'camp',             // date-bounded, booked ahead, so it DOES fill
         scope:     'School breaks and summer',
-        startTime: '9:00',
+        startTime: '09:00',        // zero-padded — see before_care above
         endTime:   '15:00',
         rate:      38,                 // per day
         capacity:  24,

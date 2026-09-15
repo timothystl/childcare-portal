@@ -4277,15 +4277,22 @@ describe('Programs & add-ons — never a room', () => {
             if (roomIds.includes(id)) throw new Error(`${id} is a room; it must not be`);
         });
         // And the program list really does declare them.
-        ['before_care', 'after_care', 'after_care_weekly', 'camp']
+        ['before_care', 'after_care', 'camp']
             .forEach(id => expect(progIds.includes(id)).toBe(true));
+        // ⚠️ There is no weekly after-care rate. Andrew: "no weekly
+        // aftercare rate." It was invented, and a price a parent can plan
+        // around but not actually buy is worse than no price at all.
+        expect(progIds.includes('after_care_weekly')).toBe(false);
     });
 
     // After care's ratio has exactly one definition. A literal here is the
     // bug: the staffing grid and the attendance board read
     // PM_COMBINED_RATIO, and a second editable copy lets them disagree.
     test('after care derives its ratio from PM_COMBINED_RATIO, never a literal', () => {
-        const block = sb.slice(sb.indexOf("id:        'after_care',"), sb.indexOf("id:        'after_care_weekly'"));
+        // Sliced to the NEXT program, whatever it is — keying the end of
+        // this block on a specific sibling meant deleting that sibling made
+        // the slice empty and the assertions meaningless rather than failing.
+        const block = sb.slice(sb.indexOf("id:        'after_care',"), sb.indexOf("id:        'camp'"));
         expect(/ratio:\s*PM_COMBINED_RATIO/.test(block)).toBe(true);
         expect(/ratio:\s*\d/.test(block)).toBe(false);
         expect(/pooledRooms:\s*PM_COMBINED_ROOM_IDS/.test(block)).toBe(true);
@@ -4294,6 +4301,25 @@ describe('Programs & add-ons — never a room', () => {
         // it back on save so a hand-edited DOM cannot persist a second value.
         const admin = read('js/admin/admin-programs.js');
         expect(/ac\.ratio\s*=\s*PM_COMBINED_RATIO/.test(admin)).toBe(true);
+    });
+
+    // ⚠️ <input type="time"> accepts ONLY zero-padded HH:MM. Given '7:30' the
+    // browser renders an EMPTY box with no error, and the next Save writes
+    // null over real hours. That shipped: Before care's 7:30–9:00 showed
+    // blank on the settings screen while After care's 15:00 was fine.
+    test('every program hour is zero-padded, and the input normalizes anyway', () => {
+        const block = sb.slice(sb.indexOf('const PROGRAMS = ['), sb.indexOf('const PROGRAM_FEES'));
+        const times = [...block.matchAll(/(?:startTime|endTime):\s*'([^']*)'/g)].map(m => m[1]);
+        expect(times.length > 0).toBe(true);
+        times.forEach(t => expect(`${t} is HH:MM: ${/^\d{2}:\d{2}$/.test(t)}`).toBe(`${t} is HH:MM: true`));
+
+        // And the render normalizes, because the settings document is
+        // admin-editable and may already hold an unpadded value. Losing a
+        // program's hours to a silent format mismatch is the worse failure.
+        const admin = read('js/admin/admin-programs.js');
+        expect(/function _pgTimeValue/.test(admin)).toBe(true);
+        expect(/value="\$\{escHtml\(_pgTimeValue\(p\.startTime\)\)\}"/.test(admin)).toBe(true);
+        expect(/value="\$\{escHtml\(_pgTimeValue\(p\.endTime\)\)\}"/.test(admin)).toBe(true);
     });
 
     // Programs are config, not a table — the whole reason this needs no

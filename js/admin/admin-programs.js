@@ -47,9 +47,26 @@ function _pgTime(hhmm) {
 }
 
 function _pgRateLabel(p) {
-    if (p.kind === 'standing') return `$${p.rate}/wk`;
-    if (p.kind === 'camp')     return `$${p.rate}/day`;
+    if (p.kind === 'camp') return `$${p.rate}/day`;
     return `$${p.rate}`;
+}
+
+// ⚠️ <input type="time"> accepts ONLY zero-padded HH:MM. Handed '7:30' it
+// renders an EMPTY box — no error, no warning — and the next Save writes null
+// over real hours. That is not hypothetical: Before care's 7:30–9:00 showed
+// blank on this screen while After care's 15:00 was fine, because one was
+// padded and the other was not.
+//
+// The defaults in js/supabase.js are padded now, but this normalizes anyway:
+// the settings document is admin-editable and may already hold an unpadded
+// value, and losing a program's hours to a silent format mismatch is a much
+// worse failure than showing them.
+function _pgTimeValue(hhmm) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '').trim());
+    if (!m) return '';
+    const h = Number(m[1]);
+    if (!(h >= 0 && h <= 23)) return '';
+    return `${String(h).padStart(2, '0')}:${m[2]}`;
 }
 
 // After care's ratio comes from one place; see the header.
@@ -58,9 +75,6 @@ function _pgRatioCell(p) {
         return `<span class="pg-locked" title="Defined by PM_COMBINED_RATIO — the pooled afternoon group the staffing grid and the attendance board both read">
                     1:${PM_COMBINED_RATIO} <span class="pg-locked-note">shared</span>
                 </span>`;
-    }
-    if (p.sharesRatioWith) {
-        return `<span class="pg-locked">shares ${escHtml(p.sharesRatioWith.replace(/_/g, ' '))}</span>`;
     }
     return `<input type="number" class="pg-input" data-pg-field="ratio" value="${p.ratio ?? ''}" min="1" step="1" placeholder="1:">`;
 }
@@ -96,11 +110,11 @@ function _pgRowHtml(p) {
             <div class="pg-fields">
                 <div class="pg-field">
                     <span class="pg-label">Starts</span>
-                    <input type="time" class="pg-input" data-pg-field="startTime" value="${escHtml(p.startTime || '')}">
+                    <input type="time" class="pg-input" data-pg-field="startTime" value="${escHtml(_pgTimeValue(p.startTime))}">
                 </div>
                 <div class="pg-field">
                     <span class="pg-label">Ends</span>
-                    <input type="time" class="pg-input" data-pg-field="endTime" value="${escHtml(p.endTime || '')}">
+                    <input type="time" class="pg-input" data-pg-field="endTime" value="${escHtml(_pgTimeValue(p.endTime))}">
                 </div>
                 <div class="pg-field">
                     <span class="pg-label">Rate ($)</span>
