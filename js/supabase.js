@@ -2650,6 +2650,60 @@ async function logChildEvent(staffId, pin, entry) {
 }
 
 /**
+ * Finds a child already on file whose name matches, regardless of whether
+ * they're on today's roster — for a walk-in who is a known sibling or past
+ * enrollee, just not scheduled today. Minimal-disclosure by design: no
+ * email, phone, allergy, or family id comes back, just enough to pick the
+ * right child.
+ * @returns {Promise<Array>} [] on a bad PIN, a query under 2 characters, or
+ *   no match.
+ */
+async function staffSearchChildren(staffId, pin, query) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_search_children', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_query: query,
+    });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Checks in a walk-in child who was never booked — either a known child not
+ * on today's roster (pass existingStudentId) or nobody has a record of yet
+ * (pass childName/parentName/parentEmail instead). Marks the child present
+ * through the same log_child_event path every other check-in uses, and
+ * folds the day into the family's CURRENT invoice immediately — a draft,
+ * not a charge; the card is billed on the normal cycle, same as admin's
+ * "+ Add Child to This Day".
+ * @param {object} opts - roomId, careDate (null = today), dayType
+ *   ('full'|'half'), applyDropinFee, childAge (always required), and either
+ *   existingStudentId OR childName/parentName/parentEmail/parentPhone.
+ * @returns {Promise<object|null>} The roster row shape (same as
+ *   listRoomChildren) to push straight into the roster, or null when the
+ *   RPC rejected it (bad PIN, or a new registration with no age given).
+ */
+async function staffAddDropinChild(staffId, pin, opts) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_add_dropin_child', {
+        p_staff_id:            staffId,
+        p_pin:                 parseInt(pin, 10),
+        p_room_id:             opts.roomId,
+        p_care_date:           opts.careDate || null,
+        p_day_type:            opts.dayType || 'full',
+        p_apply_dropin_fee:    opts.applyDropinFee !== false,
+        p_existing_student_id: opts.existingStudentId || null,
+        p_child_name:          opts.childName || null,
+        p_child_age:           opts.childAge ?? null,
+        p_child_dob:           opts.childDob || null,
+        p_parent_name:         opts.parentName || null,
+        p_parent_email:        opts.parentEmail || null,
+        p_parent_phone:        opts.parentPhone || null,
+    });
+    if (error) throw friendlyError(error);
+    return (data && data[0]) || null;
+}
+
+/**
  * The merged Attendance Board's office In/Out mark. Admin session, no PIN —
  * writes into the SAME child_day_events table log_child_event does, so the
  * parent app's daily record and the office's manual mark can never disagree.
