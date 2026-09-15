@@ -5118,6 +5118,72 @@ describe('The door kiosk creates a provisional family', () => {
 
 
 // ============================================================
+// BILLING care_charges, AND GUARDING THE FULL-DAY EXCLUSION
+// ============================================================
+// The door kiosk and the provisional-family design are live, but nothing
+// bills a recorded charge yet, and nothing stops the kiosk from charging a
+// child who already paid for that afternoon as part of full-day tuition.
+// This is that wiring, proposed rather than applied — see the migration's
+// own header for why both halves belong in one change.
+describe('Billing care_charges without double-charging a full-day booking', () => {
+    const mig = readMigration('bill_care_charges_and_guard_full_day');
+    const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+
+    test('the migration is marked unapplied', () => {
+        expect(/PROPOSED — NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+    });
+
+    // The whole point: a Pre-K-only family (no MDO registrations at all)
+    // must still be billed, straight off the charge's own family_id, and a
+    // child already covered by full-day tuition must never be billed twice.
+    test('compute_family_month_charges() and its itemized twin bill by family_id, excluding an already-covered full day', () => {
+        expect(/CREATE OR REPLACE FUNCTION public\.compute_family_month_charges\(/.test(ddl)).toBe(true);
+        expect(/CREATE OR REPLACE FUNCTION compute_family_month_charges_itemized\(/.test(ddl)).toBe(true);
+        // Billed by the charge's OWN family_id — never by joining through
+        // students, which is nullable and would let an unbillable charge
+        // through silently.
+        expect(/cc\.family_id = p_family_id/.test(ddl)).toBe(true);
+        // The exclusion reads PM_COMBINED_ROOM_IDS's own three rooms, once
+        // per invoice function (compute + itemized), plus once more inside
+        // record_door_checkin()'s own entry-side refusal below.
+        expect((ddl.match(/'goose', 'turtle', 'owl'/g) || []).length).toBe(3);
+        // Only unwaived charges count, and each is its own itemized line —
+        // never blended into a child's tuition row.
+        expect(/cc\.waived = false/.test(ddl)).toBe(true);
+        expect(/' — After care'/.test(ddl)).toBe(true);
+    });
+
+    // record_door_checkin() must refuse BEFORE writing anything, and only
+    // for a real (non-provisional) family — a brand-new walk-in cannot
+    // possibly already have an MDO registration, since it has no email yet.
+    test('record_door_checkin() refuses an already-covered full day before inserting', () => {
+        const fnBody = ddl.split('CREATE OR REPLACE FUNCTION public.record_door_checkin')[1].split('$fn$;')[0];
+        expect(!!fnBody).toBe(true);
+        const guardIdx  = fnBody.indexOf('already_full_day');
+        const insertIdx = fnBody.indexOf('INSERT INTO care_charges');
+        expect(guardIdx).toBeGreaterThan(-1);
+        expect(insertIdx).toBeGreaterThan(-1);
+        expect(guardIdx).toBeLessThan(insertIdx);
+        expect(/p_program_id = 'after_care' AND NOT v_provisional/.test(fnBody)).toBe(true);
+        // Same signature as the live function — this replaces its body, not
+        // its contract, so nothing that already calls it needs to change.
+        expect(/p_staff_id\s+uuid,\s*\n\s*p_pin\s+integer/.test(fnBody)).toBe(true);
+    });
+
+    test('anon still reaches only record_door_checkin, never care_charges directly', () => {
+        const anonGrants = (ddl.match(/GRANT[^;]*?\banon\b[^;]*;/gi) || []);
+        expect(anonGrants.length).toBe(1);
+        expect(/EXECUTE ON FUNCTION public\.record_door_checkin/.test(anonGrants[0])).toBe(true);
+        expect(/GRANT[^;]*\bcare_charges\b[^;]*\banon\b/i.test(ddl)).toBe(false);
+        // The two invoice functions stay admin/authenticated-only, same as
+        // every other billing computation in this file.
+        expect(/REVOKE EXECUTE ON FUNCTION public\.compute_family_month_charges\(UUID, TEXT\) FROM PUBLIC, anon, authenticated/.test(ddl)).toBe(true);
+        expect(/REVOKE ALL ON FUNCTION compute_family_month_charges_itemized\(uuid, text\) FROM PUBLIC, anon, authenticated/.test(ddl)).toBe(true);
+    });
+});
+
+
+// ============================================================
 // MIGRATION LEDGER HYGIENE
 // ============================================================
 // The drift that broke the Supabase Preview check on every commit to main
