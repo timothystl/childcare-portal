@@ -254,9 +254,11 @@ async function renderAllPaymentsView() {
 /** Same label the table cell shows — shared with the Method column's sort key
  *  so sorting can never disagree with what's actually printed on screen. */
 function _fhPaymentMethodLabel(p) {
-    return p.processor === 'stax'
-        ? (p.payment_method === 'ach' ? 'Stax · ACH' : 'Stax · Card')
-        : (p.payment_method || 'Manual');
+    if (p.processor !== 'stax') return p.payment_method || 'Manual';
+    if (p.payment_method === 'ach') return 'Stax · ACH';
+    if (p.card_funding_type === 'debit') return 'Stax · Debit';
+    if (p.card_funding_type === 'credit') return 'Stax · Credit';
+    return 'Stax · Card';
 }
 
 // One getter per sortable column. A missing fee/invoice sorts as -1, which

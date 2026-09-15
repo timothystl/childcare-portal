@@ -499,7 +499,7 @@ serve(async (req) => {
             status: "ambiguous" | "processor_succeeded" | "failed",
             transactionId?: string,
             note?: string,
-            fields?: { processorFee: number | null; paymentMethod: "card" | "ach" | null },
+            fields?: { processorFee: number | null; paymentMethod: "card" | "ach" | null; cardFundingType: "debit" | "credit" | null },
         ) => {
             const { error } = await admin.rpc("stax_set_charge_state", {
                 p_lock_id: lockId,
@@ -508,6 +508,7 @@ serve(async (req) => {
                 p_note: note || null,
                 p_processor_fee: fields?.processorFee ?? null,
                 p_payment_method: fields?.paymentMethod ?? null,
+                p_card_funding_type: fields?.cardFundingType ?? null,
             });
             if (error) console.error("charge-stax-payment: could not persist processor state", error.code);
             return !error;

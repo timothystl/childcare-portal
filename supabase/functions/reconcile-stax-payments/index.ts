@@ -237,6 +237,7 @@ serve(async (req) => {
                         p_note: "Recovered by scheduled reconciliation (no webhook delivery seen)",
                         p_processor_fee: staxFields.processorFee,
                         p_payment_method: staxFields.paymentMethod,
+                        p_card_funding_type: staxFields.cardFundingType,
                     });
                     if (!stateErr) {
                         const { data: finalized, error: finalizeErr } = await admin.rpc("stax_finalize_charge", { p_lock_id: lock.id });
