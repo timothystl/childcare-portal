@@ -1078,6 +1078,8 @@ function apOnToolOpened(tool) {
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
         if (tool.key === 'settingsHub' && typeof renderSettingsUnifiedTool === 'function') renderSettingsUnifiedTool();
+        // Payroll lands on its overview tab (3a), not the period dropdown.
+        if (tool.key === 'payroll' && typeof apSwitchPayrollTab === 'function') apSwitchPayrollTab('overview');
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'schedule' && typeof apMountStaffRatioStep === 'function') apMountStaffRatioStep();
         // Daily Staffing Requirement is now the schedule's second tab, not a
@@ -2477,9 +2479,16 @@ let _apClockIntegrityLoaded = false;
 function apSwitchPayrollTab(key) {
     document.querySelectorAll('#apPayrollTabs [data-ap-payroll-tab]').forEach(b =>
         b.classList.toggle('is-on', b.dataset.apPayrollTab === key));
+    // Overview (design handoff: Capacity & Fill, 3a) is the landing tab —
+    // what's owed, when it's due, and what's blocking it — in front of the
+    // period report rather than beside it. Rendered on every open rather
+    // than once: its whole content is "as of now", and a stale approval
+    // state or exception count is worse than a moment's load.
+    document.getElementById('apPayrollTabOverview')?.classList.toggle('ap-hidden-tool', key !== 'overview');
     document.getElementById('apPayrollTabPeriod')?.classList.toggle('ap-hidden-tool', key !== 'period');
     document.getElementById('apPayrollTabPto')?.classList.toggle('ap-hidden-tool', key !== 'pto');
     document.getElementById('apPayrollTabClock')?.classList.toggle('ap-hidden-tool', key !== 'clock');
+    if (key === 'overview' && typeof renderPayrollHomeTool === 'function') renderPayrollHomeTool();
 }
 
 function apSwitchTimeClockTab(key) {

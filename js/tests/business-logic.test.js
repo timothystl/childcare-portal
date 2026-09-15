@@ -3934,6 +3934,159 @@ describe('Leads & Tours — column predicates partition every lead', () => {
 });
 
 
+// ============================================================
+// PAYROLL OVERVIEW — the three things that block an approval
+// (design handoff: Capacity & Fill, 3a)
+// ============================================================
+// The exception panel is the point of this screen: it is the real reason a
+// period is not ready. A false positive costs the director a phone call to a
+// teacher about a shift that was fine, so each rule is tested at its edge.
+describe('Payroll overview — clock exceptions and the pay calendar', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-payroll-home.js'), 'utf8');
+
+    function load() {
+        const sandbox = { console, escHtml: s => String(s), apInitials: () => 'XX',
+            document: { getElementById: () => null, querySelectorAll: () => [] } };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        return sandbox;
+    }
+
+    const staffById = new Map([[1, { name: 'Kiara Bell' }], [2, { name: 'Amy Mueller' }]]);
+    const P = ['2026-09-01', '2026-09-14'];
+    const ev = (staff_id, work_date, inH, outH) => ({
+        staff_id, work_date,
+        clock_in:  `${work_date}T${String(inH).padStart(2, '0')}:00:00`,
+        clock_out: outH == null ? null : `${work_date}T${String(outH).padStart(2, '0')}:00:00`,
+    });
+
+    test('a shift clocked in and never out, on a day that is over, is flagged', () => {
+        const m = load();
+        const out = m._phExceptions([ev(1, '2026-09-10', 8, null)], [], staffById, ...P);
+        expect(out.length).toBe(1);
+        expect(out[0].kind).toBe('open');
+        expect(out[0].name).toBe('Kiara Bell');
+    });
+
+    // The one false positive that would matter most: somebody who is on shift
+    // right now has not clocked out yet, and that is not an exception.
+    test("a shift still open TODAY is not an exception", () => {
+        const m = load();
+        const today = new Date().toLocaleDateString('en-CA');
+        const out = m._phExceptions([ev(1, today, 8, null)], [], staffById, '2000-01-01', '2099-01-01');
+        expect(out.length).toBe(0);
+    });
+
+    test('two shifts on one day are only flagged when they actually overlap', () => {
+        const m = load();
+        // Touching, not overlapping: out at 1pm, back in at 1pm.
+        const touching = m._phExceptions(
+            [ev(2, '2026-09-09', 8, 13), ev(2, '2026-09-09', 13, 15)], [], staffById, ...P);
+        expect(touching.length).toBe(0);
+        // Genuinely overlapping.
+        const overlap = m._phExceptions(
+            [ev(2, '2026-09-09', 8, 13), ev(2, '2026-09-09', 12, 15)], [], staffById, ...P);
+        expect(overlap.length).toBe(1);
+        expect(overlap[0].kind).toBe('overlap');
+    });
+
+    test('an overlap reports one row per person per day, not one per pair', () => {
+        const m = load();
+        const out = m._phExceptions(
+            [ev(2, '2026-09-09', 8, 13), ev(2, '2026-09-09', 9, 14), ev(2, '2026-09-09', 10, 15)],
+            [], staffById, ...P);
+        expect(out.filter(e => e.kind === 'overlap').length).toBe(1);
+    });
+
+    // A week nobody built a schedule for is ONE missing schedule, not
+    // seventeen exceptions — otherwise the panel is useless the first week.
+    test('unscheduled hours are only flagged on days that have a schedule at all', () => {
+        const m = load();
+        const worked = [ev(1, '2026-09-08', 8, 15)];
+        expect(m._phExceptions(worked, [], staffById, ...P).length).toBe(0);
+        const withSchedule = [{ staff_id: 2, work_date: '2026-09-08', shift: 'AM' }];
+        const out = m._phExceptions(worked, withSchedule, staffById, ...P);
+        expect(out.length).toBe(1);
+        expect(out[0].kind).toBe('unscheduled');
+    });
+
+    test('a scheduled person working their own shift is never flagged', () => {
+        const m = load();
+        const out = m._phExceptions(
+            [ev(1, '2026-09-08', 8, 15)],
+            [{ staff_id: 1, work_date: '2026-09-08', shift: 'AM' }], staffById, ...P);
+        expect(out.length).toBe(0);
+    });
+
+    test('a short cover is not an exception', () => {
+        const m = load();
+        const out = m._phExceptions(
+            [{ staff_id: 1, work_date: '2026-09-08',
+               clock_in: '2026-09-08T08:00:00', clock_out: '2026-09-08T08:40:00' }],
+            [{ staff_id: 2, work_date: '2026-09-08', shift: 'AM' }], staffById, ...P);
+        expect(out.length).toBe(0);
+    });
+
+    test('exceptions outside the period are not this period’s problem', () => {
+        const m = load();
+        const out = m._phExceptions([ev(1, '2026-08-20', 8, null)], [], staffById, ...P);
+        expect(out.length).toBe(0);
+    });
+
+    // Pay day is the Friday after a period closes; the cut-off the Tuesday
+    // before that. Derived, not stored — so it must at least be internally
+    // consistent and always land on those weekdays.
+    test('pay day is always a Friday and the cut-off always the Tuesday before', () => {
+        const m = load();
+        ['2026-09-14', '2026-09-28', '2026-10-12', '2026-12-31', '2027-01-15'].forEach(end => {
+            const pay = new Date(m._phPayDay(end) + 'T00:00:00');
+            const cut = new Date(m._phCutoff(end) + 'T00:00:00');
+            expect(pay.getDay()).toBe(5);                       // Friday
+            expect(cut.getDay()).toBe(2);                       // Tuesday
+            expect(pay > new Date(end + 'T00:00:00')).toBe(true);
+            expect(cut < pay).toBe(true);
+        });
+    });
+
+    // Manual hours are the office's correction; a clock pair for the same
+    // person on the same day must not be added on top of it.
+    test('a manual hours entry replaces the clock pair for that day, never adds to it', () => {
+        const m = load();
+        const hrs = m._phHoursByStaff(
+            [ev(1, '2026-09-08', 8, 15), ev(1, '2026-09-09', 8, 12)],
+            [{ staff_id: 1, work_date: '2026-09-08', hours_worked: '6' }]);
+        // 6 manual for the 8th + 4 clocked on the 9th. NOT 6 + 7 + 4.
+        expect(hrs.get(1)).toBe(10);
+    });
+
+    test('a clock pair under ten minutes is discarded, as in the period report', () => {
+        const m = load();
+        const hrs = m._phHoursByStaff([{ staff_id: 1, work_date: '2026-09-08',
+            clock_in: '2026-09-08T08:00:00', clock_out: '2026-09-08T08:05:00' }], []);
+        expect(hrs.get(1) || 0).toBe(0);
+    });
+
+    test('estimated gross pays salary per period and hourly by the hour', () => {
+        const m = load();
+        const hrs = new Map([[1, 10], [2, 20]]);
+        const gross = m._phEstimatedGross([
+            { id: 1, pay_type: 'hourly', hourly_rate: 15 },
+            { id: 2, pay_type: 'salary', salary_biweekly: 2000, hourly_rate: 0 },
+        ], hrs);
+        expect(gross).toBe(150 + 2000);   // salaried hours do not add to it
+    });
+
+    // Benefits are the church office's, and the handoff is explicit that this
+    // screen must not pretend to administer them.
+    test('the church-office panel links out and never enrolls anyone', () => {
+        expect(src.includes('Handled by the church office')).toBe(true);
+        expect(/enroll/i.test(src.split('ph-church-list')[1] || '')).toBe(false);
+    });
+});
+
+
 // Settle any async test bodies before counting up. Every test() whose body
 // returned a promise is in _pending, already wrapped so it cannot reject here
 // — so this only ever waits, it never throws.

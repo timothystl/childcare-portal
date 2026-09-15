@@ -6625,3 +6625,102 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
   #leadsToursSection .ld-board{grid-template-columns:minmax(0,1fr);}
   #leadsToursSection .ld-form-row{grid-template-columns:minmax(0,1fr);}
 }
+
+/* ============================================================
+   Payroll → Overview  (design handoff: Capacity & Fill, 3a)
+   ============================================================
+   The landing tab of the existing Payroll tool. Cards are the shell's
+   .ap-panel; only the pay-run rows, the exception list and the two
+   side cards are new. Scoped to #apPayrollTabOverview so nothing here
+   reaches the period report in the tab beside it. */
+
+#apPayrollTabOverview .ph-runs{border-top:4px solid var(--navy);margin-bottom:20px;}
+#apPayrollTabOverview .ph-runs-head{display:flex;align-items:center;gap:11px;
+  padding:16px 22px;border-bottom:1px solid var(--border);}
+#apPayrollTabOverview .ph-runs-icon{font-size:1.15em;}
+#apPayrollTabOverview .ph-runs-head h3{font-family:var(--font-head);font-size:1.15em;
+  font-weight:700;color:var(--navy);margin:0;}
+#apPayrollTabOverview .ph-runs-meta{margin-left:auto;font-size:.78em;color:var(--text-muted);}
+
+#apPayrollTabOverview .ph-run{padding:18px 22px;border-bottom:1px solid var(--linen);
+  display:flex;gap:16px;align-items:flex-start;}
+#apPayrollTabOverview .ph-run:last-child{border-bottom:0;}
+#apPayrollTabOverview .ph-run.is-open{opacity:.7;}
+#apPayrollTabOverview .ph-run-icon{width:48px;height:48px;border-radius:12px;
+  background:var(--warm-gray);display:flex;align-items:center;justify-content:center;
+  font-size:1.3em;flex:none;}
+#apPayrollTabOverview .ph-run-main{flex:1;min-width:0;}
+#apPayrollTabOverview .ph-run-title{font-size:1.05em;font-weight:800;color:var(--navy);}
+#apPayrollTabOverview .ph-run-sub{font-size:.85em;color:var(--text-muted);margin-top:2px;}
+#apPayrollTabOverview .ph-run-note{font-size:.82em;color:var(--text-muted);margin-top:9px;line-height:1.5;}
+#apPayrollTabOverview .ph-run-done{font-size:.82em;color:var(--green-dark);margin-top:9px;line-height:1.5;}
+#apPayrollTabOverview .ph-run-alert{display:flex;align-items:center;gap:8px;margin-top:11px;
+  background:var(--sun-pale);border:1.5px solid var(--sun);border-radius:8px;
+  padding:9px 13px;font-size:.85em;font-weight:700;color:var(--mustard-dark);}
+#apPayrollTabOverview .ph-run-alert.is-late{background:var(--tang-pale);border-color:var(--tang);
+  color:var(--tang-dark);}
+#apPayrollTabOverview .ph-run-btns{display:flex;gap:9px;margin-top:12px;flex-wrap:wrap;}
+#apPayrollTabOverview .ph-run-right{text-align:right;flex:none;}
+#apPayrollTabOverview .ph-run-gross{font-family:var(--font-head);font-size:1.4em;font-weight:700;
+  color:var(--navy);margin-top:10px;}
+#apPayrollTabOverview .ph-run-grosslab{font-size:.72em;color:var(--text-muted);}
+
+#apPayrollTabOverview .ph-status{display:inline-block;border-radius:6px;padding:5px 12px;
+  font-size:.8em;font-weight:800;}
+#apPayrollTabOverview .ph-status.is-ok{background:var(--green-pale);color:var(--green-dark);}
+#apPayrollTabOverview .ph-status.is-warn{background:var(--tang-pale);color:var(--ap-deep-tang);}
+#apPayrollTabOverview .ph-status.is-muted{background:var(--warm-gray);color:var(--text-muted);}
+
+#apPayrollTabOverview .ph-btn{min-height:38px;display:inline-flex;align-items:center;
+  padding:9px 16px;border-radius:8px;background:var(--white);border:1.5px solid var(--border);
+  color:var(--navy);font-size:.84em;font-weight:800;font-family:var(--font-body);
+  cursor:pointer;white-space:nowrap;}
+#apPayrollTabOverview .ph-btn.is-primary{background:var(--navy);border-color:var(--navy);color:var(--white);}
+#apPayrollTabOverview .ph-btn:hover{border-color:var(--sun);}
+
+/* ── Two columns ───────────────────────────────────────── */
+#apPayrollTabOverview .ph-cols{display:grid;grid-template-columns:minmax(340px,1.55fr) minmax(280px,1fr);
+  gap:20px;align-items:start;}
+#apPayrollTabOverview .ph-col{display:flex;flex-direction:column;gap:20px;min-width:0;}
+#apPayrollTabOverview .ph-exceptions{border-top:4px solid var(--tang);}
+
+#apPayrollTabOverview .ph-excs{padding:8px 22px 18px;}
+#apPayrollTabOverview .ph-exc{display:flex;gap:12px;align-items:center;padding:13px 0;
+  border-bottom:1px solid var(--ap-border-lt);}
+#apPayrollTabOverview .ph-exc:last-child{border-bottom:0;}
+#apPayrollTabOverview .ph-exc-who{width:28px;height:28px;flex:none;border-radius:99px;
+  background:var(--navy);color:var(--white);font-size:.62em;font-weight:800;
+  display:flex;align-items:center;justify-content:center;}
+#apPayrollTabOverview .ph-exc-main{flex:1;min-width:0;}
+#apPayrollTabOverview .ph-exc-name{font-size:.88em;font-weight:800;color:var(--navy);}
+#apPayrollTabOverview .ph-exc-detail{font-size:.8em;color:var(--text-muted);margin-top:2px;line-height:1.45;}
+
+/* ── Side cards ────────────────────────────────────────── */
+#apPayrollTabOverview .ph-rows{padding:10px 22px 4px;}
+#apPayrollTabOverview .ph-row{padding:11px 0;border-bottom:1px solid var(--ap-border-lt);}
+#apPayrollTabOverview .ph-row:last-child{border-bottom:0;}
+#apPayrollTabOverview .ph-row.is-split{display:flex;justify-content:space-between;
+  align-items:baseline;gap:12px;}
+#apPayrollTabOverview .ph-row span{font-size:.82em;font-weight:700;color:var(--text);}
+#apPayrollTabOverview .ph-row strong{font-weight:800;font-size:.85em;color:var(--navy);}
+#apPayrollTabOverview .ph-row strong.is-warn{color:var(--ap-deep-tang);}
+#apPayrollTabOverview .ph-row-title{font-size:.9em;font-weight:800;color:var(--navy);}
+#apPayrollTabOverview .ph-row-sub{font-size:.76em;color:var(--text-muted);margin-top:2px;font-weight:400;}
+#apPayrollTabOverview .ph-row-sub.is-warn{color:var(--ap-deep-tang);font-weight:700;}
+#apPayrollTabOverview .ph-foot{padding:13px 22px 18px;border-top:1px solid var(--ap-border-lt);}
+#apPayrollTabOverview .ph-foot-note{font-size:.76em;color:var(--text-muted);line-height:1.5;}
+
+#apPayrollTabOverview .ph-church{background:var(--cream);}
+#apPayrollTabOverview .ph-church-list{padding:4px 22px 18px;}
+#apPayrollTabOverview .ph-church-row{display:flex;align-items:center;gap:10px;
+  padding:11px 0;border-top:1px solid var(--border);font-size:.85em;
+  font-weight:700;color:var(--navy);}
+
+@media (max-width:1100px){
+  #apPayrollTabOverview .ph-cols{grid-template-columns:minmax(0,1fr);}
+}
+@media (max-width:640px){
+  #apPayrollTabOverview .ph-run{flex-wrap:wrap;}
+  #apPayrollTabOverview .ph-run-right{text-align:left;width:100%;}
+  #apPayrollTabOverview .ph-exc{flex-wrap:wrap;}
+}

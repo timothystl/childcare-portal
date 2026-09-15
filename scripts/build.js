@@ -240,6 +240,12 @@ const ENTRIES = [
                 'js/admin/admin-finance-hub.js',
                 'js/admin/admin-finance-bookkeeper.js',
                 'js/admin/admin-staffing.js',
+                // After admin-reports.js (reads _buildPayrollPeriodList,
+                // _payrollPeriodLabel and generatePayrollReport) — the
+                // Overview tab reuses the period report's own calendar rather
+                // than deriving a second one. Before admin-portal.js, whose
+                // apSwitchPayrollTab() calls renderPayrollHomeTool().
+                'js/admin/admin-payroll-home.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-settings-unified.js',
                 'js/admin/admin-waitlist.js',

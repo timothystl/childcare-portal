@@ -1606,12 +1606,21 @@
                 <p class="section-desc">Hours, PTO, and pay for a bi-weekly period.</p>
 
                 <div class="bk-nav" id="apPayrollTabs">
-                    <button class="bk-pill is-on" data-ap-payroll-tab="period">Pay period</button>
+                    <button class="bk-pill is-on" data-ap-payroll-tab="overview">Overview</button>
+                    <button class="bk-pill" data-ap-payroll-tab="period">Pay period</button>
                     <button class="bk-pill" data-ap-payroll-tab="pto">PTO policy</button>
                     <button class="bk-pill" data-ap-payroll-tab="clock">Time Clock</button>
                 </div>
 
-                <div id="apPayrollTabPeriod">
+                <!-- Overview (design handoff: Capacity & Fill, 3a) — what's
+                     owed, when it's due, and what's blocking it, in front of
+                     the period report rather than beside it. The report below
+                     is untouched. js/admin/admin-payroll-home.js. -->
+                <div id="apPayrollTabOverview">
+                    <div id="phBody"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <div id="apPayrollTabPeriod" class="ap-hidden-tool">
                     <div class="roster-controls">
                         <div class="roster-field">
                             <label for="payrollPeriod">Pay Period</label>
