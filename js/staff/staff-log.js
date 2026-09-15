@@ -216,19 +216,40 @@ function slRenderRoster() {
         // screen distinguishes them — two screens must not disagree.
         const st = c.attendance_status
             || (c.checked_in ? 'present' : 'not_arrived');   // pre-upgrade payload
-        const state = st === 'present' ? { cls: 'in',   text: 'In' }
-                    : st === 'left'    ? { cls: 'out',  text: 'Out' }
-                    :                    { cls: '',     text: 'Not in' };
-        return `<button type="button" class="sl-child" data-student="${slEsc(c.student_id)}">
-            <span class="sl-child-top">
-                <span class="sl-child-name">${slEsc(c.child_name)}</span>
-                <span class="sl-child-state ${state.cls}">${state.text}</span>
-            </span>
-            ${chips ? `<span class="sl-child-chips">${chips}</span>` : ''}
-        </button>`;
+        const present = st === 'present';
+        const left    = st === 'left';
+        const dropBadge = c.drop_in ? ' <span class="sl-dropin-badge">Drop-in</span>' : '';
+        const sid = slEsc(c.student_id);
+        // The row's own name/chips area opens the full quick-log sheet (nap,
+        // diaper, meal, …). The In/Out control below it is separate and
+        // deliberately not nested inside that button — this IS the dedicated
+        // check-in/out feed, so attendance is one tap, not one tap into a
+        // sheet plus another tap inside it.
+        return `<div class="sl-child" data-student="${sid}">
+            <button type="button" class="sl-child-main" data-student="${sid}">
+                <span class="sl-child-top">
+                    <span class="sl-child-name">${slEsc(c.child_name)}${dropBadge}</span>
+                </span>
+                ${chips ? `<span class="sl-child-chips">${chips}</span>` : ''}
+            </button>
+            <div class="sl-child-attend" role="radiogroup" aria-label="${slEsc(c.child_name)} attendance">
+                <button type="button" class="sl-attend-btn${present ? ' is-active' : ''}"
+                    data-mark="check_in" data-student="${sid}"
+                    role="radio" aria-checked="${present}">In</button>
+                <button type="button" class="sl-attend-btn${left ? ' is-active' : ''}"
+                    data-mark="check_out" data-student="${sid}"
+                    role="radio" aria-checked="${left}">Out</button>
+            </div>
+        </div>`;
     }).join('');
-    wrap.querySelectorAll('.sl-child').forEach(b => {
+    wrap.querySelectorAll('.sl-child-main').forEach(b => {
         b.addEventListener('click', () => slOpenSheet(b.dataset.student));
+    });
+    wrap.querySelectorAll('.sl-attend-btn').forEach(b => {
+        b.addEventListener('click', () => {
+            const child = slChildren.find(c => String(c.student_id) === String(b.dataset.student));
+            if (child) slCommit(b.dataset.mark, {}, b, child);
+        });
     });
     // The ratio bar reads the same slChildren this just rendered, so it is
     // refreshed here rather than on its own timer — the two can never show
@@ -373,6 +394,169 @@ function slOpenSheet(studentId) {
 function slCloseSheet() {
     slEl('slSheet').classList.add('hidden');
     slOpenChild = null;
+}
+
+// ── Add a walk-in child ─────────────────────────────────────
+// A parent at the door whose child was never booked. Two shapes: a known
+// child (sibling, past enrollee) just not on today's schedule, or nobody
+// has a record at all. Either way staff_add_dropin_child() checks the child
+// in through the same log_child_event path every other check-in uses, and
+// folds the charge into the family's CURRENT invoice right away — a draft,
+// not a charge; the card is billed on the normal cycle, not this instant.
+//
+// Deliberately NOT part of the offline queue, same reasoning as photos and
+// the injury report: this creates a family/registration record and touches
+// billing, so it either goes through now or tells you it didn't — a queued
+// version silently retried later could check a child in against a day that
+// has already changed underneath it.
+
+let slDropinSelected  = null;   // { student_id, child_name } once picked from search
+let slDropinDayType   = 'full';
+let slDropinSearchT   = null;
+
+function slOpenDropinSheet() {
+    slDropinSelected = null;
+    slEl('slDropinSearch').value = '';
+    slEl('slDropinResults').innerHTML = '';
+    slEl('slDropinSearchBlock')?.classList.remove('hidden');
+    slEl('slDropinSelected')?.classList.add('hidden');
+    slEl('slDropinForm')?.classList.add('hidden');
+    slEl('slDropinNewFields')?.classList.remove('hidden');
+    slEl('slDropinChildName').value = '';
+    slEl('slDropinParentName').value = '';
+    slEl('slDropinParentEmail').value = '';
+    slEl('slDropinParentPhone').value = '';
+    slEl('slDropinChildAge').value = '';
+    slEl('slDropinFee').checked = true;
+    slDropinSetDayType('full');
+    const err = slEl('slDropinError');
+    err.textContent = '';
+    err.classList.add('hidden');
+    slEl('slDropinSheet')?.classList.remove('hidden');
+}
+
+function slCloseDropinSheet() {
+    slEl('slDropinSheet')?.classList.add('hidden');
+}
+
+function slDropinSetDayType(value) {
+    slDropinDayType = value;
+    slEl('slDropinDayType')?.querySelectorAll('.sl-choice-btn').forEach(b => {
+        b.classList.toggle('is-active', b.dataset.value === value);
+    });
+}
+
+async function slDropinRunSearch() {
+    const q = (slEl('slDropinSearch')?.value || '').trim();
+    const resultsEl = slEl('slDropinResults');
+    if (!resultsEl) return;
+    if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+    try {
+        const matches = await staffSearchChildren(slStaffId, slPin, q);
+        if (!matches.length) {
+            resultsEl.innerHTML = '<p class="sl-empty">No match. Add them as a new child below.</p>';
+            return;
+        }
+        resultsEl.innerHTML = matches.map(m => `
+            <button type="button" class="sl-dropin-result" data-student="${slEsc(m.student_id)}"
+                data-name="${slEsc(m.child_name)}">
+                <strong>${slEsc(m.child_name)}</strong> — ${slEsc(m.parent_name || 'Family on file')}
+            </button>`).join('');
+        resultsEl.querySelectorAll('.sl-dropin-result').forEach(b => {
+            b.addEventListener('click', () => slDropinSelect(b.dataset.student, b.dataset.name));
+        });
+    } catch (e) {
+        console.warn('dropin search:', e);
+        resultsEl.innerHTML = '<p class="sl-empty">Search failed. Try again.</p>';
+    }
+}
+
+function slDropinSelect(studentId, childName) {
+    slDropinSelected = { student_id: studentId, child_name: childName };
+    slEl('slDropinSearchBlock')?.classList.add('hidden');
+    slEl('slDropinSelectedText').textContent = `${childName} — checking in as a drop-in today`;
+    slEl('slDropinSelected')?.classList.remove('hidden');
+    slEl('slDropinNewFields')?.classList.add('hidden');
+    slEl('slDropinForm')?.classList.remove('hidden');
+}
+
+function slDropinClearSelection() {
+    slDropinSelected = null;
+    slEl('slDropinSelected')?.classList.add('hidden');
+    slEl('slDropinSearchBlock')?.classList.remove('hidden');
+    slEl('slDropinForm')?.classList.add('hidden');
+}
+
+function slDropinShowNewChild() {
+    slDropinSelected = null;
+    slEl('slDropinSearchBlock')?.classList.add('hidden');
+    slEl('slDropinSelected')?.classList.add('hidden');
+    slEl('slDropinNewFields')?.classList.remove('hidden');
+    slEl('slDropinForm')?.classList.remove('hidden');
+}
+
+async function slDropinSubmit(e) {
+    e.preventDefault();
+    const errEl = slEl('slDropinError');
+    errEl.classList.add('hidden');
+    errEl.textContent = '';
+
+    const age = parseInt(slEl('slDropinChildAge').value, 10);
+    if (!Number.isFinite(age) || age < 0) {
+        errEl.textContent = "Enter the child's age.";
+        errEl.classList.remove('hidden');
+        return;
+    }
+
+    const payload = {
+        roomId:          slRoomId,
+        careDate:        null,       // today — resolved server-side
+        dayType:         slDropinDayType,
+        applyDropinFee:  !!slEl('slDropinFee').checked,
+        childAge:        age,
+    };
+
+    if (slDropinSelected) {
+        payload.existingStudentId = slDropinSelected.student_id;
+    } else {
+        const childName   = slEl('slDropinChildName').value.trim();
+        const parentName  = slEl('slDropinParentName').value.trim();
+        const parentEmail = slEl('slDropinParentEmail').value.trim();
+        if (!childName || !parentName || !parentEmail) {
+            errEl.textContent = "Child's name, parent name, and parent email are all required.";
+            errEl.classList.remove('hidden');
+            return;
+        }
+        payload.childName    = childName;
+        payload.parentName   = parentName;
+        payload.parentEmail  = parentEmail;
+        payload.parentPhone  = slEl('slDropinParentPhone').value.trim();
+    }
+
+    const btn = slEl('slDropinSubmit');
+    btn.disabled = true; btn.textContent = 'Adding…';
+    try {
+        const row = await staffAddDropinChild(slStaffId, slPin, payload);
+        if (!row) {
+            errEl.textContent = 'That did not go through. Check the PIN and try again.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+        // Drop it straight into the roster the same shape a fresh load would
+        // show — the child is present NOW and staff should see that without
+        // waiting on a round trip to reload the whole room.
+        const idx = slChildren.findIndex(c => String(c.student_id) === String(row.student_id));
+        if (idx >= 0) slChildren[idx] = row; else slChildren.push(row);
+        slRenderRoster();
+        slCloseDropinSheet();
+        slToast(`${row.child_name} added and checked in.`);
+    } catch (err) {
+        console.warn('dropin add:', err);
+        errEl.textContent = 'Could not reach the server. Try again.';
+        errEl.classList.remove('hidden');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Add & check in';
+    }
 }
 
 // ── Messages ────────────────────────────────────────────────
@@ -663,11 +847,16 @@ function slRenderPending() {
     if (typeof srhRender === 'function') srhRender();
 }
 
-function slCommit(eventType, detail, btnEl) {
-    if (!slOpenChild) return;
+// `child` defaults to whichever child the quick-log sheet has open, so every
+// existing sl-act/sl-bottle call site is unchanged. The roster's own In/Out
+// buttons pass the child explicitly — they act on a row, not on the sheet,
+// and the sheet may not even be open.
+function slCommit(eventType, detail, btnEl, child) {
+    child = child || slOpenChild;
+    if (!child) return;
     slQueue.push({
-        student_id: slOpenChild.student_id,
-        child_name: slOpenChild.child_name,
+        student_id: child.student_id,
+        child_name: child.child_name,
         event_type: eventType,
         detail,
         occurred_at: new Date().toISOString(),
@@ -688,10 +877,10 @@ function slCommit(eventType, detail, btnEl) {
     // was reloaded from the server, even though the event had really been
     // recorded — which is exactly why it looked like tapping did nothing.
     if (eventType === 'check_in' || eventType === 'check_out') {
-        slOpenChild.checked_in = eventType === 'check_in';
-        slOpenChild.attendance_status = eventType === 'check_in' ? 'present' : 'left';
+        child.checked_in = eventType === 'check_in';
+        child.attendance_status = eventType === 'check_in' ? 'present' : 'left';
         slRenderRoster();
-        slToast(`${slOpenChild.child_name} checked ${eventType === 'check_in' ? 'in' : 'out'}.`);
+        slToast(`${child.child_name} checked ${eventType === 'check_in' ? 'in' : 'out'}.`);
     }
 
     slFlushQueue();
@@ -747,6 +936,19 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slSheetClose')?.addEventListener('click', slCloseSheet);
     slEl('slSheet')?.addEventListener('click', e => { if (e.target.id === 'slSheet') slCloseSheet(); });
     slEl('slRefreshBtn')?.addEventListener('click', slLoadRoster);
+    slEl('slAddDropinBtn')?.addEventListener('click', slOpenDropinSheet);
+    slEl('slDropinCancel')?.addEventListener('click', slCloseDropinSheet);
+    slEl('slDropinSheet')?.addEventListener('click', e => { if (e.target.id === 'slDropinSheet') slCloseDropinSheet(); });
+    slEl('slDropinSearch')?.addEventListener('input', () => {
+        clearTimeout(slDropinSearchT);
+        slDropinSearchT = setTimeout(slDropinRunSearch, 300);
+    });
+    slEl('slDropinNewToggle')?.addEventListener('click', slDropinShowNewChild);
+    slEl('slDropinClearSelected')?.addEventListener('click', slDropinClearSelection);
+    slEl('slDropinDayType')?.querySelectorAll('.sl-choice-btn').forEach(b => {
+        b.addEventListener('click', () => slDropinSetDayType(b.dataset.value));
+    });
+    slEl('slDropinForm')?.addEventListener('submit', slDropinSubmit);
     slEl('slPostBtn')?.addEventListener('click', slFlushQueue);
     slEl('slPhotoBtn')?.addEventListener('click', () => slEl('slPhotoInput')?.click());
     slEl('slPhotoInput')?.addEventListener('change', e => slPhotoPicked(e.target.files?.[0]));
