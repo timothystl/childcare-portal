@@ -1,0 +1,28 @@
+-- ============================================================
+-- Strip the default grants Supabase hands new public tables
+-- ============================================================
+-- APPLIED 2026-09-15 as version 20260915171831.
+--
+-- care_charges was created minutes earlier (20260915171800) and arrived with
+-- INSERT, SELECT, UPDATE, DELETE, REFERENCES and TRIGGER granted to `anon` —
+-- not by the migration that created it, but by the ALTER DEFAULT PRIVILEGES
+-- that apply to every new table in `public`.
+--
+-- RLS is on and the only policy is admin-only, so nothing could actually be
+-- read or written through those grants. That is exactly why this is worth
+-- fixing rather than shrugging at: the grant is real, it is invisible in the
+-- creating migration, and it becomes live the moment anyone disables RLS or
+-- adds a permissive policy. Defense in depth means the grant should not be
+-- there either.
+--
+-- Found by running VERIFY_door_checkin_boundary.sql immediately after
+-- applying, which is the entire reason that file exists.
+--
+-- Same treatment, same reasoning, as two migrations already in this repo:
+--   20260817042527_finance_tables_strip_default_grants
+--   20260826193806_billing_notes_strip_default_authenticated_grant
+--
+-- `authenticated` keeps its grants: the admin policy is what scopes it, and
+-- that is how every other admin table here works.
+REVOKE ALL ON TABLE public.care_charges FROM anon;
+REVOKE ALL ON SEQUENCE public.care_charges_id_seq FROM anon;
