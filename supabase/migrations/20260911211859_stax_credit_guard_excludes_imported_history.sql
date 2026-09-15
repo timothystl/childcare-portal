@@ -1,4 +1,13 @@
 -- ============================================================
+-- ⚠️ LEDGER NOTE: production recorded this as version 20260911211859 under
+-- the NAME "20260911150000_stax_credit_guard_excludes_imported_history" —
+-- the old hand-picked timestamp got swallowed into the name field when it
+-- was applied. The version is what the CLI matches on, so this file is
+-- named for the version with the stray timestamp dropped; repeating it
+-- would give the file two timestamps and re-create exactly the confusion
+-- supabase/migrations/README.md exists to end.
+-- ============================================================
+-- ============================================================
 -- Stax unapplied-credit guard: ignore imported (pre-portal) payment history
 -- ============================================================
 -- stax_quote_balance() (harden_stax_payments.sql) refuses online payment
