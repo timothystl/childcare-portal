@@ -4534,6 +4534,118 @@ describe('The door — kiosk and the signature record', () => {
 
 
 // ============================================================
+// STAFF DEDICATED CHECK-IN FEED — walk-in (drop-in) children
+// ============================================================
+// The Room roster already IS the check-in/out feed (list_room_children +
+// log_child_event). This covers the two things added on top of it: the
+// in/out control living on the roster row itself rather than behind the
+// quick-log sheet, and staff_add_dropin_child — a walk-in with no booking,
+// checked in and folded into the family's current invoice immediately.
+describe('Staff check-in feed — walk-ins', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    const staffLog = read('js/staff/staff-log.js');
+    const sb       = read('js/supabase.js');
+    const mig      = read('supabase/migrations/20260915203139_staff_dropin_checkin.sql');
+    // staff_add_dropin_child's final, live body — a follow-up CREATE OR
+    // REPLACE fixing a gap the sibling door-kiosk RPC (record_door_checkin)
+    // had already caught: photo_release must not default to true for a name
+    // typed at the door.
+    const migFix   = read('supabase/migrations/20260915203911_staff_dropin_child_no_default_photo_release.sql');
+
+    // The In/Out control must not be a button nested inside the row's own
+    // button — that is invalid HTML and, worse, means tapping "In" would
+    // also fire the row's click handler and pop the quick-log sheet open
+    // behind it. They render as siblings, each wired separately.
+    test('the roster row keeps In/Out separate from the sheet-opening control', () => {
+        expect(/class="sl-child-main"/.test(staffLog)).toBe(true);
+        expect(/class="sl-child-attend"/.test(staffLog)).toBe(true);
+        expect(/querySelectorAll\('\.sl-child-main'\)/.test(staffLog)).toBe(true);
+        expect(/querySelectorAll\('\.sl-attend-btn'\)/.test(staffLog)).toBe(true);
+    });
+
+    // slCommit is shared by the quick-log sheet (which has no child argument
+    // and falls back to slOpenChild) and the roster's own In/Out buttons
+    // (which pass the row's child explicitly, since the sheet need not be
+    // open at all).
+    test('slCommit accepts an explicit child instead of requiring the sheet to be open', () => {
+        expect(/function slCommit\(eventType, detail, btnEl, child\)/.test(staffLog)).toBe(true);
+        expect(/child = child \|\| slOpenChild/.test(staffLog)).toBe(true);
+    });
+
+    // The walk-in flow is deliberately synchronous, not queued — see the
+    // header comment in staff-log.js for why (same reasoning as photos and
+    // the injury report).
+    test('adding a walk-in does not go through the offline queue', () => {
+        const block = staffLog.slice(staffLog.indexOf('async function slDropinSubmit'));
+        const body = block.slice(0, block.indexOf('\nasync function') > 0
+            ? block.indexOf('\nasync function', 1) : block.length);
+        expect(/slQueue\.push/.test(body)).toBe(false);
+        expect(/staffAddDropinChild\(/.test(body)).toBe(true);
+    });
+
+    // Client wrappers must call the exact RPC names the migration creates,
+    // with the PIN parsed the same way every other staff RPC call parses it.
+    test('the client calls staff_search_children and staff_add_dropin_child by name', () => {
+        expect(/rpc\('staff_search_children'/.test(sb)).toBe(true);
+        expect(/rpc\('staff_add_dropin_child'/.test(sb)).toBe(true);
+        const block = sb.slice(sb.indexOf('async function staffAddDropinChild'));
+        expect(/p_pin:\s*parseInt\(pin, 10\)/.test(block.slice(0, 800))).toBe(true);
+    });
+
+    // The drop-in fee is a constant the SERVER applies, not an amount the
+    // browser sends — staff choose only whether to apply it. A numeric fee
+    // parameter here would let a compromised or modified client bill
+    // whatever it wants into a family's invoice.
+    test('the drop-in fee is a server-side constant, never a client-supplied amount', () => {
+        expect(/p_apply_dropin_fee boolean/.test(migFix)).toBe(true);
+        expect(/v_fee\s*:?=\s*CASE WHEN p_apply_dropin_fee THEN 5 ELSE 0 END/.test(migFix)).toBe(true);
+        expect(/p_fee\s+numeric/i.test(migFix)).toBe(false);
+        expect(/p_amount/i.test(migFix)).toBe(false);
+    });
+
+    // Same access model as the rest of Phase 1: no table grants to anon, and
+    // every policy/grant names its role explicitly — `TO public` is what
+    // leaked staff wages to a parent once already (see the historical
+    // migration's own warning).
+    test('the new RPCs are PIN-gated and grant no table access to anon', () => {
+        expect(/staff_id_for_pin\(p_staff_id, p_pin\)/.test(mig)).toBe(true);
+        expect(/GRANT\s+EXECUTE ON FUNCTION public\.staff_search_children/.test(mig)).toBe(true);
+        expect(/GRANT\s+EXECUTE ON FUNCTION public\.staff_add_dropin_child/.test(mig)).toBe(true);
+        expect(/GRANT\s+(SELECT|INSERT|UPDATE|DELETE)[^;]*\bTO\s+anon\b/.test(mig)).toBe(false);
+        expect(/TO\s+public\b/i.test(mig)).toBe(false);
+        expect(/TO\s+public\b/i.test(migFix)).toBe(false);
+    });
+
+    // A repeat tap (double submit, or a retry after a slow response) must
+    // check the child in again without adding a second registration_dates
+    // row or a second $5 fee — see the migration's own verification notes.
+    test('a repeat walk-in add cannot duplicate the day or double the fee', () => {
+        const fn = migFix.slice(migFix.indexOf('CREATE OR REPLACE FUNCTION public.staff_add_dropin_child'));
+        expect(/IF NOT EXISTS \(\s*SELECT 1 FROM registration_dates/.test(fn)).toBe(true);
+    });
+
+    // A brand-new registration needs a real age; an existing one already has
+    // one on file and must not be blocked by a missing form field.
+    test('a new registration requires an age; reusing an existing one does not', () => {
+        const fn = migFix.slice(migFix.indexOf('CREATE OR REPLACE FUNCTION public.staff_add_dropin_child'));
+        expect(/IF v_reg_id IS NULL THEN[\s\S]{0,200}IF p_child_age IS NULL THEN RETURN/.test(fn)).toBe(true);
+    });
+
+    // The sibling door-kiosk RPC (record_door_checkin, before/after care)
+    // already found this: photo_release defaults to true on the students
+    // table, which is consent nobody gave for a name typed at the door. A
+    // brand-new walk-in student must not inherit that default.
+    test('a brand-new walk-in student is not photo-released by default', () => {
+        const fn = migFix.slice(migFix.indexOf('CREATE OR REPLACE FUNCTION public.staff_add_dropin_child'));
+        expect(/INSERT INTO students \(family_id, child_name, child_dob, photo_release\)/.test(fn)).toBe(true);
+        expect(/VALUES \(v_family, v_child_name, p_child_dob, false\)/.test(fn)).toBe(true);
+    });
+});
+
+
+// ============================================================
 // BEFORE & AFTER CARE — the pooled afternoon floor
 // (design handoff: Capacity & Fill, 5a)
 // ============================================================

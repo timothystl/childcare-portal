@@ -209,6 +209,11 @@
                  Fill, 1d). Hidden until a roster has actually loaded —
                  js/staff/staff-room-head.js. -->
             <div id="slRoomHead" class="sl-room-head hidden"></div>
+            <!-- The dedicated check-in/out feed IS this roster — every child
+                 booked into the room today, with attendance one tap away.
+                 This button is the other half: a parent at the door whose
+                 child was never booked. js/staff/staff-log.js. -->
+            <button type="button" id="slAddDropinBtn" class="btn-secondary sl-add-dropin-btn">+ Add a child</button>
             <div id="slRoster" class="sl-roster"></div>
             <button id="slPostBtn" class="sl-post-btn hidden">Post 0</button>
         </section>
@@ -456,6 +461,83 @@
     </div>
 
     <!-- Day off request — bottom sheet off the schedule tab. -->
+    <!-- Walk-in check-in: a parent at the door whose child was never booked.
+         Two shapes — a known child just not on today's schedule, or nobody
+         has a record at all — see js/staff/staff-log.js and the
+         staff_add_dropin_child RPC. Adding here checks the child in AND
+         folds the charge into the family's current invoice right away; the
+         card is charged on the normal billing cycle, not this instant. -->
+    <div id="slDropinSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Add a child</span>
+                <button type="button" id="slDropinCancel" class="sl-link-btn">Cancel</button>
+            </div>
+
+            <div class="sl-inc-block" id="slDropinSearchBlock">
+                <div class="sl-inc-label">Search for a child already on file</div>
+                <input type="text" id="slDropinSearch" class="sl-dropin-search"
+                    placeholder="Child's name…" autocomplete="off">
+                <div id="slDropinResults" class="sl-dropin-results"></div>
+                <button type="button" id="slDropinNewToggle" class="sl-link-btn">
+                    Not on file — add a new child
+                </button>
+            </div>
+
+            <div id="slDropinSelected" class="sl-dropin-selected hidden">
+                <p id="slDropinSelectedText"></p>
+                <button type="button" id="slDropinClearSelected" class="sl-link-btn">Not this child</button>
+            </div>
+
+            <form id="slDropinForm" class="hidden">
+                <div id="slDropinNewFields">
+                    <label class="sl-field">
+                        <span>Child's name</span>
+                        <input type="text" id="slDropinChildName" autocomplete="off">
+                    </label>
+                    <label class="sl-field">
+                        <span>Parent/guardian name</span>
+                        <input type="text" id="slDropinParentName" autocomplete="off">
+                    </label>
+                    <label class="sl-field">
+                        <span>Parent email <span class="sl-optional">(for billing)</span></span>
+                        <input type="email" id="slDropinParentEmail" autocomplete="off">
+                    </label>
+                    <label class="sl-field">
+                        <span>Parent phone</span>
+                        <input type="tel" id="slDropinParentPhone" autocomplete="off">
+                    </label>
+                </div>
+                <label class="sl-field">
+                    <span>Child's age</span>
+                    <input type="number" id="slDropinChildAge" min="0" max="17" inputmode="numeric">
+                </label>
+
+                <div class="sl-inc-block">
+                    <div class="sl-inc-label">Today</div>
+                    <div class="sl-choice-row" id="slDropinDayType" role="radiogroup" aria-label="Full or half day">
+                        <button type="button" class="sl-choice-btn is-active" data-value="full">Full day</button>
+                        <button type="button" class="sl-choice-btn" data-value="half">Half day</button>
+                    </div>
+                </div>
+
+                <label class="sl-check">
+                    <input type="checkbox" id="slDropinFee" checked>
+                    <span>Apply the $5 drop-in fee</span>
+                </label>
+
+                <p class="sl-inc-note sl-dropin-error hidden" id="slDropinError"></p>
+
+                <button type="submit" id="slDropinSubmit" class="btn-primary sl-btn">Add &amp; check in</button>
+                <p class="sl-inc-note">
+                    This adds today to their booking and folds the charge into the
+                    family's current invoice right away. The card isn't charged until
+                    the office sends it — same as any other schedule change.
+                </p>
+            </form>
+        </div>
+    </div>
+
     <div id="slDayOffSheet" class="sl-sheet hidden">
         <div class="sl-sheet-inner">
             <div class="sl-sheet-head">
