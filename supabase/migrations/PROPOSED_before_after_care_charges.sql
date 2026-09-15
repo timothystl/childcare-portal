@@ -55,17 +55,34 @@
 -- Andrew's correction settles the shape but not the billing route, and
 -- these two are genuinely open:
 --
---   * A Pre-K child has no registration, so who receives the invoice?
---     Either their family is a `families` row like any other and is billed
---     directly, or Timothy Lutheran Pre-K is billed once for all of them and
---     collects from its own families. The column `bill_to` is NOT included
---     below on purpose — guessing it into the schema would bake in an answer
---     nobody has given. Add it when the answer exists.
---
 --   * A name taken at the door, before the office has a family record: is
 --     that a `students` row created on the spot, or a note the office turns
 --     into one later? A charge needs someone to bill, so this is the thing
---     that blocks the kiosk half of the design, not a detail.
+--     that blocks the kiosk half of the design, not a detail. Andrew's
+--     answer below makes this sharper rather than softer: there is now no
+--     such thing as a charge without a family behind it.
+--
+-- ── ANSWERED: each family is billed directly ────────────────
+-- Andrew: "bill each family directly, not the pre-k organization."
+--
+-- So there is no `bill_to` column, no organization payer, and no
+-- consolidated Pre-K invoice. A Pre-K family is a `families` row like any
+-- other and receives its own invoice, which means the whole existing
+-- billing path — statements, balances, payments, the parent's billing tab —
+-- works for them without a second mode to maintain.
+--
+-- ⚠️ That answer has one consequence worth building in rather than hoping
+-- for. `students.family_id` is NULLABLE. A charge written against a student
+-- with no family would be owed by nobody: it would never appear on an
+-- invoice, never age into a balance, and never raise an error — it would
+-- just sit there. So `care_charges` carries its OWN `family_id`, NOT NULL,
+-- and an unbillable charge becomes impossible to write rather than
+-- something a month-end report has to go looking for.
+--
+-- Storing it here rather than joining through `students` also freezes WHO
+-- WAS BILLED, for the same reason `rate_charged` freezes the price: if a
+-- child later moves between families, September's charge still belongs to
+-- whoever owed it in September.
 -- ============================================================
 
 BEGIN;
@@ -75,6 +92,14 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.care_charges (
     id            bigserial PRIMARY KEY,
     student_id    uuid        NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    -- Who is billed, frozen at the moment the charge is written. NOT NULL,
+    -- because `students.family_id` is nullable and a charge owed by nobody
+    -- would never surface anywhere. See the note at the top of this file.
+    --
+    -- ON DELETE RESTRICT, not CASCADE: deleting a family must not silently
+    -- erase what it was charged. The office settles or voids the charges
+    -- first, deliberately.
+    family_id     uuid        NOT NULL REFERENCES public.families(id) ON DELETE RESTRICT,
     -- A program id from settings.programs ('before_care', 'after_care').
     -- Deliberately TEXT and deliberately NOT a foreign key: programs are an
     -- admin-edited settings document, not a table, and an FK here would force
@@ -104,6 +129,9 @@ CREATE INDEX IF NOT EXISTS care_charges_date_idx
     ON public.care_charges (care_date, program_id);
 CREATE INDEX IF NOT EXISTS care_charges_student_idx
     ON public.care_charges (student_id, care_date DESC);
+-- The month-end run is per family per month, so that is the index it needs.
+CREATE INDEX IF NOT EXISTS care_charges_family_month_idx
+    ON public.care_charges (family_id, care_date);
 
 -- ── RLS ─────────────────────────────────────────────────────
 -- ⚠️ The policy names its role explicitly. NOT `TO public` — the note in

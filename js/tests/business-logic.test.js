@@ -4690,6 +4690,34 @@ describe('Before & After Care — the combined afternoon', () => {
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
         expect(/from\(\s*['"`]care_charges/.test(code)).toBe(false);
     });
+
+    // Andrew: "bill each family directly, not the pre-k organization."
+    //
+    // The trap this closes: `students.family_id` is NULLABLE, so a charge
+    // that reached the family only by joining through `students` could be
+    // owed by nobody — never on an invoice, never in a balance, and never an
+    // error. Just a row. So the charge carries its own family_id, NOT NULL.
+    test('every charge names the family it bills, and cannot exist without one', () => {
+        const mig = fs.readFileSync(path.join(repoRoot,
+            'supabase/migrations/PROPOSED_before_after_care_charges.sql'), 'utf8');
+        const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+
+        expect(/family_id\s+uuid\s+NOT NULL REFERENCES public\.families\(id\)/.test(ddl)).toBe(true);
+        // RESTRICT, not CASCADE: deleting a family must not silently erase
+        // what it was charged.
+        expect(/REFERENCES public\.families\(id\) ON DELETE RESTRICT/.test(ddl)).toBe(true);
+        expect(/REFERENCES public\.families\(id\) ON DELETE CASCADE/.test(ddl)).toBe(false);
+
+        // No organization payer, no consolidated Pre-K invoice, no second
+        // billing mode — the answer removes a column rather than adding one.
+        expect(/bill_to/.test(ddl)).toBe(false);
+        expect(/'organization'/.test(ddl)).toBe(false);
+        // The decision is written down where the next reader will find it.
+        expect(/bill each family directly, not the pre-k organization/i.test(mig)).toBe(true);
+
+        // And the screen says so too, rather than leaving it open.
+        expect(/Every family is billed directly/.test(src)).toBe(true);
+    });
 });
 
 
