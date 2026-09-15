@@ -300,6 +300,19 @@ const AP_TOOLS = [
     // unreachable without deleting markup anything else might read.
 
     // ── Planning · Enrollment Outlook ──
+    // Fill the Rooms (design handoff: Capacity & Fill, turn 1) — first in the
+    // group on purpose: it is the "what should I do about it" screen, and the
+    // two below it are the "show me the numbers" screens it links into.
+    // It computes nothing capacity-related of its own; see the module header
+    // in admin-fill-rooms.js for which existing call each panel reads
+    // (apStaffing's own seat/at-ratio rule, wlpRunAllocation's queue and
+    // forecast, waitlist_applications' own status/tour_* columns). The
+    // handoff ships two layouts of this screen and asks for a choice between
+    // them — both are built, behind the section's own Dense/Calm toggle,
+    // rather than one being picked on the director's behalf.
+    { key: 'fillRooms', pane: 'waitlist', section: 'fillRoomsSection', tab: 'planning',
+      group: 'Enrollment Outlook', tint: AP_TINT.gold, icon: '🎯', name: 'Fill the Rooms',
+      blurb: 'Every empty seat-day this week, every family who stopped moving, and the one action that clears each.' },
     // `capacityOverview` was retired from here in the Classroom Tab Redesign
     // (its content folded into the FTE/Seat-Day sub-view of Classrooms →
     // Planning → Enrollment & Capacity, `enrollCap`, above) but restored
@@ -1036,6 +1049,13 @@ function apOnToolOpened(tool) {
         if (tool.pane === 'market' && typeof initMarketTab === 'function' && !window._apMarketInit) {
             window._apMarketInit = true; initMarketTab();
         }
+        // Fill the Rooms reads the same allocation the Planner does, so it
+        // needs registrations AND the waitlist loaded before it can render.
+        // It awaits both itself (renderFillRoomsTool) rather than being
+        // pre-loaded here, so opening it directly works without the Planner
+        // ever having been opened first — and so the two loads aren't fired
+        // twice by doing half of it in each place.
+        if (tool.key === 'fillRooms' && typeof renderFillRoomsTool === 'function') renderFillRoomsTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

@@ -780,6 +780,32 @@
                  (apRenderDetail() no longer renders anything into
                  #apDetailHead) rather than continuing to patch which parts of
                  a section's own heading get hidden underneath it. -->
+            <!-- Fill the Rooms (design handoff: Capacity & Fill, turn 1). The
+                 section carries its own head row — title, week nav, and the
+                 dense/calm density toggle the handoff asks to choose between —
+                 because apRenderDetail() renders no shell header. Everything
+                 below #frBody is drawn by renderFillRoomsTool(). -->
+            <section class="admin-section" id="fillRoomsSection">
+                <div class="fr-head">
+                    <div>
+                        <h2>🎯 Fill the rooms</h2>
+                        <p class="section-desc" id="frWeekLabel">Week of —</p>
+                    </div>
+                    <div class="fr-head-ctrls">
+                        <div class="fr-density" role="group" aria-label="Layout density">
+                            <button type="button" class="ap-pill" data-fr-density="dense">Dense</button>
+                            <button type="button" class="ap-pill" data-fr-density="calm">Calm</button>
+                        </div>
+                        <div class="fr-weeknav" role="group" aria-label="Week">
+                            <button type="button" class="ap-pill" data-fr-week="-1" aria-label="Previous week">‹</button>
+                            <button type="button" class="ap-pill" data-fr-week="0">This week</button>
+                            <button type="button" class="ap-pill" data-fr-week="1" aria-label="Next week">›</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="frBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <section class="admin-section" id="roomCapacityOverviewSection">
                 <h2>📆 Room Capacity Overview</h2>
                 <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>

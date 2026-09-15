@@ -3350,6 +3350,239 @@ describe('Admin users — only real admins, and all of them', () => {
     });
 });
 
+// ============================================================
+// FILL THE ROOMS — seat math and funnel
+// (design handoff: Capacity & Fill, turn 1)
+// ============================================================
+// Unlike most of this file, these exercise the REAL shipped functions rather
+// than a stub that mirrors them: admin-fill-rooms.js declares only functions
+// and a couple of consts at the top level — nothing runs on load — so the
+// whole module can be evaluated in a vm sandbox with the browser globals it
+// calls at render time stubbed in. A regression in the seat/at-ratio rule
+// therefore fails here, which a source-text assertion could not catch.
+describe('Fill the Rooms — open seats, at-ratio, and the funnel', () => {
+    const vm = require('vm');
+    // Each describe block in this file scopes its own repoRoot — see the two
+    // above — rather than sharing one, so a block can be moved or removed
+    // without silently breaking its neighbours.
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-fill-rooms.js'), 'utf8');
+
+    // Two rooms with deliberately different ratios, so "at ratio" can be
+    // wrong for one and right for the other in the same week.
+    const stubRooms = [
+        { id: 'turtle', label: '🐢 Turtle Room', capacity: 11, staffRatio: 8, status: 'active', hidden: false },
+        { id: 'goose',  label: '🪿 Goose Room',  capacity: 12, staffRatio: 8, status: 'active', hidden: false },
+    ];
+    const WEEK = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18'];
+
+    // n children booked into `room` on `date`, as the registration shape
+    // allRegistrations actually carries.
+    function regs(spec) {
+        return Object.entries(spec).map(([roomId, byDate]) => ({
+            room_id: roomId,
+            registration_dates: Object.entries(byDate).flatMap(([date, n]) =>
+                Array.from({ length: n }, () => ({ care_date: date, waitlisted: false, day_type: 'full' }))),
+        }));
+    }
+
+    function load({ registrations = [], closures = [], apps = [] } = {}) {
+        const sandbox = {
+            console,
+            apWeekDates: () => WEEK.slice(),
+            apWeekStart: () => WEEK[0],
+            apFmtDayShort: (d) => ({ '2026-09-14': 'Mon 9/14', '2026-09-15': 'Tue 9/15',
+                '2026-09-16': 'Wed 9/16', '2026-09-17': 'Thu 9/17', '2026-09-18': 'Fri 9/18' })[d] || d,
+            getSortedRooms: () => stubRooms,
+            allRegistrations: registrations,
+            allClosureDates: new Set(closures),
+            _allWaitlistApps: apps,
+            TREND_DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+            escHtml: (s) => String(s),
+            wlRoomLabel: (id) => id,
+            wlDaysLabel: () => 'Tue/Thu',
+            wlDeriveRoom: (a) => a.room_id || 'turtle',
+            wlDaysWaiting: () => '10 days',
+            wlpMonths: () => [],
+            wlpRankedKids: () => [],
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        return sandbox;
+    }
+
+    test('open seats are capacity minus booked, per room per day', () => {
+        const m = load({ registrations: regs({ turtle: { '2026-09-14': 4 }, goose: { '2026-09-14': 5 } }) });
+        const week = m._frWeekData(WEEK[0]);
+        const mon = week.byDay[0];
+        // (11 - 4) + (12 - 5) = 14
+        expect(mon.open).toBe(14);
+        expect(mon.booked).toBe(9);
+        expect(mon.capacity).toBe(23);
+    });
+
+    // The whole point of the coral cells: a room sitting exactly on a ratio
+    // boundary is NOT offered for release, however many seats look open.
+    test('a room exactly on a ratio boundary is at-ratio and not releasable', () => {
+        const m = load({ registrations: regs({ turtle: { '2026-09-14': 8 }, goose: { '2026-09-14': 7 } }) });
+        const week = m._frWeekData(WEEK[0]);
+        const turtle = week.rows.find(r => r.room.id === 'turtle').cells[0];
+        const goose  = week.rows.find(r => r.room.id === 'goose').cells[0];
+        expect(turtle.booked).toBe(8);          // 8 % 8 === 0 → the 9th child costs an adult
+        expect(turtle.atRatio).toBe(true);
+        expect(turtle.open).toBe(3);            // three seats open, still not releasable
+        expect(turtle.releasable).toBe(false);
+        expect(goose.atRatio).toBe(false);      // 7 % 8 !== 0
+        expect(goose.releasable).toBe(true);
+    });
+
+    test('an empty room is not at ratio — zero children never costs an adult', () => {
+        const m = load({ registrations: [] });
+        const week = m._frWeekData(WEEK[0]);
+        expect(week.rows[0].cells[0].atRatio).toBe(false);
+        expect(week.rows[0].cells[0].releasable).toBe(true);
+    });
+
+    test('a closure removes the day from both sides of the occupancy fraction', () => {
+        const m = load({
+            registrations: regs({ turtle: { '2026-09-14': 4 }, goose: { '2026-09-14': 4 } }),
+            closures: ['2026-09-16'],
+        });
+        const week = m._frWeekData(WEEK[0]);
+        const wed = week.byDay[2];
+        expect(wed.closed).toBe(true);
+        expect(wed.open).toBe(0);
+        expect(wed.capacity).toBe(0);           // not counted as unsold capacity
+        expect(week.capacity).toBe(23 * 4);     // four open days, not five
+    });
+
+    test('waitlisted rows never count as booked', () => {
+        const m = load({
+            registrations: [{ room_id: 'turtle', registration_dates: [
+                { care_date: '2026-09-14', waitlisted: true,  day_type: 'full' },
+                { care_date: '2026-09-14', waitlisted: false, day_type: 'full' },
+            ] }],
+        });
+        expect(m._frWeekData(WEEK[0]).byDay[0].booked).toBe(1);
+    });
+
+    test('seats-sold percentage and empty seat-days are two views of one number', () => {
+        const m = load({ registrations: regs({ turtle: { '2026-09-14': 11 }, goose: { '2026-09-14': 12 } }) });
+        const week = m._frWeekData(WEEK[0]);
+        expect(week.open + week.booked).toBe(week.capacity);
+        expect(week.soldPct).toBeCloseTo((week.booked / week.capacity) * 100, 6);
+    });
+
+    // "Thursday and Friday carry two-thirds of it" is derived from the week in
+    // front of you, not asserted — a differently shaped week names its own
+    // worst two days.
+    test('the two emptiest open days are picked from the data, not hardcoded', () => {
+        const m = load({ registrations: regs({
+            turtle: { '2026-09-14': 11, '2026-09-15': 11, '2026-09-16': 1, '2026-09-17': 11, '2026-09-18': 2 },
+            goose:  { '2026-09-14': 12, '2026-09-15': 12, '2026-09-16': 1, '2026-09-17': 12, '2026-09-18': 2 },
+        }) });
+        const week = m._frWeekData(WEEK[0]);
+        expect(week.worst.includes('2026-09-16')).toBe(true);
+        expect(week.worst.includes('2026-09-18')).toBe(true);
+        expect(week.worst.includes('2026-09-14')).toBe(false);
+        expect(week.worstShare).toBeGreaterThan(0.9);
+    });
+
+    // The funnel reads waitlist_applications' own columns. Every stage must be
+    // a subset of the one above it, or the bars lie about where families stop.
+    test('funnel stages are monotonic and read real application state', () => {
+        const yr = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const when = `${yr}-08-01T00:00:00Z`;
+        const m = load({ apps: [
+            { applied_at: when, status: 'pending',  tour_status: 'not_scheduled' },
+            { applied_at: when, status: 'pending',  tour_status: 'scheduled', tour_scheduled_at: when },
+            { applied_at: when, status: 'offered',  tour_status: 'completed', offered_at: when },
+            { applied_at: when, status: 'accepted', tour_status: 'completed', paperwork_received: false },
+            { applied_at: when, status: 'enrolled', tour_status: 'completed' },
+        ] });
+        const f = m._frFunnel();
+        const n = f.stages.map(s => s.n);
+        expect(n[0]).toBe(5);                        // inquired
+        expect(n[1]).toBe(4);                        // tour scheduled or beyond
+        expect(n[2]).toBe(3);                        // toured
+        expect(n[3]).toBe(3);                        // offered / accepted / enrolled
+        expect(n[4]).toBe(1);                        // paperwork open
+        expect(n[5]).toBe(1);                        // enrolled
+        for (let i = 1; i < n.length - 2; i++) expect(n[i] <= n[i - 1]).toBe(true);
+    });
+
+    test('applications from before the program year are excluded', () => {
+        const yr = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const m = load({ apps: [
+            { applied_at: `${yr}-08-01T00:00:00Z`, status: 'pending' },
+            { applied_at: `${yr - 1}-08-01T00:00:00Z`, status: 'pending' },
+        ] });
+        expect(m._frFunnel().total).toBe(1);
+    });
+
+    // Both layouts are built from the same data object. A ReferenceError in
+    // either one only shows up when a director opens that density, which is
+    // exactly the kind of thing a source-text assertion cannot catch —
+    // so render both, against data that exercises every panel.
+    test('both layouts render, with no undefined or NaN reaching the markup', () => {
+        const yr = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const when = `${yr}-08-01T00:00:00Z`;
+        const m = load({
+            registrations: regs({
+                turtle: { '2026-09-14': 8, '2026-09-15': 6, '2026-09-16': 5, '2026-09-17': 3, '2026-09-18': 2 },
+                goose:  { '2026-09-14': 10, '2026-09-15': 9, '2026-09-16': 7, '2026-09-17': 4, '2026-09-18': 3 },
+            }),
+            apps: [
+                { id: 1, applied_at: when, status: 'offered', child_name: 'Noah W', parent_name: 'Dana Whitfield',
+                  offered_at: when, offer_deadline: new Date(Date.now() + 86400000).toLocaleDateString('en-CA'),
+                  tour_status: 'completed', room_id: 'turtle' },
+                { id: 2, applied_at: when, status: 'accepted', child_name: 'Camila R', parent_name: 'Ana Ruiz',
+                  offered_at: when, paperwork_received: false, tour_status: 'completed', room_id: 'goose' },
+                { id: 3, applied_at: when, status: 'pending', child_name: 'Arjun B', parent_name: 'Priya Bhatt',
+                  tour_status: 'scheduled', tour_scheduled_at: `${yr}-08-20T00:00:00Z`, room_id: 'turtle' },
+                { id: 4, applied_at: when, status: 'enrolled', child_name: 'Rowan I', parent_name: 'T Ives',
+                  tour_status: 'completed', room_id: 'goose' },
+            ],
+        });
+        const week = m._frWeekData(WEEK[0]);
+        const funnel = m._frFunnel();
+        const placeable = m._frPlaceableNow(null);
+        const data = { week, funnel, alloc: null, placeable,
+            forecast: m._frForecast(null, placeable), actions: m._frActions(week, funnel, null) };
+
+        const dense = m._frDenseHtml(data);
+        const calm  = m._frCalmHtml(data);
+        expect(dense.length).toBeGreaterThan(2000);
+        expect(calm.length).toBeGreaterThan(1000);
+        expect(/undefined|NaN|\[object /.test(dense + calm)).toBe(false);
+        // The queue found the real records, not an empty state.
+        expect(data.actions.length).toBeGreaterThan(2);
+    });
+
+    // A brand-new center, or a week nobody has registered for yet, must render
+    // an empty state rather than dividing by zero.
+    test('an empty week renders without dividing by zero', () => {
+        const m = load({ registrations: [], apps: [] });
+        const week = m._frWeekData(WEEK[0]);
+        const funnel = m._frFunnel();
+        const data = { week, funnel, alloc: null, placeable: [],
+            forecast: m._frForecast(null, []), actions: m._frActions(week, funnel, null) };
+        expect(funnel.total).toBe(0);
+        expect(funnel.stages[0].pct).toBe(100);         // the top of the funnel is always full-width
+        expect(/undefined|NaN/.test(m._frDenseHtml(data) + m._frCalmHtml(data))).toBe(false);
+    });
+
+    // The drop-in release path has no table behind it yet. If someone wires a
+    // button up without wiring the write, this fails.
+    test('every drop-in action is still marked pending, not silently dead', () => {
+        expect(src.includes('is-pending')).toBe(true);
+        expect(/disabled/.test(src)).toBe(true);
+        // No write call may appear in this module until the tables exist.
+        expect(/sbClient\s*\.\s*from\(/.test(src)).toBe(false);
+    });
+});
+
+
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);

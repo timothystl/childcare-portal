@@ -226,6 +226,12 @@ const ENTRIES = [
                 'js/admin/admin-settings.js',
                 'js/admin/admin-settings-unified.js',
                 'js/admin/admin-waitlist.js',
+                // After admin-waitlist.js: Fill the Rooms calls that module's
+                // wlpRunAllocation()/wlpRankedKids()/wlRoomLabel() rather than
+                // recomputing the queue, and reads TREND_DAYS from
+                // admin-reports.js above. Before admin-portal.js, which
+                // registers it as a tool and calls renderFillRoomsTool().
+                'js/admin/admin-fill-rooms.js',
                 'js/admin/admin-attendance.js',
                 'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',
