@@ -1,9 +1,27 @@
 // ============================================================
 // MODULE: Before & After Care  (design handoff: Capacity & Fill, 5a)
 // ============================================================
-// Classrooms → Daily → Before & After Care. The program's own floor: who
-// is on it this afternoon, and how many more children can walk in before
-// the ratio needs another adult.
+// Classrooms → Daily → Before & After Care.
+//
+// ── ⚠️ BEFORE AND AFTER CARE IS NOT A ROOM ──────────────────
+// Andrew, correcting an earlier version of this screen:
+//
+//     "the pre-k before care and after care is not a room, just a charge
+//      that is applied if a child attends."
+//
+// That sentence rules out most of what a room screen would show. There is
+// no enrolment, so there is no roster to draw before the day starts. There
+// is no reservation, so there are no seats to count down and no "5 spots
+// left" to put in a stat tile. Nobody is turned away at a capacity line,
+// because there is no line — a child attends, and a charge follows.
+//
+// What survives is two genuinely different things, and this screen keeps
+// them apart on purpose:
+//
+//   1. WHO IS SUPERVISED RIGHT NOW. Ratio is licensing law and applies to
+//      any group of children however it is billed. A staffing fact.
+//   2. WHAT IS OWED. One charge per child per session attended. A billing
+//      fact, and the whole of what the program is.
 //
 // ── The afternoon floor IS real, and this is why ────────────
 // Goose, Turtle and Owl physically combine into one supervised group from
@@ -12,38 +30,35 @@
 // Build Staff Schedule and the Attendance Board's ratio watch. A full-day
 // booking in one of those three rooms IS a child on that floor.
 //
-// So this screen can answer the number that does the real work — "how many
-// more can still walk in" — from registrations that already exist, using
-// the same pooled rule every staffing screen uses. It does not invent a
-// second definition of the afternoon.
+// That floor is the MDO day, not the after-care program. This screen shows
+// it because it is who the teacher is actually watching at 3:00 — not
+// because those children are "enrolled in after care." It does not invent
+// a second definition of the afternoon.
 //
-// Hours, rate and capacity come from the `after_care` program in
-// settings.programs (Settings → Programs & add-ons), so the office changes
-// them in one place.
+// Hours and rate come from settings.programs (Settings → Programs &
+// add-ons), so the office changes them in one place. Capacity is NOT read
+// here, and the daily programs no longer carry one: a seat you cannot
+// reserve is not a seat.
 //
-// ── ⚠️ THE PRE-K HALF DOES NOT EXIST YET ────────────────────
-// The handoff's second group — Timothy Lutheran Pre-K children who use the
-// care and never the program — has no record of any kind in myMDO. By
-// design they must have:
+// ── ⚠️ THE CHARGE HAS NOWHERE TO LAND YET ───────────────────
+// A charge needs a record that a child attended, and myMDO has no such
+// record for before or after care. Billing runs off `registration_dates` —
+// a day BOOKED in a room — and nobody books a morning at 7:30.
 //
-//   * a family and child record, with guardians, allergies and a pickup
-//     list, the same as anyone else;
-//   * an enrolment in a PROGRAM rather than a room, so they never touch
-//     room capacity, the ratio math for a room, the waitlist or the fill
-//     forecast;
-//   * an attendance row per session used, because nothing is booked ahead
-//     — the check-in IS the record;
-//   * a monthly invoice counted off that attendance.
+// So the missing piece is exactly one table: this child, this program,
+// this date, this rate. The proposed shape is written up as a migration
+// source file (supabase/migrations/PROPOSED_before_after_care_charges.sql)
+// which is NOT applied — per AGENTS.md, migrations there are source records
+// applied by hand, and a schema change needs Andrew's explicit approval.
 //
-// None of those tables exist. The proposed shape is written up as a
-// migration source file (supabase/migrations/PROPOSED_program_enrolments
-// _and_attendance.sql) which is NOT applied — see AGENTS.md: migrations in
-// that folder are source records, applied by hand, and a schema change
-// needs Andrew's explicit approval.
+// Pre-K children need nothing more than that table plus a `students` row.
+// They have no registration, so room capacity, the ratio math for a room,
+// the waitlist and the fill forecast — all of which read `registrations`
+// and `registration_dates` — correctly never see them. Nothing has to
+// remember to exclude them.
 //
 // Until then this screen shows the MDO afternoon truthfully and names the
-// Pre-K gap, rather than rendering a roster of invented children that a
-// director might act on.
+// gap, rather than rendering charges nobody has recorded.
 
 let _bacDate  = null;
 let _bacBound = false;
@@ -93,24 +108,28 @@ function _bacAfternoonFloor(date) {
     kids.sort((a, b) => a.roomLabel.localeCompare(b.roomLabel) || a.name.localeCompare(b.name));
 
     const program = _bacProgram('after_care');
-    const capacity = Number(program?.capacity) || 0;
     const ratio = PM_COMBINED_RATIO;
     const present = kids.length;
     const adults = present > 0 ? Math.ceil(present / ratio) : 0;
     // How many more before ceil() steps up — the same "next child costs an
     // adult" arithmetic the teacher's ratio bar and the release grid use.
+    //
+    // ⚠️ There is deliberately no seatsLeft here. A seat implies a booking,
+    // and nobody books before or after care; the number that limits the
+    // afternoon is staffing, not a capacity line. Counting down to a cap
+    // nobody reserves against would invent a queue that does not exist.
     const beforeNextAdult = ratio > 0 ? (adults * ratio) - present : null;
-    const seatsLeft = capacity ? Math.max(0, capacity - present) : null;
 
-    return { closed, kids, present, capacity, ratio, adults, beforeNextAdult, seatsLeft, program };
+    return { closed, kids, present, ratio, adults, beforeNextAdult, program };
 }
 
 function _bacMorning(date) {
     const program = _bacProgram('before_care');
-    // ⚠️ Before care has no booking record at all — unlike the afternoon,
-    // there is no registration day_type that means "came in at 7:30". It is
-    // capacity and hours from the programs document and nothing else.
-    return { program, capacity: Number(program?.capacity) || 0 };
+    // ⚠️ Before care has no record of any kind — unlike the afternoon, there
+    // is no registration day_type that means "came in at 7:30", and there is
+    // no booking to read because none is made. Hours and rate from the
+    // programs document, and nothing else.
+    return { program };
 }
 
 // ── Render ──────────────────────────────────────────────────
@@ -146,13 +165,12 @@ function _bacHeadroomHtml(f) {
     return `
         <div class="ap-panel${edge ? ' bac-edge' : ''}">
             <div class="ap-panel-head">
-                <h3>Walk-in headroom</h3>
-                <p>Nobody books the afternoon ahead, so this is the only number protecting the ratio.</p>
+                <h3>Staffing the floor</h3>
+                <p>Ratio is the law, whatever the billing says. This is the number that decides whether another adult is needed &mdash; there is no seat count, because nobody reserves a place.</p>
             </div>
             <div class="bac-rows">
-                <div class="bac-stat"><span>Room for</span><strong>${f.capacity || '—'} at 1:${f.ratio}</strong></div>
+                <div class="bac-stat"><span>Ratio</span><strong>1:${f.ratio}</strong></div>
                 <div class="bac-stat"><span>On the floor</span><strong>${f.present}</strong></div>
-                <div class="bac-stat"><span>Seats left</span><strong class="${f.seatsLeft === 0 ? 'is-warn' : 'is-ok'}">${f.seatsLeft == null ? '—' : f.seatsLeft}</strong></div>
                 <div class="bac-stat"><span>Adults needed</span><strong class="${edge ? 'is-warn' : ''}">${f.adults || '—'}</strong></div>
             </div>
             <div class="bac-note${edge ? ' is-edge' : ''}">
@@ -172,11 +190,11 @@ function _bacMorningHtml(m) {
         <div class="ap-panel">
             <div class="ap-panel-head">
                 <h3>🌅 ${escHtml(p.label)} · ${escHtml(_bacTime(p.startTime))} – ${escHtml(_bacTime(p.endTime))}</h3>
-                <p>Room for ${m.capacity || '—'} at 1:${p.ratio || '—'}, at $${p.rate} a morning.</p>
+                <p>$${p.rate} a morning, staffed at 1:${p.ratio || '—'}.</p>
             </div>
             <div class="bac-gap bac-gap-soft">
                 <strong>Who came this morning isn't recorded.</strong>
-                Unlike the afternoon — where a full-day booking IS a child on the combined floor — there is no booking or attendance row that means "arrived at 7:30". The hours, rate and capacity above are real; the register is the piece that has to be built.
+                Unlike the afternoon — where a full-day booking IS a child on the combined floor — there is no row anywhere that means "arrived at 7:30". The hours and rate above are real; the register that turns a morning into a charge is the piece that has to be built.
             </div>
         </div>`;
 }
@@ -185,21 +203,22 @@ function _bacPrekHtml() {
     return `
         <div class="ap-panel bac-prek">
             <div class="ap-panel-head">
-                <h3>Pre-K children on file</h3>
-                <p>The second group this program serves: Timothy Lutheran Pre-K children who use the care and never the MDO program.</p>
+                <h3>Who attended, and what it cost</h3>
+                <p>Before and after care is not a room and nobody enrolls in it. A child attends, and a charge follows. This is the register of that &mdash; including the Timothy Lutheran Pre-K children who use the care and never the MDO program.</p>
             </div>
             <div class="bac-gap">
-                <strong>There are none, because there is nowhere to put them.</strong>
-                A Pre-K child needs a family and child record like anyone else, but an enrolment in a <em>program</em> rather than a room — so they never touch room capacity, a room's ratio math, the waitlist or the fill forecast. That does not exist in myMDO today, so this list would be empty however it were drawn.
+                <strong>It is empty because nothing records the attendance.</strong>
+                Billing here runs off a day <em>booked</em> in a room, and nobody books a morning at 7:30. There is no table that says a child was here, so there is nothing to charge from &mdash; for MDO children or Pre-K ones.
             </div>
             <div class="bac-spec">
                 <div class="bac-spec-title">What it needs, precisely</div>
                 <ul class="bac-spec-list">
-                    <li><strong>program_enrolments</strong> — a child in a program rather than a room, so capacity and the waitlist never see them.</li>
-                    <li><strong>program_attendance</strong> — one row per session actually used. Nothing is booked ahead, so the check-in IS the record and there is no billed-versus-booked gap to reconcile.</li>
-                    <li><strong>A provisional flag</strong> — a name taken at the door is a real child in the ratio and a real line on the invoice, but badged unfinished until the office closes the file.</li>
+                    <li><strong>One table, and it is a charge.</strong> Child, program, date, rate as charged. A row exists because a child attended; no row means nothing is owed. No booking, so no billed-versus-booked gap to reconcile.</li>
+                    <li><strong>The rate copied in, not looked up later.</strong> A price change in October must not silently re-price September.</li>
+                    <li><strong>A waived session stays visible</strong>, with its reason, rather than vanishing. A charge that disappears is one nobody can ask about later.</li>
                 </ul>
-                <p class="bac-spec-note">The shape is written up in <code>supabase/migrations/PROPOSED_program_enrolments_and_attendance.sql</code>. It is <strong>not applied</strong> — per <code>AGENTS.md</code>, migrations in that folder are source records applied by hand, and a schema change on a live childcare system needs Andrew's explicit approval first.</p>
+                <p class="bac-spec-note">A Pre-K child needs that table and a child record &mdash; nothing else. With no registration, room capacity, a room's ratio math, the waitlist and the fill forecast never see them, because every one of those reads registrations.</p>
+                <p class="bac-spec-note">The shape is written up in <code>supabase/migrations/PROPOSED_before_after_care_charges.sql</code>. It is <strong>not applied</strong> &mdash; per <code>AGENTS.md</code>, migrations in that folder are source records applied by hand, and a schema change on a live childcare system needs Andrew's explicit approval first.</p>
             </div>
         </div>`;
 }
@@ -220,7 +239,7 @@ function _bacInvoiceHtml(f) {
             </div>
             <div class="bac-gap bac-gap-soft">
                 <strong>Nothing to invoice yet.</strong>
-                The rates above are live, from Settings → Programs &amp; add-ons. The run itself counts sessions out of <code>program_attendance</code>, which is the table that does not exist — so this would produce an empty invoice for every family however it were built.
+                The rates above are live, from Settings → Programs &amp; add-ons. The run itself adds up the charges recorded for the month, and that table does not exist — so this would produce an empty invoice for every family however it were built.
             </div>
         </div>`;
 }

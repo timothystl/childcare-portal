@@ -6,7 +6,7 @@
 // that is already happening.
 //
 // ── One definition of a program ─────────────────────────────
-// Hours, rate, capacity and ratio come from `settings.programs` via
+// Hours, rate and ratio come from `settings.programs` via
 // loadProgramSettings() — the same document the director edits in Settings
 // → Programs & add-ons. The parent app does not carry its own copy of "$12
 // for after care": if the office changes the rate on Monday, this card
@@ -76,7 +76,7 @@ function _ppDayChipsHtml(p) {
 
 function _ppCardHtml(p, fees) {
     const daily = Number(p.rate) || 0;
-    const weekly = _ppState.programs.find(x => x.sharesCapacityWith === p.id && x.active);
+    const weekly = _ppState.programs.find(x => x.sharesRatioWith === p.id && x.active);
 
     const savings = weekly && daily
         ? Math.max(0, daily * 5 - (Number(weekly.rate) || 0))
