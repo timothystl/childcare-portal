@@ -12,16 +12,30 @@
 // ---- Minimal test runner ----
 
 let _passed = 0, _failed = 0;
+// A test whose body returns a promise is settled before the summary prints —
+// see _pending and the tail of this file. Without this, an async body that
+// REJECTED was counted as a pass, because the try/catch around a synchronous
+// fn() call never sees a rejection that happens a microtask later.
+const _pending = [];
 function describe(label, fn) { console.log(`\n  ${label}`); fn(); }
 function test(label, fn) {
+    let result;
     try {
-        fn();
-        _passed++;
-        console.log(`    ✓ ${label}`);
+        result = fn();
     } catch (err) {
         _failed++;
         console.error(`    ✗ ${label}\n      ${err.message}`);
+        return;
     }
+    if (result && typeof result.then === 'function') {
+        _pending.push(result.then(
+            () => { _passed++; console.log(`    ✓ ${label}`); },
+            (err) => { _failed++; console.error(`    ✗ ${label}\n      ${err && err.message}`); },
+        ));
+        return;
+    }
+    _passed++;
+    console.log(`    ✓ ${label}`);
 }
 function expect(actual) {
     return {
@@ -3583,6 +3597,157 @@ describe('Fill the Rooms — open seats, at-ratio, and the funnel', () => {
 });
 
 
-console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
-if (_failed > 0) process.exitCode = 1;
-if (_failed > 0) process.exit(1);
+// ============================================================
+// THE AT-RATIO RULE — one rule, three surfaces
+// (design handoff: Capacity & Fill, 1a/1b · 1c · 1d)
+// ============================================================
+// "One more child here costs another adult" is now decided in four places:
+// apStaffing() for the director's staffing requirement, admin-fill-rooms.js
+// for the release grid, parent-dropin.js for which days a parent is offered,
+// and staff-room-head.js for the teacher's headroom line. They are separate
+// bundles and cannot share a helper, so this is the drift guard AGENTS.md
+// asks for over an intentional copy: all four must express the SAME rule, and
+// a fifth copy appearing without a test is exactly what this catches.
+describe('At-ratio — the same boundary on every screen', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    const portal = read('js/admin/admin-portal.js');
+    const fill   = read('js/admin/admin-fill-rooms.js');
+    const parent = read('js/parent/parent-dropin.js');
+    const staff  = read('js/staff/staff-room-head.js');
+
+    // All four spell the boundary as "count % ratio === 0, and count > 0".
+    // A room with nobody in it is not on a boundary — zero children have
+    // never required an adult, and `0 % n === 0` is true, so the count>0
+    // guard is the part that actually matters.
+    test('every copy guards on count > 0, not just the modulo', () => {
+        [['apStaffing', portal], ['fill rooms', fill], ['parent drop-in', parent]].forEach(([name, src]) => {
+            const hit = /(\w+)\s*>\s*0\s*&&\s*\1\s*%\s*\w*[Rr]atio\w*\s*===\s*0/.test(src)
+                     || /(\w+)\s*>\s*0\s*&&\s*\1\s*%\s*(\w+)\s*===\s*0/.test(src);
+            if (!hit) throw new Error(`${name} does not guard the modulo on a positive count`);
+        });
+    });
+
+    // The teacher's screen states the same fact the other way round — how
+    // many more children fit before ceil() steps up — so it must agree at
+    // the boundary rather than repeating the modulo.
+    test('the teacher headroom line agrees with ceil(children / ratio)', () => {
+        const sandbox = {
+            console,
+            ROOMS: [{ id: 'goose', label: '🪿 Goose Room', capacity: 12, staffRatio: 8 }],
+            slRoomId: 'goose',
+            slQueue: [],
+            slEsc: s => String(s),
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(staff, sandbox);
+
+        const kids = n => Array.from({ length: n }, () => ({ attendance_status: 'present' }));
+
+        // 8 present, ratio 8 → one adult, and zero headroom: the 9th child
+        // is the one that costs a second adult.
+        let c = sandbox.srhCounts(kids(8));
+        expect(c.present).toBe(8);
+        expect(c.adults).toBe(1);
+        expect(c.headroom).toBe(0);
+
+        // 9 present → two adults, and seven more fit before a third.
+        c = sandbox.srhCounts(kids(9));
+        expect(c.adults).toBe(2);
+        expect(c.headroom).toBe(7);
+
+        // Nobody in the room is not a boundary.
+        c = sandbox.srhCounts([]);
+        expect(c.adults).toBe(0);
+
+        // ceil(children / ratio) — the same expression apStaffing uses.
+        for (let n = 1; n <= 24; n++) {
+            expect(sandbox.srhCounts(kids(n)).adults).toBe(Math.ceil(n / 8));
+        }
+    });
+
+    // A child who has gone home is not in the ratio. "Out" and "Not in" are
+    // different facts everywhere else in this app (see slRenderRoster's own
+    // note) and the ratio bar must not blend them back together.
+    test('only children actually present count toward the ratio', () => {
+        const sandbox = {
+            console,
+            ROOMS: [{ id: 'goose', capacity: 12, staffRatio: 8 }],
+            slRoomId: 'goose', slQueue: [], slEsc: s => String(s),
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(staff, sandbox);
+        const c = sandbox.srhCounts([
+            { attendance_status: 'present' },
+            { attendance_status: 'present' },
+            { attendance_status: 'left' },
+            { attendance_status: 'not_arrived' },
+        ]);
+        expect(c.present).toBe(2);
+    });
+
+    // The parent card must never offer a day the director's grid would keep
+    // closed, and must never offer a day the child already holds.
+    test('the parent card offers only days the director would release', () => {
+        const ROOM = { id: 'goose', label: '🪿 Goose Room', capacity: 12, staffRatio: 8, fullDayOnly: false, fullDayRate: 75, halfDayRate: 45 };
+        // Three upcoming weekdays: one with room, one exactly on the ratio
+        // boundary, one the child is already booked for.
+        const FUTURE = [1, 2, 3].map(i => {
+            const d = new Date(Date.now() + i * 86400000);
+            return d.toLocaleDateString('en-CA');
+        });
+        const sandbox = {
+            console,
+            ROOMS: [ROOM],
+            fetchCapacityForDates: async (_room, dates) => {
+                const out = {};
+                dates.forEach((d, i) => { out[d] = [5, 8, 5][i % 3]; });
+                return out;
+            },
+            psDayRate: (room, t) => (t === 'half' ? room.halfDayRate : room.fullDayRate),
+            psSchedule: async () => null,
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(parent, sandbox);
+        // Force a deterministic date list rather than depending on which
+        // weekday the suite happens to run on.
+        sandbox.pdiUpcomingWeekdays = () => FUTURE.slice();
+
+        const child = { id: 7, child_name: 'Ellie Reyes', room_id: 'goose' };
+        const sched = { closures: [], registrations: [{ child_id: 7, dates: [{ care_date: FUTURE[2], waitlisted: false }] }] };
+
+        return sandbox.pdiOpenDaysFor(child, sched).then(days => {
+            const offered = days.map(d => d.date);
+            expect(offered.includes(FUTURE[0])).toBe(true);   // 5 booked of 12, not on a boundary
+            expect(offered.includes(FUTURE[1])).toBe(false);  // 8 booked, 8 % 8 === 0 → held back
+            expect(offered.includes(FUTURE[2])).toBe(false);  // already booked by this child
+        });
+    });
+
+    // Neither the parent card nor the teacher bar may write anything: the
+    // release decision belongs to the office and has no table yet.
+    test('neither the parent card nor the teacher bar writes to the database', () => {
+        [parent, staff].forEach(src => {
+            expect(/sbClient\s*\.\s*from\(/.test(src)).toBe(false);
+            expect(/\.rpc\(/.test(src)).toBe(false);
+        });
+        // The parent card says so in as many words rather than rendering a
+        // disabled submit.
+        expect(parent.includes("Booking isn't open yet")).toBe(true);
+    });
+});
+
+
+// Settle any async test bodies before counting up. Every test() whose body
+// returned a promise is in _pending, already wrapped so it cannot reject here
+// — so this only ever waits, it never throws.
+Promise.all(_pending).then(() => {
+    console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
+    if (_failed > 0) process.exitCode = 1;
+    if (_failed > 0) process.exit(1);
+});

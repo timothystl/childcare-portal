@@ -139,6 +139,9 @@ const ENTRIES = [
                 // After staff-log: reads slStaffId/slPin/slOpenChild/slChildren
                 // and the toast helper from it.
                 'js/staff/staff-incident.js',
+                // After staff-log: reads slChildren/slRoomId/slQueue and
+                // slEsc, and staff-log calls srhRender() when either changes.
+                'js/staff/staff-room-head.js',
                 'js/staff/staff-schedule.js',
                 // Reads slStaffId/slPin/slToast and compressImageToDataUrl;
                 // slOpenAccountTab is called by staff-nav.
@@ -170,6 +173,11 @@ const ENTRIES = [
         'js/parent/parent-account.js',
         'js/parent/parent-schedule.js',
         'js/parent/parent-billing.js',
+                // After parent-schedule.js: the drop-in card reads psSchedule()
+                // for closures and the child's already-booked dates, and
+                // psDayRate() for the rate it quotes. Before parent-today.js,
+                // which calls pdiSetup()/pdiRender() as it builds the feed.
+                'js/parent/parent-dropin.js',
         'js/parent/parent-today.js',
                 // After parent-today: reuses its PT_EVENT label map, ptEsc/ptTime/
                 // ptToday helpers, and ptChildren/ptActiveId.
