@@ -50,7 +50,13 @@ const PT_EVENT = {
     meal:       { icon: '/images/icons/event-meal.svg', label: d => ({ none: 'Meal — did not eat', some: 'Meal — ate some',
                                              most: 'Meal — ate most', all: 'Meal — ate it all' }[d?.amount] || 'Meal') },
     note:       { icon: '/images/icons/event-note.svg', label: d => d?.text || 'Note from the teacher' },
-    supplies:   { icon: '/images/icons/event-supplies.svg', label: () => 'Supplies needed' },
+    // d.item is new (see SL_SUPPLY_ITEMS in staff-log.js) — a supplies event
+    // logged before that shipped has no item and still just says "needed".
+    supplies:   { icon: '/images/icons/event-supplies.svg', label: d => ({
+                    diapers: 'Supplies needed — Diapers', wipes: 'Supplies needed — Wipes',
+                    clothes: 'Supplies needed — Extra clothes', formula: 'Supplies needed — Formula/food',
+                    other: d?.note ? `Supplies needed — ${d.note}` : 'Supplies needed',
+                  }[d?.item] || 'Supplies needed') },
 };
 
 function ptRenderTimeline(events) {

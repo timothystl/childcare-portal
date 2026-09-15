@@ -2670,6 +2670,29 @@ async function adminLogChildEvent(studentId, eventType, occurredAt = null, careD
 }
 
 /**
+ * Families → Child → "Add a day" (admin-family-lookup.js): the office logging
+ * a full day's activity — naps, diapers, meals, bottles, notes, supplies —
+ * not just the Attendance Board's narrower check-in/check-out mark above.
+ * Writes into the same child_day_events table the teacher app and the Board
+ * both use, via admin_log_child_event_detail (PROPOSED_admin_child_daily_log.sql
+ * — not live until that migration is applied by hand).
+ * @returns {Promise<number|null>} New event id, or null if the caller's admin
+ *   role isn't 'full'/'restricted' or event_type was rejected.
+ */
+async function adminLogChildEventDetail(studentId, eventType, detail = {}, occurredAt = null, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_log_child_event_detail', {
+        p_student_id:  studentId,
+        p_event_type:  eventType,
+        p_detail:      detail || {},
+        p_occurred_at: occurredAt,
+        p_care_date:   careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
  * The signed-in staff member's own CPR/first-aid and TB-test records — the
  * Account tab's "Your details and training" screen. Never widened to
  * another staff id; the RPC resolves the caller from their own PIN.

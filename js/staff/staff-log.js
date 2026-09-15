@@ -252,13 +252,22 @@ const SL_ACTIONS = [
     { type: 'meal', label: 'Some',     group: 'meal', detail: { amount: 'some' } },
     { type: 'meal', label: 'Most',     group: 'meal', detail: { amount: 'most' } },
     { type: 'meal', label: 'All',      group: 'meal', detail: { amount: 'all' } },
-    { type: 'supplies', label: 'Needs supplies', group: 'other' },
 ];
 
 const SL_GROUP_LABEL = {
     attendance: 'Attendance', nap: 'Nap', diaper: 'Diaper',
-    meal: 'Meal', bottle: 'Bottle', other: 'Other',
+    meal: 'Meal', bottle: 'Bottle', supplies: 'Supplies',
 };
+
+// Supplies used to be a single "Needs supplies" tap with no detail — the
+// office could see a request but not what for. Now it says which item, so
+// the front desk can grab it instead of guessing or walking back to ask.
+const SL_SUPPLY_ITEMS = [
+    { item: 'diapers', label: 'Diapers' },
+    { item: 'wipes',   label: 'Wipes' },
+    { item: 'clothes', label: 'Extra clothes' },
+    { item: 'formula', label: 'Formula / food' },
+];
 
 function slOpenSheet(studentId) {
     const child = slChildren.find(c => String(c.student_id) === String(studentId));
@@ -297,13 +306,28 @@ function slOpenSheet(studentId) {
     // Bottle gets its own row because it carries an amount. Infants only in
     // practice, but the plan says show diapering everywhere and simply ignore
     // it for the oldest, so the same applies here — staff judge, not the UI.
-    const groups = ['attendance', 'nap', 'diaper', 'bottle', 'meal', 'other'];
+    const groups = ['attendance', 'nap', 'diaper', 'bottle', 'meal', 'supplies'];
     slEl('slSheetActions').innerHTML = groups.map(g => {
         if (g === 'bottle') {
             return `<div class="sl-group"><div class="sl-group-label">${SL_GROUP_LABEL.bottle}</div>
                 <div class="sl-bottle-row">
                     ${[2, 4, 6, 8].map(oz =>
                         `<button type="button" class="sl-act" data-bottle="${oz}">${oz} oz</button>`).join('')}
+                </div></div>`;
+        }
+        if (g === 'supplies') {
+            // A specific item is one tap, same as every other chip here. "Other"
+            // is the only one that needs typing, so it is the only one that opens
+            // anything — asking every request to go through a text box would slow
+            // down the common case of "we're out of diapers".
+            return `<div class="sl-group"><div class="sl-group-label">${SL_GROUP_LABEL.supplies}</div>
+                <div class="sl-act-row">
+                    ${SL_SUPPLY_ITEMS.map(s => `<button type="button" class="sl-act" data-supply="${s.item}">${slEsc(s.label)}</button>`).join('')}
+                    <button type="button" class="sl-act" id="slSupplyOtherBtn">Other…</button>
+                </div>
+                <div id="slSupplyOtherRow" class="sl-supply-other-row hidden">
+                    <input type="text" id="slSupplyOtherInput" placeholder="What's needed?" maxlength="120">
+                    <button type="button" id="slSupplyOtherSend" class="sl-act">Send</button>
                 </div></div>`;
         }
         const acts = SL_ACTIONS.filter(a => a.group === g);
@@ -321,6 +345,18 @@ function slOpenSheet(studentId) {
     });
     slEl('slSheetActions').querySelectorAll('[data-bottle]').forEach(b => {
         b.addEventListener('click', () => slCommit('bottle', { oz: Number(b.dataset.bottle) }, b));
+    });
+    slEl('slSheetActions').querySelectorAll('[data-supply]').forEach(b => {
+        b.addEventListener('click', () => slCommit('supplies', { item: b.dataset.supply }, b));
+    });
+    slEl('slSupplyOtherBtn')?.addEventListener('click', () => slEl('slSupplyOtherRow')?.classList.toggle('hidden'));
+    slEl('slSupplyOtherSend')?.addEventListener('click', () => {
+        const input = slEl('slSupplyOtherInput');
+        const note = (input?.value || '').trim();
+        if (!note) { input?.focus(); return; }
+        slCommit('supplies', { item: 'other', note }, slEl('slSupplyOtherSend'));
+        input.value = '';
+        slEl('slSupplyOtherRow')?.classList.add('hidden');
     });
 
     // The photo control reflects consent rather than failing after the fact.
