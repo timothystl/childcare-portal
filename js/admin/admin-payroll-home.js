@@ -214,9 +214,16 @@ async function _phLoad() {
         periods[currentIdx + 1],                   // still running
     ].filter(Boolean);
 
+    // ⚠️ `shown` is in calendar order — [just closed, still running] — so the
+    // span runs from the FIRST entry's start to the LAST entry's end. Taking
+    // them the other way round inverts the range (start > end), and every
+    // .gte()/.lte() fetch below silently returns nothing: no hours, no clock
+    // exceptions, and $0 estimated gross on a period with a fortnight of work
+    // in it. No error and no empty state — just wrong numbers on the one
+    // screen whose job is to say whether a period is ready to approve.
     const span = {
-        start: shown[shown.length - 1].start,
-        end:   shown[0].end,
+        start: shown[0].start,
+        end:   shown[shown.length - 1].end,
     };
 
     const [staff, clockEvents, manualHours, schedules, timeOff, approvals] = await Promise.all([
