@@ -263,6 +263,17 @@
                 <div id="paPreview"><p class="empty-hint">Loading…</p></div>
             </section>
 
+            <!-- Sign-in & sign-out record (design handoff: Capacity & Fill,
+                 4b). The licensing artifact, as it actually stands: real
+                 arrivals and departures from child_day_events, and a
+                 signature column that is empty because nothing in this
+                 database stores one. js/admin/admin-signature-record.js. -->
+            <section class="admin-section" id="signatureRecordSection">
+                <h2>✍️ Sign-in &amp; sign-out record</h2>
+                <p class="section-desc">One row per child per day &mdash; when they arrived, when they left, and who signed for them. Anything signed on paper is still the licensed record until the door tablet can write.</p>
+                <div id="srBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <!-- Classroom Roster (most-used — at top) -->
             <section class="admin-section collapsible-section" id="dailyRosterSection">
                 <h2>📋 Classroom Roster</h2>

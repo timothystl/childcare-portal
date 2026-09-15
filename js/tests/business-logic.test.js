@@ -4348,6 +4348,103 @@ describe('Newsletter — what it stores and how blocks move', () => {
 });
 
 
+// ============================================================
+// THE DOOR — kiosk and the signature record
+// (design handoff: Capacity & Fill, 4a · 4b · 5b · 5d)
+// ============================================================
+// These two are the halves of one licensing artifact, and both are honest
+// about a gap rather than filling it. The tests protect the honesty: a
+// signature stored anywhere but a real record is worse than paper, because
+// it looks like a system of record and is not.
+describe('The door — kiosk and the signature record', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const kiosk = read('js/kiosk.js');
+    const rec   = read('js/admin/admin-signature-record.js');
+    const code = src => src.replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+
+    // The kiosk never decides whether a PIN is right, and never keeps one.
+    test('the kiosk authenticates server-side and holds no credential', () => {
+        const c = code(kiosk);
+        expect(/familyLogin\(/.test(c)).toBe(true);
+        // No local PIN comparison, no hashing, no storage of any kind.
+        expect(/localStorage|sessionStorage|indexedDB/i.test(c)).toBe(false);
+        // The PIN is dropped on reset.
+        expect(/kPin\s*=\s*null/.test(c)).toBe(true);
+    });
+
+    // A signature in localStorage would look like a record and not be one.
+    test('the kiosk stores no signature and writes no attendance', () => {
+        const c = code(kiosk);
+        expect(/toDataURL/.test(c)).toBe(false);
+        expect(/\.\s*insert\s*\(/.test(c)).toBe(false);
+        expect(/log_child_event|admin_log_child_event/.test(c)).toBe(false);
+        expect(kiosk.includes("can't be saved yet")).toBe(true);
+    });
+
+    // A shared tablet must not hold a family's session after they leave.
+    test('the kiosk resets itself after an idle period', () => {
+        expect(/KIOSK_IDLE_MS/.test(kiosk)).toBe(true);
+        expect(/setTimeout\(kReset/.test(kiosk)).toBe(true);
+    });
+
+    // first check_in / last check_out, from events ordered ascending.
+    test('the record takes the first arrival and the last departure', () => {
+        const sandbox = {
+            console, escHtml: s => String(s),
+            getSortedRooms: () => [{ id: 'goose', label: 'Goose' }],
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(rec, sandbox);
+
+        const board = { children: [
+            { student_id: 'a', child_name: 'Ada', room_id: 'goose', attendance_status: 'left' },
+            { student_id: 'b', child_name: 'Bo',  room_id: 'goose', attendance_status: 'present' },
+            { student_id: 'c', child_name: 'Cy',  room_id: 'goose', attendance_status: 'not_arrived' },
+        ] };
+        // Ada came, went, came back, went again. Bo is still here.
+        const events = [
+            { student_id: 'a', event_type: 'check_in',  occurred_at: '2026-09-15T08:05:00Z' },
+            { student_id: 'b', event_type: 'check_in',  occurred_at: '2026-09-15T08:40:00Z' },
+            { student_id: 'a', event_type: 'check_out', occurred_at: '2026-09-15T12:00:00Z' },
+            { student_id: 'a', event_type: 'check_in',  occurred_at: '2026-09-15T13:00:00Z' },
+            { student_id: 'a', event_type: 'check_out', occurred_at: '2026-09-15T17:10:00Z' },
+        ];
+        const rows = sandbox._srRows(board, events);
+        const ada = rows.find(r => r.name === 'Ada');
+        const bo  = rows.find(r => r.name === 'Bo');
+        const cy  = rows.find(r => r.name === 'Cy');
+
+        // FIRST in, not the later one; LAST out, not the earlier one.
+        // Compared against the same formatter rather than a literal clock
+        // time, so the assertion means "it picked THAT event" regardless of
+        // the machine's timezone.
+        const fmt = iso => sandbox._srTime(iso);
+        expect(ada.inAt).toBe(fmt('2026-09-15T08:05:00Z'));    // the 8:05 in
+        expect(ada.inAt === fmt('2026-09-15T13:00:00Z')).toBe(false);  // not the 13:00 one
+        expect(ada.outAt).toBe(fmt('2026-09-15T17:10:00Z'));   // the 17:10 out
+        expect(ada.outAt === fmt('2026-09-15T12:00:00Z')).toBe(false); // not the 12:00 one
+        // Bo has an in and no out; Cy has neither.
+        expect(bo.outAt).toBeNull();
+        expect(cy.inAt).toBeNull();
+        expect(cy.outAt).toBeNull();
+    });
+
+    // Zero signatures is the true figure, not a placeholder to be tidied
+    // away. If the column ever fills, this test is the reminder to update
+    // the copy along with it.
+    test('the record reports the signature gap rather than hiding it', () => {
+        expect(rec.includes('no signature')).toBe(true);
+        expect(/With a signature/.test(rec)).toBe(true);
+        // It writes nothing at all.
+        expect(/\.\s*insert\s*\(|\.\s*update\s*\(|\.\s*upsert\s*\(/.test(code(rec))).toBe(false);
+    });
+});
+
+
 // Settle any async test bodies before counting up. Every test() whose body
 // returned a promise is in _pending, already wrapped so it cannot reject here
 // — so this only ever waits, it never throws.

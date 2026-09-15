@@ -1,0 +1,201 @@
+/* ============================================================
+   KIOSK — the tablet at the door
+   (design handoff: Capacity & Fill, 4a · 5b · 5d)
+   ============================================================
+   Everything on this page is sized for a thumb on a wall tablet
+   held at arm's length by someone carrying a bag and a child:
+   nothing tappable is under 56px, and the type is a step larger
+   than the admin portal's throughout. */
+
+.k-body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--cream);
+    font-family: var(--font-body);
+    color: var(--text);
+}
+
+/* ── Chrome ────────────────────────────────────────────── */
+.k-topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 28px;
+    background: var(--green-lt);
+    border-bottom: 3px solid var(--sun);
+}
+.k-wordmark { font-size: 1.7rem; font-weight: 800; color: var(--navy); }
+.k-wordmark em {
+    font-family: 'Dancing Script', cursive; font-style: normal;
+    font-weight: 700; color: var(--green-text);
+}
+.k-topbar-mid {
+    flex: 1; text-align: center; font-size: .78rem;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--navy);
+}
+.k-topbar-link {
+    font-size: .9rem; font-weight: 800; color: var(--navy);
+    background: rgba(255,255,255,.65); border-radius: 999px;
+    padding: 9px 16px; text-decoration: none;
+}
+.k-bottombar {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 12px 28px; background: var(--navy);
+    color: rgba(255,255,255,.75); font-size: .85rem;
+}
+
+.k-root {
+    flex: 1; width: 100%; max-width: 980px; margin: 0 auto;
+    padding: 32px 28px 48px;
+}
+
+/* ── Type ──────────────────────────────────────────────── */
+.k-h1 {
+    font-family: var(--font-head); font-size: 2rem; font-weight: 700;
+    color: var(--navy); margin: 0; line-height: 1.2;
+}
+.k-sub { font-size: 1.05rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.5; }
+.k-kicker {
+    font-size: .78rem; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;
+}
+.k-note { font-size: .95rem; color: var(--text-muted); line-height: 1.55; margin: 16px 0 0; }
+.k-foot { font-size: .9rem; color: var(--text-muted); margin-top: 22px; text-align: center; }
+.k-empty { color: var(--text-muted); font-size: 1rem; }
+.k-msg { min-height: 1.4em; margin: 0; font-size: .95rem; color: var(--tang-dark); }
+
+.k-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 20px; flex-wrap: wrap; margin-bottom: 24px;
+}
+
+/* ── Buttons ───────────────────────────────────────────── */
+.k-btn {
+    min-height: 56px; display: inline-flex; align-items: center;
+    justify-content: center; gap: 8px; padding: 14px 26px;
+    border-radius: 10px; border: 2px solid var(--navy);
+    background: var(--white); color: var(--navy);
+    font-family: var(--font-body); font-size: 1.05rem; font-weight: 800;
+    cursor: pointer;
+}
+.k-btn-primary { background: var(--navy); color: var(--white); }
+.k-btn-ghost { border-width: 1.5px; border-color: var(--border); color: var(--text-muted); }
+.k-btn:disabled { opacity: .45; cursor: not-allowed; }
+.k-wide { width: 100%; margin-top: 22px; font-size: 1.15rem; min-height: 64px; }
+.k-link {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font-family: var(--font-body); font-size: .95rem; font-weight: 800;
+    color: var(--green-text);
+}
+
+/* ── Sign-in ───────────────────────────────────────────── */
+.k-start { max-width: 520px; margin: 0 auto; text-align: center; }
+.k-signin { margin-top: 28px; display: flex; flex-direction: column; gap: 16px; text-align: left; }
+.k-field { display: flex; flex-direction: column; gap: 6px; font-size: .95rem; font-weight: 700; color: var(--text-muted); }
+.k-field input {
+    font-family: var(--font-body); font-size: 1.25rem;
+    padding: 16px 18px; border: 1.5px solid var(--border);
+    border-radius: 10px; background: var(--white); color: var(--text);
+    min-height: 60px;
+}
+.k-field input:focus {
+    outline: none; border-color: var(--navy);
+    box-shadow: 0 0 0 4px rgba(1,41,74,.12);
+}
+.k-program-hint {
+    margin-top: 26px; background: var(--sun-pale);
+    border: 1.5px solid var(--sun-lt); border-radius: 12px;
+    padding: 14px 16px; font-size: .95rem; color: var(--mustard-dark);
+    line-height: 1.55; text-align: left;
+}
+.k-program-hint strong { display: block; color: var(--navy); margin-bottom: 2px; }
+
+/* ── Children ──────────────────────────────────────────── */
+.k-children { display: flex; flex-direction: column; gap: 14px; }
+.k-child {
+    display: flex; align-items: center; gap: 18px; width: 100%;
+    background: var(--white); border: 2px solid var(--border);
+    border-radius: 16px; padding: 16px 20px; text-align: left;
+    font-family: var(--font-body); cursor: pointer; min-height: 92px;
+}
+.k-child.is-on { border-color: var(--navy); box-shadow: 0 2px 14px rgba(1,41,74,.1); }
+.k-child.is-unbooked { opacity: .55; cursor: not-allowed; background: var(--linen); }
+.k-avatar {
+    width: 62px; height: 62px; border-radius: 50%; flex: none;
+    background: var(--sun); color: var(--navy);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-head); font-weight: 700; font-size: 1.6rem;
+}
+.k-child-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.k-child-name {
+    font-family: var(--font-head); font-size: 1.35rem; font-weight: 700;
+    color: var(--navy); display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+}
+.k-child-sub { font-size: 1rem; color: var(--text-muted); }
+.k-allergy {
+    background: var(--tang-pale); border: 1.5px solid var(--tang);
+    color: var(--tang-dark); border-radius: 999px; padding: 2px 10px;
+    font-size: .7rem; font-weight: 800; letter-spacing: .04em;
+}
+.k-tick {
+    width: 46px; height: 46px; border-radius: 50%; flex: none;
+    border: 2.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; color: var(--white);
+}
+.k-child.is-on .k-tick { background: var(--navy); border-color: var(--navy); }
+
+/* ── Signature ─────────────────────────────────────────── */
+.k-signing { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.3fr); gap: 22px; align-items: start; }
+.k-signing-list {
+    background: var(--linen); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+}
+.k-signing-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border);
+    font-size: 1rem; font-weight: 700; color: var(--navy);
+}
+.k-signing-row:last-child { border-bottom: 0; }
+
+.k-pad-wrap { display: flex; flex-direction: column; gap: 8px; }
+.k-pad {
+    width: 100%; height: 220px; touch-action: none;
+    background: var(--white); border: 2.5px solid var(--navy);
+    border-radius: 14px; display: block; cursor: crosshair;
+}
+.k-pad-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.k-pad-stamp { font-size: .85rem; color: var(--text-muted); }
+
+/* The honest stop. Not a styled-up disabled button — a statement. */
+.k-blocked {
+    margin-top: 24px; background: var(--white);
+    border: 2px dashed var(--ap-neutral-bar, #C9C0A8); border-radius: 12px;
+    padding: 16px 18px; font-size: .98rem; color: var(--text-muted); line-height: 1.6;
+}
+.k-blocked strong { display: block; color: var(--navy); margin-bottom: 3px; font-size: 1.05rem; }
+
+/* ── Programs placeholder ──────────────────────────────── */
+.k-plan {
+    margin-top: 22px; background: var(--white);
+    border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px;
+}
+.k-plan-list { margin: 10px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; }
+.k-plan-list li { font-size: .98rem; color: var(--text); line-height: 1.6; }
+.k-plan-list strong { color: var(--navy); }
+.k-plan-note {
+    margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--border);
+    font-size: .9rem; color: var(--green-text); line-height: 1.55;
+}
+
+@media (max-width: 760px) {
+    .k-root { padding: 22px 18px 36px; }
+    .k-h1 { font-size: 1.6rem; }
+    .k-signing { grid-template-columns: minmax(0,1fr); }
+    .k-topbar { padding: 14px 18px; }
+    .k-topbar-mid { display: none; }
+    .k-bottombar { padding: 10px 18px; font-size: .78rem; flex-wrap: wrap; }
+    .k-child { padding: 14px 16px; min-height: 80px; }
+    .k-avatar { width: 52px; height: 52px; font-size: 1.35rem; }
+    .k-child-name { font-size: 1.15rem; }
+}

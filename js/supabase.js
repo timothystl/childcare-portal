@@ -2749,6 +2749,33 @@ async function fetchChildDay(studentId, careDate) {
 }
 
 /**
+ * Admin: every arrival and departure on one day, across the whole center.
+ *
+ * Used by the Sign-in & Sign-out Record (design handoff: Capacity & Fill,
+ * 4b), which needs a first-in and a last-out per child. `center_headcount_
+ * admin` deliberately carries only `attendance_status` and one
+ * `last_event_at` — it answers "who is in the building right now", not
+ * "what times were recorded" — so this reads the events themselves rather
+ * than making the board's RPC do two jobs.
+ *
+ * One query for the day, not one per child. Scoped by child_day_events'
+ * own "admin any role" policy (phase1_daily_feed_APPLIED.sql): a
+ * non-admin session gets nothing back, and this adds no filter of its own
+ * to imply otherwise.
+ */
+async function fetchAttendanceEventsForDate(careDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('child_day_events')
+        .select('student_id, event_type, occurred_at')
+        .eq('care_date', careDate)
+        .in('event_type', ['check_in', 'check_out'])
+        .order('occurred_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
  * The signed-in parent's children. RLS scopes this to their family, so there is
  * no filter here on purpose — the database owns the rule, and a filter in JS
  * would imply otherwise to whoever reads it next.

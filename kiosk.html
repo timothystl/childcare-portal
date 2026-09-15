@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/images/logo/apps/parent/parent-touch-180.png">
+  <meta name="apple-mobile-web-app-title" content="MDO Door">
+  <meta name="theme-color" content="#01294A">
+  <meta charset="UTF-8">
+  <!-- A wall tablet tapped all day by people holding a bag and a child.
+       Pinch-zoom is deliberately left ENABLED (WCAG 2.1 §1.4.4) — the same
+       decision clockin.html records in its own comment. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Drop-off — Timothy Lutheran MDO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/kiosk.css">
+</head>
+<body class="k-body">
+
+  <header class="k-topbar">
+    <span class="k-wordmark"><em>my</em>MDO</span>
+    <span class="k-topbar-mid">Timothy Lutheran · Mother's Day Out</span>
+    <a href="#" id="kProgramLink" class="k-topbar-link">Before &amp; after care</a>
+  </header>
+
+  <main id="kRoot" class="k-root k-start">
+    <p class="k-empty">Loading…</p>
+  </main>
+
+  <footer class="k-bottombar">
+    <span>Trouble? The office is through the door on the right.</span>
+    <span>(314) 843-3600</span>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="dist/supabase.min.js"></script>
+  <script src="dist/error-monitor.min.js"></script>
+  <script src="dist/kiosk.min.js"></script>
+</body>
+</html>

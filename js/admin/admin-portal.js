@@ -150,6 +150,13 @@ const AP_TOOLS = [
     // (admin-settings.js) — has named this exact tool the whole time via
     // apToolAvailable()'s group==='Daily' gate; without an entry here that
     // label was describing a tool 'staff' accounts could no longer reach.
+    // Sign-in & sign-out record (design handoff: Capacity & Fill, 4b). Next
+    // to Print Attendance on purpose: they are the digital and paper halves
+    // of the same licensing artifact, and today the paper one is still the
+    // record — see the module header for why the signature column is empty
+    // rather than placeholdered.
+    { key: 'signatures',  pane: 'daily',    section: 'signatureRecordSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '✍️', name: 'Sign-in & Sign-out Record',
+      blurb: 'Who arrived, when they left, and who signed for them — the record licensing asks to see.' },
     { key: 'roster',      pane: 'daily',    section: 'dailyRosterSection',      tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
       blurb: 'Who is in each room today, this week, or this month — Day/Week/Month PDF export and Print All Rooms.' },
 
@@ -1087,6 +1094,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'leadsTours' && typeof renderLeadsTool === 'function') renderLeadsTool();
         if (tool.key === 'programCalendar' && typeof renderProgramCalendarTool === 'function') renderProgramCalendarTool();
         if (tool.key === 'newsletter' && typeof renderNewsletterTool === 'function') renderNewsletterTool();
+        if (tool.key === 'signatures' && typeof renderSignatureRecordTool === 'function') renderSignatureRecordTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

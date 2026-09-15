@@ -7038,3 +7038,66 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
   #newsletterSection .nl-cols{grid-template-columns:minmax(0,1fr);}
   #newsletterSection .nl-col-insp{flex-direction:column;}
 }
+
+/* ============================================================
+   Sign-in & sign-out record — Classrooms → Daily
+   (design handoff: Capacity & Fill, 4b)
+   ============================================================ */
+
+#signatureRecordSection .sr-toolbar{display:flex;gap:16px;align-items:flex-end;
+  flex-wrap:wrap;margin-bottom:18px;}
+#signatureRecordSection .sr-ctrl{display:flex;flex-direction:column;gap:4px;
+  font-size:.74em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-muted);}
+#signatureRecordSection .sr-ctrl input,
+#signatureRecordSection .sr-ctrl select{font-family:var(--font-body);font-size:1.1em;
+  padding:8px 11px;border:1px solid var(--border);border-radius:8px;
+  background:var(--white);color:var(--text);font-weight:400;text-transform:none;letter-spacing:0;}
+
+#signatureRecordSection .sr-stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+#signatureRecordSection .sr-stat{flex:1 1 150px;background:var(--white);
+  border:1px solid var(--border);border-top:4px solid var(--green);border-radius:12px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:3px;}
+#signatureRecordSection .sr-stat.is-gap{border-top-color:var(--tang);}
+#signatureRecordSection .sr-stat-label{font-size:.7em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);}
+#signatureRecordSection .sr-stat-n{font-family:var(--font-head);font-size:1.5em;
+  font-weight:700;color:var(--navy);}
+#signatureRecordSection .sr-stat.is-gap .sr-stat-n{color:var(--ap-deep-tang);}
+
+#signatureRecordSection .sr-gap{background:var(--tang-pale);border:1.5px solid var(--tang);
+  border-radius:12px;padding:14px 16px;margin-bottom:18px;
+  font-size:.85em;color:var(--tang-dark);line-height:1.6;}
+#signatureRecordSection .sr-gap strong{display:block;color:var(--navy);
+  font-size:1.05em;margin-bottom:3px;}
+#signatureRecordSection .sr-gap code{background:var(--white);border-radius:4px;padding:1px 5px;}
+
+#signatureRecordSection .sr-table{background:var(--white);border:1px solid var(--border);
+  border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.06);}
+#signatureRecordSection .sr-head,
+#signatureRecordSection .sr-row{display:grid;
+  grid-template-columns:minmax(0,1.5fr) .9fr .6fr .6fr minmax(0,1.6fr);
+  gap:14px;padding:12px 20px;align-items:center;}
+#signatureRecordSection .sr-head{background:var(--linen);border-bottom:1px solid var(--border);
+  font-size:.7em;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);}
+#signatureRecordSection .sr-row{border-bottom:1px solid var(--ap-border-lt);}
+#signatureRecordSection .sr-row:last-child{border-bottom:0;}
+#signatureRecordSection .sr-row.is-absent{opacity:.5;}
+#signatureRecordSection .sr-child{display:flex;align-items:center;gap:10px;min-width:0;}
+#signatureRecordSection .sr-avatar{width:32px;height:32px;border-radius:50%;flex:none;
+  background:var(--sun);color:var(--navy);display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-head);font-weight:700;font-size:.85em;}
+#signatureRecordSection .sr-name{font-size:.88em;font-weight:800;color:var(--navy);}
+#signatureRecordSection .sr-room{font-size:.82em;color:var(--text-muted);}
+#signatureRecordSection .sr-time{font-size:.82em;font-weight:700;color:var(--navy);}
+#signatureRecordSection .sr-sig{font-size:.78em;color:var(--text-muted);}
+#signatureRecordSection .sr-sig.is-missing{color:var(--tang-dark);font-weight:700;}
+
+@media (max-width:760px){
+  #signatureRecordSection .sr-head{display:none;}
+  #signatureRecordSection .sr-row{grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:'child room' 'in out' 'sig sig';gap:6px 14px;}
+  #signatureRecordSection .sr-child{grid-area:child;}
+  #signatureRecordSection .sr-room{grid-area:room;text-align:right;}
+  #signatureRecordSection .sr-sig{grid-area:sig;}
+}

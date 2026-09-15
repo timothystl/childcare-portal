@@ -87,6 +87,16 @@ const ENTRIES = [
         },
     },
     {
+        // The tablet at the door (design handoff: Capacity & Fill, 4a/5b/5d).
+        // Standalone: it authenticates a family with family_login and holds
+        // no app state of its own.
+        outfile: 'dist/kiosk.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/kiosk.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         // Public tour booking (design handoff: Capacity & Fill, 2b). Same
         // shape as inquiry: one standalone page, no app state.
         outfile: 'dist/tour.min.js',
@@ -220,6 +230,10 @@ const ENTRIES = [
                 // load order doesn't gate calls in one concatenated script, but
                 // keeping it after both is the honest place to read it.
                 'js/admin/admin-print-attendance.js',
+                // Next to Print Attendance, which it is the digital half of.
+                // Reads centerHeadcountAdmin() and the day's child_day_events;
+                // writes nothing.
+                'js/admin/admin-signature-record.js',
                 // After admin-calendar.js: reuses showDayRosterDetail(),
                 // renderCapacityOverview() and renderRoomSchedule() as the
                 // Enrollment & Capacity tool's Day/Month/Week sub-views.
@@ -363,6 +377,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/lookup.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'kiosk.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/kiosk\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `  <script src="dist/supabase.min.js"></script>`,
+            `  <script src="dist/error-monitor.min.js"></script>`,
+            `  <script src="dist/kiosk.min.js"></script>`,
         ],
     },
     {
