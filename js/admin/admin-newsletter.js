@@ -39,6 +39,16 @@
 // the send button needs building. "Copy for email" is offered instead, so
 // the letter is usable today by pasting it into whatever actually sends
 // mail now.
+//
+// ── Rich text ───────────────────────────────────────────────
+// The Text block uses a self-hosted TinyMCE (admin.html's own script tags
+// + scripts/build.js's vendorAssets — never a cloud CDN or an API key).
+// Its output is HTML, which is the one thing this module ever renders
+// instead of escaping, so every path that reaches innerHTML — the
+// preview, the plain-text export, the field's own re-population — goes
+// through _nlSanitizeHtml() first. See that function and
+// _nlInitRichEditor()/_nlDestroyRichEditor() for the teardown rule that
+// keeps one editor instance alive at a time.
 
 const NL_BLOCKS = [
     { type: 'heading', icon: '✍️', label: 'Heading',   dynamic: false },
@@ -62,7 +72,7 @@ const NL_DEFAULT = [
 // than the old one-field-fits-all assumption.
 const NL_EDITABLE_FIELDS = {
     heading: [{ key: 'text', label: 'Heading', kind: 'text' }],
-    text:    [{ key: 'text', label: 'Text', kind: 'textarea' }],
+    text:    [{ key: 'text', label: 'Text', kind: 'richtext' }],
     button:  [
         { key: 'text', label: 'Button label', kind: 'text' },
         { key: 'url',  label: 'Link — where the button goes', kind: 'text', placeholder: 'https://… (a page, or a file link)' },
@@ -159,7 +169,9 @@ function _nlBlockPreviewHtml(b) {
         case 'heading':
             return `<h2 class="nl-p-heading">${escHtml(b.text || 'Heading')}</h2>`;
         case 'text':
-            return `<p class="nl-p-text">${escHtml(b.text || 'Write something here.')}</p>`;
+            return b.text
+                ? `<div class="nl-p-text">${_nlSanitizeHtml(b.text)}</div>`
+                : `<p class="nl-p-text nl-p-text-empty">Write something here.</p>`;
         case 'button':
             return b.url
                 ? `<div class="nl-p-btnwrap"><a class="nl-p-btn" href="${escHtml(b.url)}" target="_blank" rel="noopener">${escHtml(b.text || 'Register')}</a></div>`
@@ -276,8 +288,8 @@ function _nlInspectorHtml() {
                 ${fields ? fields.map(f => `
                     <label class="nl-field">
                         <span>${escHtml(f.label)}</span>
-                        ${f.kind === 'textarea'
-                            ? `<textarea data-nl-field="${f.key}" rows="10" placeholder="${escHtml(f.placeholder || '')}">${escHtml(b[f.key] || '')}</textarea>`
+                        ${f.kind === 'richtext'
+                            ? `<textarea id="nlBlockRichText" data-nl-field="${f.key}" data-nl-richtext="1">${escHtml(b[f.key] || '')}</textarea>`
                             : `<input type="text" data-nl-field="${f.key}" placeholder="${escHtml(f.placeholder || '')}" value="${escHtml(b[f.key] || '')}">`}
                     </label>`).join('')
                 : b ? `<p class="nl-hint">This block fills itself from myMDO — there is nothing to type. Remove it with the ✕ if you don't want it.</p>`
@@ -302,6 +314,7 @@ function _nlInspectorHtml() {
 async function renderNewsletterTool() {
     const body = _nlEl('nlBody');
     if (!body) return;
+    _nlDestroyRichEditor();
     body.innerHTML = '<p class="empty-hint">Loading…</p>';
 
     try {
@@ -341,22 +354,81 @@ function _nlRepaint({ keepFocus = false } = {}) {
     const canvas = document.querySelector('#nlBody .nl-col-canvas');
     const insp = document.querySelector('#nlBody .nl-col-insp');
     if (canvas) canvas.innerHTML = _nlCanvasHtml();
-    if (insp && !keepFocus) insp.innerHTML = _nlInspectorHtml();
+    if (insp && !keepFocus) {
+        _nlDestroyRichEditor();
+        insp.innerHTML = _nlInspectorHtml();
+    }
     _nlBindLive();
 }
 
 function _nlBindLive() {
     document.querySelectorAll('#nlBody .nl-col-insp [data-nl-field]').forEach(el => {
+        // Owned by TinyMCE (see _nlInitRichEditor) once it actually loads —
+        // but if the vendored script failed to load for any reason, this
+        // plain textarea is the fallback editor, so it still needs binding.
+        if (el.dataset.nlRichtext && typeof tinymce !== 'undefined') return;
         el.addEventListener('input', () => {
             const b = (_nlDraft?.blocks || []).find(x => x.id === _nlSel);
             if (!b) return;
-            b[el.dataset.nlField] = el.value;
+            b[el.dataset.nlField] = el.dataset.nlRichtext ? _nlSanitizeHtml(el.value) : el.value;
             const canvas = document.querySelector('#nlBody .nl-col-canvas');
             if (canvas) canvas.innerHTML = _nlCanvasHtml();
         });
     });
+    _nlInitRichEditor();
     _nlEl('nlSaveBtn')?.addEventListener('click', _nlSave);
     _nlEl('nlCopyBtn')?.addEventListener('click', _nlCopy);
+}
+
+// Self-hosted TinyMCE (admin.html + scripts/build.js's vendorAssets) for
+// the Text block only. One instance at a time. It must be torn down with
+// _nlDestroyRichEditor() BEFORE its textarea is ever removed from the DOM —
+// TinyMCE replaces the field with an iframe it manages itself, so wiping
+// that out from under a live instance via innerHTML leaks it and throws on
+// the next init.
+function _nlInitRichEditor() {
+    const el = _nlEl('nlBlockRichText');
+    if (!el || typeof tinymce === 'undefined') return;
+    tinymce.init({
+        selector: '#nlBlockRichText',
+        license_key: 'gpl', // self-hosted open-source use, not the Tiny Cloud
+        // Absolute, not relative to admin.html's own URL — TinyMCE resolves
+        // its theme/model/icon/plugin files against this, and a relative
+        // path only happens to work while the page lives at the site root.
+        base_url: '/vendor/tinymce',
+        suffix: '.min',
+        menubar: false,
+        statusbar: false,
+        plugins: 'lists link autolink',
+        toolbar: 'bold italic | bullist numlist | link | removeformat',
+        height: 220,
+        setup(editor) {
+            editor.on('input change undo redo', () => {
+                const b = (_nlDraft?.blocks || []).find(x => x.id === _nlSel);
+                if (!b) return;
+                b.text = _nlSanitizeHtml(editor.getContent());
+                const canvas = document.querySelector('#nlBody .nl-col-canvas');
+                if (canvas) canvas.innerHTML = _nlCanvasHtml();
+            });
+        },
+    });
+}
+
+function _nlDestroyRichEditor() {
+    if (typeof tinymce === 'undefined') return;
+    tinymce.get('nlBlockRichText')?.remove();
+}
+
+// The only place this app renders HTML instead of escaping it. DOMPurify
+// (vendored alongside TinyMCE) strips everything outside a short allowlist
+// before this ever reaches innerHTML; if it somehow failed to load, fail
+// closed to plain escaped text rather than risk unsanitized HTML.
+function _nlSanitizeHtml(html) {
+    if (typeof DOMPurify === 'undefined') return escHtml(html || '');
+    return DOMPurify.sanitize(html || '', {
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li'],
+        ALLOWED_ATTR: ['href', 'target', 'rel'],
+    });
 }
 
 async function _nlSave() {
@@ -369,13 +441,23 @@ async function _nlSave() {
     }
 }
 
+// Text blocks store sanitized HTML now (the rich editor); the plain-text
+// export needs real line breaks, not the tags that produced them.
+function _nlHtmlToPlainText(html) {
+    if (!html) return '';
+    const withBreaks = html.replace(/<\/(p|li)>/gi, '\n').replace(/<br\s*\/?>/gi, '\n');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = _nlSanitizeHtml(withBreaks);
+    return (tmp.textContent || '').trim();
+}
+
 /** Plain text of the letter as it currently resolves, for pasting elsewhere. */
 function _nlPlainText() {
     const live = _nlLive || {};
     const lines = [];
     (_nlDraft?.blocks || []).forEach(b => {
         if (b.type === 'heading') lines.push('', (b.text || '').toUpperCase(), '');
-        else if (b.type === 'text') lines.push(b.text || '');
+        else if (b.type === 'text') lines.push(_nlHtmlToPlainText(b.text));
         else if (b.type === 'button') lines.push(`[ ${b.text || 'Register'} ]${b.url ? ' — ' + b.url : ''}`);
         else if (b.type === 'image') { if (b.url) lines.push(`[picture: ${b.alt || b.url}]`); }
         else if (b.type === 'divider') lines.push('—————');

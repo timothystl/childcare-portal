@@ -3277,6 +3277,12 @@
 </script>
     <!-- Filled by incidentPrint(); visible only while body.printing-incident. -->
     <div id="incidentPrintHost" aria-hidden="true"></div>
+    <!-- Self-hosted, not a cloud CDN or API key — see scripts/build.js's
+         vendorAssets(). The newsletter's Text block uses TinyMCE for rich
+         formatting and DOMPurify to sanitize what it produces before that
+         HTML is ever re-rendered. -->
+    <script src="vendor/tinymce/tinymce.min.js"></script>
+    <script src="vendor/dompurify/purify.min.js"></script>
     <script src="dist/supabase.min.js"></script>
     <script src="dist/error-monitor.min.js"></script>
     <script src="dist/admin.min.js"></script>

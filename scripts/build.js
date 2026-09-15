@@ -17,6 +17,11 @@
 // HTML pages are automatically updated to reference dist/ files
 // during the build (see patchHtml below). The source js/ files
 // remain unmodified so development still works without building.
+//
+// Also copies the self-hosted TinyMCE/DOMPurify files the newsletter's
+// Text block needs into vendor/ (see vendorAssets below) — same
+// generated-but-committed treatment as dist/, since production serves
+// both directly with no npm install step of its own.
 // ============================================================
 
 const esbuild      = require('esbuild');
@@ -27,6 +32,41 @@ const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
+
+// ── Vendored third-party assets ─────────────────────────────────
+// Self-hosted (never a cloud CDN or an API key): the newsletter's rich
+// text block needs a WYSIWYG editor and something to sanitize the HTML
+// it produces before that HTML is ever re-rendered. Only the pieces
+// actually used are copied — not all of node_modules/tinymce's plugins
+// and languages — so vendor/ stays small.
+const VENDOR_FILES = [
+    ['tinymce/tinymce.min.js',                 'tinymce/tinymce.min.js'],
+    ['tinymce/models/dom/model.min.js',        'tinymce/models/dom/model.min.js'],
+    ['tinymce/themes/silver/theme.min.js',     'tinymce/themes/silver/theme.min.js'],
+    ['tinymce/icons/default/icons.min.js',     'tinymce/icons/default/icons.min.js'],
+    ['tinymce/skins/ui/oxide/skin.min.css',    'tinymce/skins/ui/oxide/skin.min.css'],
+    ['tinymce/skins/ui/oxide/content.min.css', 'tinymce/skins/ui/oxide/content.min.css'],
+    ['tinymce/skins/content/default/content.min.css', 'tinymce/skins/content/default/content.min.css'],
+    ['tinymce/plugins/lists/plugin.min.js',    'tinymce/plugins/lists/plugin.min.js'],
+    ['tinymce/plugins/link/plugin.min.js',     'tinymce/plugins/link/plugin.min.js'],
+    ['tinymce/plugins/autolink/plugin.min.js', 'tinymce/plugins/autolink/plugin.min.js'],
+    ['dompurify/dist/purify.min.js',           'dompurify/purify.min.js'],
+];
+
+function vendorAssets() {
+    const nodeModules = path.join(ROOT, 'node_modules');
+    const vendorDir = path.join(ROOT, 'vendor');
+    VENDOR_FILES.forEach(([from, to]) => {
+        const src = path.join(nodeModules, from);
+        const dest = path.join(vendorDir, to);
+        if (!fs.existsSync(src)) {
+            throw new Error(`[build] vendor source missing: ${from} — run npm install`);
+        }
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(src, dest);
+    });
+    console.log('[build] vendored', VENDOR_FILES.length, 'files →', vendorDir);
+}
 
 // ── Build version ─────────────────────────────────────────────
 // Version comes from package.json only — no git commit count — so the
@@ -548,6 +588,7 @@ const BASE_OPTS = {
 };
 
 async function build() {
+    vendorAssets();
     for (const entry of ENTRIES) {
         await esbuild.build({
             ...BASE_OPTS,
@@ -561,6 +602,7 @@ async function build() {
 
 if (watch) {
     // Watch mode: rebuild whenever source files change
+    vendorAssets();
     (async () => {
         const contexts = await Promise.all(
             ENTRIES.map(entry =>
