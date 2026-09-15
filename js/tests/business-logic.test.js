@@ -5129,8 +5129,15 @@ describe('Billing care_charges without double-charging a full-day booking', () =
     const mig = readMigration('bill_care_charges_and_guard_full_day');
     const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
 
-    test('the migration is marked unapplied', () => {
-        expect(/PROPOSED — NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+    // Applied 2026-09-15 as version 20260915222738 — Andrew approved
+    // applying it straight to production (Supabase branching, which would
+    // have given an isolated staging copy, is not available on this
+    // project's plan) and it was verified live inside BEGIN/ROLLBACK.
+    test('the applied migration records how it was verified', () => {
+        expect(/APPLIED 2026-09-15 as version 20260915222738/.test(mig)).toBe(true);
+        expect(/PROPOSED|NOT APPLIED/.test(mig.split('\n')[1] || '')).toBe(false);
+        expect(/SCENARIO A/.test(mig)).toBe(true);
+        expect(/SCENARIO B/.test(mig)).toBe(true);
     });
 
     // The whole point: a Pre-K-only family (no MDO registrations at all)
