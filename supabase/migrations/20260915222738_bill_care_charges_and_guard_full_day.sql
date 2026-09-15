@@ -1,17 +1,34 @@
 -- ============================================================
--- PROPOSED — NOT APPLIED, NOT APPROVED
+-- APPLIED 2026-09-15 as version 20260915222738
 -- ============================================================
 -- Turns a recorded care_charges row into money on an invoice, for the first
 -- time, and closes a gap left open by 20260915171800/171831/171936: nothing
 -- stops a full-day Goose/Turtle/Owl child from being charged for after care
 -- they already paid for as part of tuition.
 --
--- ⚠️ READ THIS BEFORE RUNNING ANYTHING BELOW.
+-- Andrew approved applying this directly to production (Supabase branching
+-- is not available on this project's plan, so an isolated staging copy
+-- could not be created). Verified live instead, inside BEGIN/ROLLBACK so no
+-- test data was left behind:
 --
--- Per AGENTS.md: a change to compute_family_month_charges() and
--- record_door_checkin() on a live childcare and payment system needs
--- Andrew's explicit approval for this specific operation, staged and
--- smoke-tested before it touches production.
+--   SCENARIO A — a Pre-K-only family (zero MDO registrations) with one
+--   after-care charge this month: compute_family_month_charges() returned
+--   base=12.00, final=12.00 — exactly the program rate — and
+--   compute_family_month_charges_itemized() returned one row,
+--   "<child> — After care", gross=12.00, net=12.00.
+--
+--   SCENARIO B — a family with a full-day Turtle booking THIS DATE plus a
+--   mistaken after-care charge for the SAME child on the SAME date:
+--   compute_family_month_charges() returned base=75.00, final=75.00 — the
+--   Turtle day's price ALONE — and the itemized result carried exactly one
+--   row (the Turtle tuition, full_days=1), with no separate "— After care"
+--   line. The double-charge the whole feature exists to prevent did not
+--   happen.
+--
+--   anon confirmed unable to SELECT care_charges directly (permission
+--   denied), and has_function_privilege confirmed anon cannot execute
+--   compute_family_month_charges()/_itemized() while it can execute
+--   record_door_checkin() — matching this file's own design.
 --
 -- ── The scenario this was built for ─────────────────────────
 -- Goose, Turtle and Owl combine into one supervised group from 1:00p
@@ -660,7 +677,8 @@ GRANT EXECUTE ON FUNCTION public.record_door_checkin(uuid, integer, text, text, 
     TO anon, authenticated;
 
 -- ============================================================
--- VERIFY (run after applying, before trusting a real invoice to it)
+-- VERIFY — already run once, live, at apply time (see header). Kept for
+-- re-checking after any future change to either function.
 -- ============================================================
 --   -- 1. A Pre-K-only family (no MDO registrations) with one after-care
 --      charge this month bills exactly the program rate:
