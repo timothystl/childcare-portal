@@ -50,6 +50,9 @@ async function initDashboard() {
     // toggle + week nav) and restores the saved density. The screen itself
     // renders lazily, when apOnToolOpened() opens the tool.
     if (typeof setupFillRoomsTool === 'function') setupFillRoomsTool();
+    // Leads & Tours binds one delegated listener on its section; the board
+    // itself renders lazily when apOnToolOpened() opens the tool.
+    if (typeof setupLeadsTool === 'function') setupLeadsTool();
     setupRegFee();
     setupPtoSettings();
     setupStaffDirectory();

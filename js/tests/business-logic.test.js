@@ -3617,13 +3617,15 @@ describe('At-ratio — the same boundary on every screen', () => {
     const fill   = read('js/admin/admin-fill-rooms.js');
     const parent = read('js/parent/parent-dropin.js');
     const staff  = read('js/staff/staff-room-head.js');
+    const tour   = read('js/tour.js');
 
     // All four spell the boundary as "count % ratio === 0, and count > 0".
     // A room with nobody in it is not on a boundary — zero children have
     // never required an adult, and `0 % n === 0` is true, so the count>0
     // guard is the part that actually matters.
     test('every copy guards on count > 0, not just the modulo', () => {
-        [['apStaffing', portal], ['fill rooms', fill], ['parent drop-in', parent]].forEach(([name, src]) => {
+        [['apStaffing', portal], ['fill rooms', fill], ['parent drop-in', parent],
+         ['public tour page', tour]].forEach(([name, src]) => {
             const hit = /(\w+)\s*>\s*0\s*&&\s*\1\s*%\s*\w*[Rr]atio\w*\s*===\s*0/.test(src)
                      || /(\w+)\s*>\s*0\s*&&\s*\1\s*%\s*(\w+)\s*===\s*0/.test(src);
             if (!hit) throw new Error(`${name} does not guard the modulo on a positive count`);
@@ -3692,7 +3694,7 @@ describe('At-ratio — the same boundary on every screen', () => {
 
     // The parent card must never offer a day the director's grid would keep
     // closed, and must never offer a day the child already holds.
-    test('the parent card offers only days the director would release', () => {
+    test('[at-ratio] the parent card offers only days the director would release', () => {
         const ROOM = { id: 'goose', label: '🪿 Goose Room', capacity: 12, staffRatio: 8, fullDayOnly: false, fullDayRate: 75, halfDayRate: 45 };
         // Three upcoming weekdays: one with room, one exactly on the ratio
         // boundary, one the child is already booked for.
@@ -3739,6 +3741,195 @@ describe('At-ratio — the same boundary on every screen', () => {
         // The parent card says so in as many words rather than rendering a
         // disabled submit.
         expect(parent.includes("Booking isn't open yet")).toBe(true);
+    });
+
+    // ⚠️ The security boundary this whole design turns on. The public submit
+    // RPC's allow-list deliberately excludes tour_*, so a stranger cannot
+    // write themselves onto the tour calendar — the office confirms from the
+    // board instead. If the public page ever tries to set those fields, or
+    // reaches waitlist_applications directly, this fails.
+    test('the public tour page never writes an admin-controlled field', () => {
+        const code = tour
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        // It submits through the allow-listed RPC, not a direct table write.
+        expect(/submitWaitlistApplication\(/.test(code)).toBe(true);
+        expect(/from\('waitlist_applications'\)/.test(code)).toBe(false);
+        // And it never names a field the RPC would silently drop.
+        ['tour_status', 'tour_scheduled_at', 'tour_completed_at', 'offered_at',
+         'offer_deadline', 'paperwork_received', 'deposit_paid', 'applied_at']
+            .forEach(f => {
+                if (new RegExp(f + '\\s*:').test(code))
+                    throw new Error(`tour.js sets ${f}, which submit_waitlist_application() drops`);
+            });
+        // The requested time rides in notes, which IS on the allow-list.
+        expect(/TOUR REQUESTED/.test(code)).toBe(true);
+    });
+
+    // The allow-list itself must stay closed. If someone widens the migration
+    // to let the public set tour_*, this is the test that should make them
+    // stop and think about who the caller is.
+    test('the public submit RPC still excludes every admin-controlled field', () => {
+        const mig = read('supabase/migrations/fix_public_waitlist_submit_APPLIED.sql');
+        const insert = /INSERT INTO waitlist_applications \(([\s\S]*?)\)\s*VALUES/.exec(mig);
+        if (!insert) throw new Error('could not find the allow-list in the migration');
+        const cols = insert[1];
+        ['status', 'tour_status', 'tour_scheduled_at', 'offered_at', 'offer_deadline',
+         'paperwork_received', 'deposit_paid', 'applied_at', 'archived_at']
+            .forEach(f => {
+                if (new RegExp('\\b' + f + '\\b').test(cols))
+                    throw new Error(`${f} is reachable from the public internet`);
+            });
+    });
+});
+
+
+// ============================================================
+// LEADS & TOURS — the board is a view, not a second table
+// (design handoff: Capacity & Fill, turn 2a)
+// ============================================================
+// Every column is a predicate over waitlist_applications columns that already
+// exist. The invariant that matters: the predicates must PARTITION — every
+// active lead lands in exactly one column, so a family can never be in two
+// places or vanish from the board entirely.
+describe('Leads & Tours — column predicates partition every lead', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-leads.js'), 'utf8');
+
+    function load(apps) {
+        const sandbox = {
+            console,
+            _allWaitlistApps: apps || [],
+            escHtml: s => String(s),
+            calcAgeMonths: () => 30,
+            wlDeriveRoom: a => a.room_id || 'turtle',
+            wlRoomLabel: id => id,
+            wlDaysLabel: () => 'Tue/Thu',
+            FR_STALL_DAYS: 5,
+            document: { getElementById: () => null },
+            sbClient: null,
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        return sandbox;
+    }
+
+    const old = new Date(Date.now() - 30 * 86400000).toISOString();
+    const recent = new Date(Date.now() - 1 * 86400000).toISOString();
+    const future = new Date(Date.now() + 2 * 86400000).toISOString();
+    const past   = new Date(Date.now() - 2 * 86400000).toISOString();
+
+    const CASES = [
+        ['new',       { id: 1, status: 'pending',  applied_at: recent }],
+        ['contacted', { id: 2, status: 'pending',  applied_at: old, confirmation_sent_at: old }],
+        ['contacted', { id: 3, status: 'pending',  applied_at: old, reminder_count: 2 }],
+        ['contacted', { id: 4, status: 'pending',  applied_at: old, still_interested_confirmed_at: recent }],
+        ['tour',      { id: 5, status: 'pending',  applied_at: old, tour_status: 'scheduled', tour_scheduled_at: future }],
+        ['toured',    { id: 6, status: 'pending',  applied_at: old, tour_status: 'completed', tour_completed_at: past }],
+        ['offered',   { id: 7, status: 'offered',  applied_at: old, offered_at: old, offer_deadline: '2099-01-01' }],
+        ['offered',   { id: 8, status: 'accepted', applied_at: old, paperwork_received: true }],
+        ['offered',   { id: 9, status: 'enrolled', applied_at: old }],
+    ];
+
+    test('each state lands in the column its own record defines', () => {
+        const m = load([]);
+        CASES.forEach(([expected, app]) => {
+            const got = m.ldColumnFor(app);
+            if (got !== expected) throw new Error(`id ${app.id}: expected ${expected}, got ${got}`);
+        });
+    });
+
+    // A family who has toured AND been offered is Offered, not Toured — the
+    // later state wins, or a card would sit in two columns' worth of truth.
+    test('later states win over earlier ones', () => {
+        const m = load([]);
+        expect(m.ldColumnFor({ status: 'offered', tour_status: 'completed', confirmation_sent_at: old })).toBe('offered');
+        expect(m.ldColumnFor({ status: 'pending', tour_status: 'completed', tour_scheduled_at: past })).toBe('toured');
+        expect(m.ldColumnFor({ status: 'pending', tour_status: 'scheduled', confirmation_sent_at: old })).toBe('tour');
+    });
+
+    test('every active lead lands in exactly one column', () => {
+        const apps = CASES.map(([, a]) => a);
+        const m = load(apps);
+        const buckets = m.ldBuckets(apps);
+        const total = Object.values(buckets).reduce((s, l) => s + l.length, 0);
+        expect(total).toBe(apps.length);
+        // No id appears twice across the five columns.
+        const seen = new Set();
+        Object.values(buckets).forEach(list => list.forEach(a => {
+            if (seen.has(a.id)) throw new Error(`id ${a.id} is in two columns`);
+            seen.add(a.id);
+        }));
+        expect(seen.size).toBe(apps.length);
+    });
+
+    // A declined or archived family is history, not a lead sitting on a board
+    // for someone to chase.
+    test('declined, expired and archived leads are off the board', () => {
+        const apps = [
+            { id: 1, status: 'pending',  applied_at: old },
+            { id: 2, status: 'declined', applied_at: old },
+            { id: 3, status: 'expired',  applied_at: old },
+            { id: 4, status: 'archived', applied_at: old },
+            { id: 5, status: 'pending',  applied_at: old, archived_at: old },
+        ];
+        const m = load(apps);
+        expect(m.ldActive(apps).length).toBe(1);
+        const total = Object.values(m.ldBuckets(apps)).reduce((s, l) => s + l.length, 0);
+        expect(total).toBe(1);
+    });
+
+    // The conversion figure must divide by everyone who toured, including the
+    // ones who toured and went elsewhere — otherwise it only ever reads 100%.
+    test('tour → enrolled divides by everyone who toured, not just the wins', () => {
+        const apps = [
+            { id: 1, status: 'enrolled', applied_at: old, tour_status: 'completed' },
+            { id: 2, status: 'accepted', applied_at: old, tour_status: 'completed' },
+            { id: 3, status: 'declined', applied_at: old, tour_status: 'completed' },
+            { id: 4, status: 'pending',  applied_at: old, tour_status: 'completed' },
+        ];
+        const m = load(apps);
+        const metrics = m.ldMetrics(apps, m.ldBuckets(apps));
+        expect(metrics.everToured.length).toBe(4);   // the declined one still toured
+        expect(metrics.touredEnrolled).toBe(2);
+        expect(metrics.convPct).toBe(50);
+    });
+
+    test('no tours and no leads reads as an empty state, not 0%', () => {
+        const m = load([]);
+        const metrics = m.ldMetrics([], m.ldBuckets([]));
+        expect(metrics.convPct).toBeNull();
+        expect(metrics.newThisWeek).toBe(0);
+    });
+
+    // "Gone quiet" must mean the same number of days here as on Fill the
+    // Rooms — the two screens are describing the same families. The constant
+    // is read off the source rather than the sandbox: a top-level `const` in
+    // a vm script lives in the script's lexical scope and never becomes a
+    // property of the context object (unlike a `function` declaration, which
+    // is how every other module here is reached).
+    test('the stall threshold is shared with Fill the Rooms, not redeclared', () => {
+        const decl = /const\s+LD_STALL_DAYS\s*=([^;]+);/.exec(src);
+        if (!decl) throw new Error('LD_STALL_DAYS is not declared');
+        // It must DERIVE from Fill the Rooms' constant, not restate the number.
+        expect(decl[1].includes('FR_STALL_DAYS')).toBe(true);
+        expect(/\b5\b/.test(decl[1])).toBe(true);   // the fallback, for a bundle without it
+    });
+
+    // Log a call writes a real row, so it must NOT go through the public RPC
+    // whose allow-list exists to constrain the public internet. Comments are
+    // stripped first — the module header discusses that RPC by name, and a
+    // naive source search would match the explanation of why it is not used.
+    test('Log a call inserts directly and never through the public RPC', () => {
+        const code = src
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/from\('waitlist_applications'\)\s*\.insert\(/.test(code)).toBe(true);
+        expect(/submit_waitlist_application/.test(code)).toBe(false);
+        // desired_start_date is NOT NULL on the table — an unknown start must
+        // fall back rather than fail the insert.
+        expect(/desired_start_date:/.test(code)).toBe(true);
     });
 });
 

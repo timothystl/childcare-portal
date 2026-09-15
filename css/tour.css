@@ -1,0 +1,106 @@
+/* ============================================================
+   PUBLIC TOUR BOOKING  (design handoff: Capacity & Fill, 2b)
+   ============================================================
+   Page chrome (.inquiry-body/.inquiry-wrap/.inquiry-card, the section
+   labels, .contact-form-grid, .form-group, .btn-primary) is inherited
+   from css/inquiry.css on purpose — these are the two pages a family
+   meets before they have an account and they must read as one product.
+   Only what this page has and that one does not lives here. */
+
+/* ── Derived room + its real open days ─────────────────── */
+.t-room-card {
+    background: var(--green-pale);
+    border: 1.5px solid var(--green-lt);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+}
+.t-room-kicker {
+    font-size: .72em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--green-text);
+}
+.t-room-name { font-size: 1.1em; font-weight: 800; color: var(--navy); margin-top: 3px; }
+.t-room-ages { font-size: .88em; color: var(--text-muted); margin-top: 1px; }
+.t-room-days { font-size: .9em; line-height: 1.5; margin-top: 6px; color: var(--text-muted); }
+.t-room-open { color: var(--green-dark); font-weight: 700; }
+.t-room-full { color: var(--mustard-dark); }
+
+/* ── Days wanted ───────────────────────────────────────── */
+.t-days { display: flex; gap: 6px; }
+.t-day {
+    flex: 1; background: var(--white); color: var(--text-muted);
+    border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 11px 0; text-align: center; font-size: .9em; font-weight: 800;
+    font-family: var(--font-body); cursor: pointer;
+}
+.t-day.is-on { background: var(--navy); border-color: var(--navy); color: var(--white); }
+.t-hint { display: block; font-size: .82em; color: var(--text-muted); margin-top: 6px; }
+
+/* ── Tour slots ────────────────────────────────────────── */
+.t-slots { display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px; }
+.t-slot {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    background: var(--white); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 13px 15px; text-align: left;
+    font-family: var(--font-body); cursor: pointer;
+}
+.t-slot.is-on { background: var(--linen); border-color: var(--navy); border-width: 2px; }
+.t-radio {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--border); flex: none;
+}
+.t-slot.is-on .t-radio {
+    border-color: var(--navy);
+    background: radial-gradient(circle, var(--navy) 0 5px, transparent 5px);
+}
+.t-slot-main { display: flex; flex-direction: column; }
+.t-slot-main strong { font-size: .98em; font-weight: 800; color: var(--navy); }
+.t-slot-main small { font-size: .85em; color: var(--text-muted); margin-top: 1px; }
+
+/* ── The promise, stated up front ──────────────────────── */
+.t-keepsafe {
+    background: var(--sun-pale); border: 1.5px solid var(--sun-lt);
+    border-radius: 12px; padding: 13px 15px; margin: 4px 0 18px;
+    font-size: .9em; line-height: 1.5; color: var(--mustard-dark);
+}
+.t-keepsafe strong { display: block; color: var(--navy); margin-bottom: 2px; }
+
+.t-msg { min-height: 1.2em; margin: 0 0 10px; font-size: .9em; color: var(--tang-dark); }
+.t-submit { width: 100%; }
+.t-alt { text-align: center; font-size: .9em; color: var(--text-muted); margin-top: 14px; }
+
+/* ── Confirmation ──────────────────────────────────────── */
+.t-done-head { text-align: center; margin-bottom: 22px; }
+.t-done-tick {
+    width: 78px; height: 78px; border-radius: 50%;
+    background: var(--green); color: var(--white); font-size: 2.2em;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+}
+.t-done-head h2 {
+    font-family: var(--font-head); font-size: 1.5em; font-weight: 700;
+    color: var(--navy); margin: 0;
+}
+.t-done-head p { font-size: 1em; color: var(--text-muted); line-height: 1.55; margin: 8px 0 0; }
+
+.t-done-card {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 14px;
+}
+.t-done-card-kicker {
+    font-size: .72em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;
+}
+.t-done-card-title { font-size: .98em; font-weight: 800; color: var(--navy); line-height: 1.4; }
+.t-done-card p { font-size: .9em; color: var(--text-muted); line-height: 1.55; margin: 4px 0 0; }
+.t-done-open { background: var(--green-pale); border-color: var(--green-lt); }
+.t-done-open .t-done-card-kicker { color: var(--green-text); }
+
+.t-done-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.t-done-list li { font-size: .95em; color: var(--text); line-height: 1.5; }
+
+.t-done-foot { text-align: center; font-size: .9em; color: var(--text-muted); margin-top: 18px; }
+
+@media (max-width: 520px) {
+    .t-done-tick { width: 64px; height: 64px; font-size: 1.8em; }
+}

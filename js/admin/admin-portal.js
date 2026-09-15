@@ -274,6 +274,17 @@ const AP_TOOLS = [
     // `cacfpClaimsSection` stay in admin.html and `js/admin/admin-cacfp.js`
     // stays in the tree, unreferenced, in case the program is ever revived.
 
+    // ── Planning · Getting In (design handoff: Capacity & Fill, turn 2a) ──
+    // Sits ABOVE the waitlist group on purpose: the handoff's whole point is
+    // that the waitlist only starts once a family fills in the inquiry form,
+    // and everything before that — a phone call, a tour, a family who came
+    // and never applied — had nowhere to live. This is that half of the
+    // funnel. It stores nothing new; see admin-leads.js's header for the
+    // predicate behind each board column.
+    { key: 'leadsTours', pane: 'waitlist', section: 'leadsToursSection', tab: 'planning',
+      group: 'Getting In', tint: AP_TINT.gold, icon: '🤝', name: 'Leads & Tours',
+      blurb: 'Every family who has contacted us and not yet started, from first contact to first paid day.' },
+
     // ── Planning · Waitlist ──
     // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
     // Planning + Market Analysis tools → 6. Retired entries below: `planner`
@@ -1056,6 +1067,9 @@ function apOnToolOpened(tool) {
         // ever having been opened first — and so the two loads aren't fired
         // twice by doing half of it in each place.
         if (tool.key === 'fillRooms' && typeof renderFillRoomsTool === 'function') renderFillRoomsTool();
+        // Same story as fillRooms: it awaits the waitlist load itself, so
+        // opening it directly works without the Planner having been opened.
+        if (tool.key === 'leadsTours' && typeof renderLeadsTool === 'function') renderLeadsTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

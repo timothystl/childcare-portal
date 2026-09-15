@@ -6479,3 +6479,149 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
   #fillRoomsSection .fr-hero-n{font-size:2.6em;}
   #fillRoomsSection .fr-move-btns{width:100%;flex-direction:row;}
 }
+
+/* ============================================================
+   Leads & Tours — Planning → Getting In
+   (design handoff: Capacity & Fill, turn 2a)
+   ============================================================
+   Cards/pills are the shell's own; only the board, its cards and the
+   Log-a-call form live here. Scoped to #leadsToursSection throughout. */
+
+#leadsToursSection .ld-head{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:20px;flex-wrap:wrap;margin-bottom:22px;}
+#leadsToursSection .ld-head h2{margin:0;}
+#leadsToursSection .ld-head .section-desc{margin:6px 0 0;max-width:62ch;}
+#leadsToursSection .ld-head-ctrls{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* ── Metrics ───────────────────────────────────────────── */
+#leadsToursSection .ld-metrics{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:22px;}
+#leadsToursSection .ld-metric{flex:1 1 170px;max-width:420px;min-width:0;background:var(--white);
+  border:1px solid var(--border);border-top:4px solid var(--navy);border-radius:12px;
+  padding:16px 18px;box-shadow:0 2px 12px rgba(1,41,74,.06);}
+#leadsToursSection .ld-metric-label{font-size:.7em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);}
+#leadsToursSection .ld-metric-n{font-family:var(--font-head);font-size:1.75em;font-weight:700;
+  color:var(--navy);margin:6px 0 2px;line-height:1.1;}
+#leadsToursSection .ld-metric-sub{font-size:.78em;font-weight:700;color:var(--navy);}
+#leadsToursSection .ld-metric-sub.is-warn{color:var(--tang);}
+#leadsToursSection .ld-metric-sub.is-gold{color:var(--mustard-dark);}
+#leadsToursSection .ld-metric-sub.is-ok{color:var(--green-text);}
+
+/* ── The board ─────────────────────────────────────────── */
+#leadsToursSection .ld-board-panel{margin-bottom:20px;}
+#leadsToursSection .ld-board{padding:16px 22px 22px;display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start;}
+#leadsToursSection .ld-col{display:flex;flex-direction:column;gap:9px;min-width:0;}
+#leadsToursSection .ld-col-head{display:flex;align-items:baseline;justify-content:space-between;
+  gap:6px;padding:0 2px 6px;border-bottom:2px solid var(--navy);}
+#leadsToursSection .ld-col-label{font-size:.72em;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--navy);}
+#leadsToursSection .ld-col-n{font-size:.8em;font-weight:800;color:var(--text-muted);}
+#leadsToursSection .ld-col-empty{font-size:.78em;color:var(--text-muted);margin:0;padding:4px 2px;}
+/* Contacted is derived, not a drop target — see admin-leads.js's header. */
+#leadsToursSection .ld-col-note{font-size:.72em;color:var(--text-muted);line-height:1.45;
+  margin:0;padding:6px 8px;background:var(--linen);border-radius:8px;}
+#leadsToursSection .ld-col-add{border:1.5px dashed var(--ap-neutral-bar,#C9C0A8);border-radius:10px;
+  padding:11px 12px;text-align:center;font-size:.76em;font-weight:800;color:var(--text-muted);
+  background:transparent;font-family:var(--font-body);cursor:pointer;}
+#leadsToursSection .ld-col-add:hover{border-color:var(--sun);color:var(--navy);}
+
+#leadsToursSection .ld-card{background:var(--cream);border:1px solid var(--border);
+  border-radius:10px;padding:11px 12px;cursor:pointer;text-align:left;width:100%;}
+#leadsToursSection .ld-card:hover{border-color:var(--sun);}
+#leadsToursSection .ld-card:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+#leadsToursSection .ld-card.is-stalled{background:var(--tang-pale);border-color:var(--tang);}
+#leadsToursSection .ld-card.is-ok{background:var(--green-pale);border-color:var(--green-lt);}
+#leadsToursSection .ld-card-name{font-size:.82em;font-weight:800;color:var(--navy);}
+#leadsToursSection .ld-card-meta{font-size:.74em;color:var(--text-muted);margin-top:2px;}
+#leadsToursSection .ld-card-days{font-size:.74em;color:var(--text);margin-top:3px;}
+#leadsToursSection .ld-card-line{font-size:.74em;margin-top:4px;line-height:1.4;color:var(--text);}
+#leadsToursSection .ld-card-line.is-warn{color:var(--tang-dark);font-weight:700;}
+#leadsToursSection .ld-card-line.is-gold{color:var(--mustard-dark);font-weight:700;}
+#leadsToursSection .ld-card-line.is-ok{color:var(--green-dark);font-weight:700;}
+#leadsToursSection .ld-card-sib{display:inline-block;margin-top:6px;font-size:.68em;
+  font-weight:800;color:var(--mustard-dark);background:var(--sun-pale);
+  border:1px solid var(--sun-lt);border-radius:999px;padding:2px 8px;}
+
+/* ── Lower two columns ─────────────────────────────────── */
+#leadsToursSection .ld-cols{display:grid;grid-template-columns:minmax(340px,1.55fr) minmax(280px,1fr);
+  gap:20px;align-items:start;}
+#leadsToursSection .ld-col-wide,
+#leadsToursSection .ld-col-narrow{display:flex;flex-direction:column;gap:20px;min-width:0;}
+#leadsToursSection .ld-foot{padding:14px 22px 18px;margin-top:8px;
+  border-top:1px solid var(--ap-border-lt);}
+#leadsToursSection .ld-foot p{margin:0;font-size:.8em;color:var(--text-muted);line-height:1.55;text-wrap:pretty;}
+#leadsToursSection .ld-foot-note{font-size:.78em;color:var(--text-muted);line-height:1.55;}
+
+/* ── Tours ─────────────────────────────────────────────── */
+#leadsToursSection .ld-tours{padding:8px 22px 4px;}
+#leadsToursSection .ld-tour{display:flex;gap:12px;align-items:center;padding:12px 0;
+  border-bottom:1px solid var(--ap-border-lt);}
+#leadsToursSection .ld-tour:last-child{border-bottom:0;}
+#leadsToursSection .ld-tour-date{width:52px;text-align:center;flex:none;}
+#leadsToursSection .ld-tour-dow{display:block;font-size:.7em;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-muted);}
+#leadsToursSection .ld-tour-num{display:block;font-family:var(--font-head);font-size:1.15em;
+  font-weight:700;color:var(--navy);}
+#leadsToursSection .ld-tour-main{flex:1;min-width:0;}
+#leadsToursSection .ld-tour-title{font-size:.85em;font-weight:800;color:var(--navy);}
+#leadsToursSection .ld-tour-meta{font-size:.76em;color:var(--text-muted);}
+
+/* ── Automations ───────────────────────────────────────── */
+#leadsToursSection .ld-autos{padding:8px 22px 4px;}
+#leadsToursSection .ld-auto{display:flex;justify-content:space-between;align-items:baseline;
+  gap:12px;padding:11px 0;border-bottom:1px solid var(--ap-border-lt);}
+#leadsToursSection .ld-auto:last-child{border-bottom:0;}
+#leadsToursSection .ld-auto-title{font-size:.8em;font-weight:700;color:var(--text);}
+#leadsToursSection .ld-auto-sub{font-size:.72em;color:var(--text-muted);margin-top:2px;}
+
+#leadsToursSection .ld-pill{background:var(--warm-gray);color:var(--text-muted);
+  border:1px solid var(--border);border-radius:999px;padding:2px 9px;font-size:.68em;
+  font-weight:800;white-space:nowrap;}
+#leadsToursSection .ld-pill.is-ok{background:var(--green-pale);color:var(--green-dark);
+  border-color:var(--green-lt);}
+
+#leadsToursSection .ld-btn{min-height:34px;display:inline-flex;align-items:center;
+  padding:7px 13px;border-radius:8px;background:var(--white);border:1px solid var(--border);
+  color:var(--navy);font-size:.78em;font-weight:800;font-family:var(--font-body);
+  cursor:pointer;white-space:nowrap;}
+#leadsToursSection .ld-btn.is-primary{background:var(--navy);border-color:var(--navy);color:var(--white);}
+#leadsToursSection .ld-btn:hover{border-color:var(--sun);}
+#leadsToursSection .ld-btn:disabled{opacity:.6;cursor:not-allowed;}
+
+/* ── Log a call ────────────────────────────────────────── */
+#leadsToursSection .ld-scrim{position:fixed;inset:0;background:rgba(1,41,74,.45);z-index:60;}
+#leadsToursSection .ld-modal{position:fixed;z-index:61;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(620px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;
+  background:var(--white);border-radius:var(--radius-md,14px);box-shadow:0 18px 48px rgba(1,41,74,.3);}
+#leadsToursSection .ld-modal-head{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:14px;padding:20px 22px 14px;border-bottom:1px solid var(--border);}
+#leadsToursSection .ld-modal-title{font-family:var(--font-head);font-size:1.25em;font-weight:700;color:var(--navy);}
+#leadsToursSection .ld-modal-sub{font-size:.82em;color:var(--text-muted);margin-top:3px;line-height:1.5;}
+#leadsToursSection .ld-modal-close{background:transparent;border:0;font-size:1.1em;
+  color:var(--text-muted);cursor:pointer;padding:2px 6px;line-height:1;}
+#leadsToursSection .ld-form{padding:18px 22px 22px;display:flex;flex-direction:column;gap:14px;}
+#leadsToursSection .ld-form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+#leadsToursSection .ld-form label,
+#leadsToursSection .ld-form-full{display:flex;flex-direction:column;gap:5px;
+  font-size:.82em;font-weight:700;color:var(--text-muted);}
+#leadsToursSection .ld-form label small{font-weight:400;font-size:.9em;color:var(--text-muted);}
+#leadsToursSection .ld-form input,
+#leadsToursSection .ld-form textarea{font-family:var(--font-body);font-size:1.05em;
+  padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+  background:var(--white);color:var(--text);width:100%;}
+#leadsToursSection .ld-form input:focus,
+#leadsToursSection .ld-form textarea:focus{outline:none;border-color:var(--navy);
+  box-shadow:0 0 0 3px rgba(1,41,74,.12);}
+#leadsToursSection .ld-form .req{color:var(--tang);}
+#leadsToursSection .ld-form-msg{margin:0;font-size:.82em;color:var(--tang-dark);min-height:1em;}
+#leadsToursSection .ld-form-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+@media (max-width:1100px){
+  #leadsToursSection .ld-cols{grid-template-columns:minmax(0,1fr);}
+  #leadsToursSection .ld-board{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media (max-width:640px){
+  #leadsToursSection .ld-board{grid-template-columns:minmax(0,1fr);}
+  #leadsToursSection .ld-form-row{grid-template-columns:minmax(0,1fr);}
+}

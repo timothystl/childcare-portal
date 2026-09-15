@@ -87,6 +87,15 @@ const ENTRIES = [
         },
     },
     {
+        // Public tour booking (design handoff: Capacity & Fill, 2b). Same
+        // shape as inquiry: one standalone page, no app state.
+        outfile: 'dist/tour.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/tour.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         outfile: 'dist/confirm-interest.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/confirm-interest.js'), 'utf8'),
@@ -240,6 +249,11 @@ const ENTRIES = [
                 // admin-reports.js above. Before admin-portal.js, which
                 // registers it as a tool and calls renderFillRoomsTool().
                 'js/admin/admin-fill-rooms.js',
+                // After admin-waitlist.js and admin-fill-rooms.js: the board
+                // reuses wlDeriveRoom/wlRoomLabel/wlDaysLabel, hands a card
+                // off to _openAdminWlModalForEdit(), and reads FR_STALL_DAYS
+                // so "gone quiet" means the same thing on both screens.
+                'js/admin/admin-leads.js',
                 'js/admin/admin-attendance.js',
                 'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',
@@ -321,6 +335,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/lookup.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'tour.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/tour\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/tour.min.js"></script>`,
         ],
     },
     {

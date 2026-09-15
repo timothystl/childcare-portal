@@ -780,6 +780,25 @@
                  (apRenderDetail() no longer renders anything into
                  #apDetailHead) rather than continuing to patch which parts of
                  a section's own heading get hidden underneath it. -->
+            <!-- Leads & Tours (design handoff: Capacity & Fill, turn 2a).
+                 A VIEW over waitlist_applications, not a second table: each
+                 board column is a predicate over columns that already exist,
+                 and moving a card writes the field that defines where it
+                 lands. js/admin/admin-leads.js. -->
+            <section class="admin-section" id="leadsToursSection">
+                <div class="ld-head">
+                    <div>
+                        <h2>🤝 Leads &amp; tours</h2>
+                        <p class="section-desc">Every family who has contacted us and not yet started &mdash; from first contact to first paid day, with the tour in the middle.</p>
+                    </div>
+                    <div class="ld-head-ctrls">
+                        <button type="button" class="ap-pill" data-ld-log>+ Log a call</button>
+                    </div>
+                </div>
+                <div id="ldBody"><p class="empty-hint">Loading…</p></div>
+                <div id="ldModalHost" class="hidden"></div>
+            </section>
+
             <!-- Fill the Rooms (design handoff: Capacity & Fill, turn 1). The
                  section carries its own head row — title, week nav, and the
                  dense/calm density toggle the handoff asks to choose between —
