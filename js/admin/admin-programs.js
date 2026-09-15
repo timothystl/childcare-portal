@@ -2,9 +2,13 @@
 // MODULE: Programs & add-ons  (design handoff: Capacity & Fill, 4d)
 // ============================================================
 // Settings → Rooms & rates gains a second table. Before care, after care
-// and camps each carry their own hours, rate, capacity and ratio, so the
-// staffing tools, the parent's add-days screen and the before/after care
-// roster all read one definition rather than three hardcoded guesses.
+// and camps each carry their own hours, rate and ratio, so the staffing
+// tools, the parent's add-days screen and the before/after care screen all
+// read one definition rather than three hardcoded guesses.
+//
+// ⚠️ Only camp carries a CAPACITY. Andrew: "the pre-k before care and after
+// care is not a room, just a charge that is applied if a child attends."
+// See _pgCapacityCell() below for what that rules out and why.
 //
 // ── Why a program is not a room ─────────────────────────────
 // A room is a place a child is ENROLLED in: it consumes room capacity,
@@ -55,15 +59,26 @@ function _pgRatioCell(p) {
                     1:${PM_COMBINED_RATIO} <span class="pg-locked-note">shared</span>
                 </span>`;
     }
-    if (p.sharesCapacityWith) {
-        return `<span class="pg-locked">shares ${escHtml(p.sharesCapacityWith.replace(/_/g, ' '))}</span>`;
+    if (p.sharesRatioWith) {
+        return `<span class="pg-locked">shares ${escHtml(p.sharesRatioWith.replace(/_/g, ' '))}</span>`;
     }
     return `<input type="number" class="pg-input" data-pg-field="ratio" value="${p.ratio ?? ''}" min="1" step="1" placeholder="1:">`;
 }
 
+// ⚠️ Only a program that is BOOKED AHEAD has a capacity. Andrew: "the pre-k
+// before care and after care is not a room, just a charge that is applied if
+// a child attends." Nobody reserves a morning, so there is no seat to hold —
+// what limits the floor is the ratio, and that has its own column. Camp is
+// the exception and the only one: it is booked for a specific week and
+// genuinely fills up.
+//
+// The others render as a dash, not an empty input, on purpose. An editable
+// box invites a director to type 20 into it, and the moment a capacity
+// exists somebody builds a "spots left" badge on top of it — counting down
+// against reservations nobody makes.
 function _pgCapacityCell(p) {
-    if (p.sharesCapacityWith) {
-        return `<span class="pg-locked">shares cap</span>`;
+    if (p.kind !== 'camp') {
+        return `<span class="pg-locked" title="Not booked ahead — the charge follows attendance, so there is no seat to hold.">—</span>`;
     }
     return `<input type="number" class="pg-input" data-pg-field="capacity" value="${p.capacity ?? ''}" min="0" step="1" placeholder="—">`;
 }
@@ -134,7 +149,7 @@ async function renderProgramsTable() {
             </label>
         </div>
 
-        <p class="rates-hint">💡 A program is an add-on to a day that is already happening, not a room. Children in one are never counted in room capacity, the waitlist or the fill forecast — only against the program's own capacity during its own hours. After care's ratio is shared with the staffing grid's pooled afternoon group and is shown here rather than edited, so the two can never disagree.</p>
+        <p class="rates-hint">💡 A program is an add-on to a day that is already happening, not a room. Before and after care are <strong>a charge that follows attendance</strong> — nobody books them, so they have no capacity and no waitlist, and the number that limits the floor is the ratio. Only camp is booked ahead, so only camp fills up. After care's ratio is shared with the staffing grid's pooled afternoon group and is shown here rather than edited, so the two can never disagree.</p>
 
         <div class="pg-actions">
             <button type="button" class="btn-primary" id="pgSaveBtn">Save programs</button>
@@ -174,6 +189,12 @@ async function _pgSave() {
         // source of truth the header exists to prevent.
         const ac = byId.get('after_care');
         if (ac) ac.ratio = PM_COMBINED_RATIO;
+
+        // Same reasoning for capacity, in the other direction: a program
+        // nobody books has none, so any value a previously saved document
+        // still carries is dropped here rather than quietly surviving. A
+        // stale capacity is worse than none — it reads like a real limit.
+        programs.forEach(p => { if (p.kind !== 'camp') delete p.capacity; });
 
         const num = (id) => {
             const v = (_pgEl(id)?.value || '').trim();

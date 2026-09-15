@@ -1776,6 +1776,14 @@ async function lookupFamilyByEmailAndPin(email, pin) {
 // document over it, the same way loadRateSettings() merges room_rates over
 // the ROOMS defaults.
 //
+// ⚠️ A DAILY PROGRAM HAS NO CAPACITY. Andrew: "the pre-k before care and
+// after care is not a room, just a charge that is applied if a child
+// attends." Nobody reserves a morning, so there is no seat to hold and no
+// count to run down — what limits the floor is staffing, and `ratio` says
+// that. `capacity` therefore appears only on `camp`, which IS booked ahead
+// for a specific week and genuinely fills up. Putting a capacity back on
+// before or after care would re-create the room model this is not.
+//
 // ⚠️ After care already exists in two places this MUST agree with:
 //   * STAFF_ONLY_ROOMS carries `after_care` as a staff duty station, which
 //     is where the combined-afternoon staffing lands on the schedule grid;
@@ -1783,8 +1791,8 @@ async function lookupFamilyByEmailAndPin(email, pin) {
 //     Goose, Turtle and Owl become from 1:00p.
 // The `after_care` program's `ratio` therefore DEFAULTS from
 // PM_COMBINED_RATIO rather than restating a number, and its `pooledRooms`
-// names the same three rooms. A program is a billing and capacity record;
-// it does not re-decide how the afternoon is staffed.
+// names the same three rooms. A program is a billing record; it does not
+// re-decide how the afternoon is staffed.
 const PROGRAMS = [
     {
         id:        'before_care',
@@ -1794,7 +1802,6 @@ const PROGRAMS = [
         startTime: '7:30',
         endTime:   '9:00',
         rate:      8,
-        capacity:  6,
         ratio:     6,
         active:    true,
         note:      'Breakfast included.',
@@ -1807,7 +1814,6 @@ const PROGRAMS = [
         startTime: '15:00',
         endTime:   '17:00',
         rate:      12,
-        capacity:  20,
         // Deliberately not a literal: the pooled afternoon ratio has one
         // definition (PM_COMBINED_RATIO) and every screen reads it.
         ratio:     PM_COMBINED_RATIO,
@@ -1823,14 +1829,18 @@ const PROGRAMS = [
         startTime: '15:00',
         endTime:   '17:00',
         rate:      48,                 // per week
-        sharesCapacityWith: 'after_care',
+        // The weekly rate buys the SAME afternoon at a cheaper price; it is
+        // not a second group. So it rides after care's ratio rather than
+        // carrying one, and it has no capacity for the same reason after
+        // care has none.
+        sharesRatioWith: 'after_care',
         active:    true,
         note:      'Cheaper than five single afternoons.',
     },
     {
         id:        'camp',
         label:     '🏕️ Camp',
-        kind:      'camp',             // date-bounded, own capacity
+        kind:      'camp',             // date-bounded, booked ahead, so it DOES fill
         scope:     'School breaks and summer',
         startTime: '9:00',
         endTime:   '15:00',
@@ -1866,7 +1876,15 @@ async function loadProgramSettings() {
         const saved = Array.isArray(raw.programs) ? raw.programs : [];
         const byId = new Map(saved.map(p => [p.id, p]));
         return {
-            programs: PROGRAMS.map(p => ({ ...p, ...(byId.get(p.id) || {}) })),
+            programs: PROGRAMS.map(p => {
+                const merged = { ...p, ...(byId.get(p.id) || {}) };
+                // ⚠️ A capacity saved before before/after care stopped being
+                // modelled as a room would survive this merge and read like a
+                // real limit on a screen that has no way to enforce one. Only
+                // camp is booked ahead, so only camp keeps a capacity.
+                if (merged.kind !== 'camp') delete merged.capacity;
+                return merged;
+            }),
             fees: { ...PROGRAM_FEES, ...(raw.fees || {}) },
         };
     } catch (_) {

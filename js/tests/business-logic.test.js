@@ -4578,11 +4578,51 @@ describe('Before & After Care — the combined afternoon', () => {
         for (let n = 1; n <= 24; n++) expect(at(n).adults).toBe(Math.ceil(n / 8));
     });
 
-    test('seats left comes from the program capacity, never below zero', () => {
+    // ⚠️ This used to assert a seat count. Andrew: "the pre-k before care and
+    // after care is not a room, just a charge that is applied if a child
+    // attends." A seat implies a reservation, and none is ever made — so the
+    // screen must expose no capacity at all, and staffing must still be
+    // right past any number a capacity would have named.
+    test('there is no seat count, because nobody reserves a place', () => {
         const m = load({ registrations: [reg('goose', 12), reg('turtle', 11)], capacity: 20 });
         const f = m._bacAfternoonFloor(DATE);
         expect(f.present).toBe(23);
-        expect(f.seatsLeft).toBe(0);                // not −3
+        expect('seatsLeft' in f).toBe(false);
+        expect('capacity' in f).toBe(false);
+        // Past 20 the ratio keeps working, which is the point: what limits
+        // the floor is adults, not a cap.
+        expect(f.adults).toBe(3);                   // ceil(23 / 8)
+        expect(f.beforeNextAdult).toBe(1);
+    });
+
+    // A capacity saved back when this WAS modelled as a room would survive
+    // the merge in loadProgramSettings() and read like a real limit on a
+    // screen with no way to enforce one. Both the load and the save drop it.
+    test('a stale saved capacity does not survive into a daily program', () => {
+        const sb = fs.readFileSync(path.join(repoRoot, 'js/supabase.js'), 'utf8');
+        const load = sb.slice(sb.indexOf('async function loadProgramSettings()'));
+        const body = load.slice(0, load.indexOf('\n}\n'));
+        expect(/kind !== 'camp'[\s\S]{0,80}delete merged\.capacity/.test(body)).toBe(true);
+
+        const pg = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-programs.js'), 'utf8');
+        expect(/kind !== 'camp'[\s\S]{0,40}delete p\.capacity/.test(pg)).toBe(true);
+        // And the settings table offers no box to type one into.
+        const cell = pg.slice(pg.indexOf('function _pgCapacityCell'));
+        expect(/kind !== 'camp'/.test(cell.slice(0, cell.indexOf('\n}')))).toBe(true);
+    });
+
+    test('the settings document gives a daily program no capacity to read', () => {
+        const sb = fs.readFileSync(path.join(repoRoot, 'js/supabase.js'), 'utf8');
+        const block = sb.slice(sb.indexOf('const PROGRAMS = ['));
+        const programs = block.slice(0, block.indexOf('\n];'));
+        // Split on the id lines so each program's own fields are checked.
+        const chunks = programs.split(/\n\s{4}\{/).filter(c => c.includes('id:'));
+        for (const c of chunks) {
+            const id = /id:\s*'([^']+)'/.exec(c)[1];
+            const hasCapacity = /\n\s*capacity:/.test(c);
+            // Camp is booked ahead for a specific week and genuinely fills.
+            expect(`${id}:${hasCapacity}`).toBe(`${id}:${id === 'camp'}`);
+        }
     });
 
     test('a closed day has no floor at all', () => {
@@ -4592,22 +4632,37 @@ describe('Before & After Care — the combined afternoon', () => {
         expect(f.present).toBe(0);
     });
 
-    // The Pre-K half has no table, and the screen must not pretend otherwise
-    // or quietly query something that is not there.
-    test('the screen queries no program table and states the gap', () => {
+    // Nothing records the attendance yet, so the screen must not pretend
+    // otherwise or quietly query something that is not there.
+    test('the screen queries no charge table and states the gap', () => {
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
-        expect(/from\('program_enrolments'\)|from\('program_attendance'\)/.test(code)).toBe(false);
+        expect(/from\(\s*['"`](care_charges|program_)/.test(code)).toBe(false);
         expect(/\.\s*insert\s*\(|\.\s*upsert\s*\(/.test(code)).toBe(false);
-        expect(src.includes('nowhere to put them')).toBe(true);
+        expect(src.includes('It is empty because nothing records the attendance')).toBe(true);
     });
 
-    // The proposed migration must stay a proposal: unprefixed by a
-    // timestamp, loudly marked, and with no anon policy over a table that
-    // names children.
+    // The screen must say what the thing IS, in Andrew's terms, so the next
+    // person to open it does not rebuild the room model from the UI.
+    test('the screen calls it a charge, not an enrolment or a seat', () => {
+        expect(/not a room/i.test(src)).toBe(true);
+        // The quote is wrapped across comment lines, so collapse the file to
+        // one line of words before looking for it — otherwise this passes or
+        // fails on where the line break landed.
+        const flat = src.replace(/\/\//g, ' ').replace(/\s+/g, ' ');
+        expect(flat.includes('just a charge that is applied if a child attends')).toBe(true);
+        expect(/A child attends, and a charge follows/.test(src)).toBe(true);
+        // No leftover room vocabulary in anything the director reads.
+        const ui = src.split('\n').filter(l => !/^\s*(\/\/|\*)/.test(l)).join('\n');
+        expect(/Seats left|spots left|Walk-in headroom|Room for \$\{/i.test(ui)).toBe(false);
+        expect(/enrolment in a <em>program<\/em>/i.test(ui)).toBe(false);
+    });
+
+    // The proposal must stay a proposal: no version prefix, loudly marked,
+    // and no anon policy over a table that names children and sets a price.
     test('the proposed migration is marked unapplied and opens no anon door', () => {
         const mig = fs.readFileSync(path.join(repoRoot,
-            'supabase/migrations/PROPOSED_program_enrolments_and_attendance.sql'), 'utf8');
+            'supabase/migrations/PROPOSED_before_after_care_charges.sql'), 'utf8');
         expect(/NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
         // Policies name `authenticated`, never `public`/`anon`. Checked
         // against the DDL with comments stripped — the file EXPLAINS why
@@ -4616,15 +4671,18 @@ describe('Before & After Care — the combined afternoon', () => {
         expect(/TO\s+authenticated/.test(ddl)).toBe(true);
         expect(/TO\s+(public|anon)\b/.test(ddl)).toBe(false);
         expect(/CREATE POLICY[^;]*anon/i.test(ddl)).toBe(false);
-        // And nothing in the shipped code DEPENDS on it. The screen names
-        // both tables on purpose — it tells the director exactly what is
-        // missing — so this checks for a query, not for the words.
+        // One table, and it is a charge. The enrolment table is gone, not
+        // renamed — a second table would be the room model wearing a hat.
+        expect((ddl.match(/CREATE TABLE/g) || []).length).toBe(1);
+        expect(/program_enrolments/.test(mig)).toBe(true);   // explains what it replaced
+        expect(/CREATE TABLE[^;]*program_enrolments/.test(ddl)).toBe(false);
+        // The rate is frozen into the row, and a waiver has to say why.
+        expect(/rate_charged/.test(ddl)).toBe(true);
+        expect(/waived_reason IS NOT NULL/.test(ddl)).toBe(true);
+        // And nothing shipped DEPENDS on it.
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
             .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
-        expect(/from\(\s*['"`]program_/.test(code)).toBe(false);
-        expect(/rpc\(\s*['"`][^'"`]*program_(enrolments|attendance)/.test(code)).toBe(false);
-        // It does still tell the reader what to build.
-        expect(src.includes('program_enrolments')).toBe(true);
+        expect(/from\(\s*['"`]care_charges/.test(code)).toBe(false);
     });
 });
 
