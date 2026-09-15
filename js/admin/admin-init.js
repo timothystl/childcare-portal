@@ -54,6 +54,7 @@ async function initDashboard() {
     // itself renders lazily when apOnToolOpened() opens the tool.
     if (typeof setupLeadsTool === 'function') setupLeadsTool();
     if (typeof setupProgramCalendarTool === 'function') setupProgramCalendarTool();
+    if (typeof setupNewsletterTool === 'function') setupNewsletterTool();
     // Payroll's Overview tab binds one delegated listener; the tab itself
     // renders on every open (apSwitchPayrollTab), since its whole content
     // is "as of now".

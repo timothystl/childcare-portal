@@ -4266,6 +4266,88 @@ describe('Programs & add-ons — never a room', () => {
 });
 
 
+// ============================================================
+// NEWSLETTER — live blocks and drag reordering
+// (design handoff: Capacity & Fill, 4e)
+// ============================================================
+describe('Newsletter — what it stores and how blocks move', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-newsletter.js'), 'utf8');
+
+    // The whole value of the feature: a live block stores its TYPE, never
+    // its rendered text. Freezing the text at drag time is the bug — a
+    // closure changed the day before sending would reach families wrong.
+    test('a live block stores only its type, never resolved text', () => {
+        const drop = src.slice(src.indexOf("if (_nlDrag.kind === 'new')"));
+        const splice = /blocks\.splice\(index, 0, \{([^}]*)\}\)/.exec(drop);
+        if (!splice) throw new Error('could not find the insert');
+        const fields = splice[1];
+        expect(/type:\s*_nlDrag\.type/.test(fields)).toBe(true);
+        // text is an empty string for the typed blocks; nothing resolved.
+        expect(/closures|menu|regWindow|openDays/.test(fields)).toBe(false);
+    });
+
+    // Reordering with splice is the classic off-by-one: removing the block
+    // first shifts every later index down by one. This is that fix, tested
+    // as a pure reimplementation of the same three lines.
+    test('moving a block down accounts for its own removal', () => {
+        function move(list, id, index) {
+            const blocks = list.slice();
+            const from = blocks.findIndex(b => b.id === id);
+            if (from < 0) return blocks;
+            if (from < index) index--;
+            const [moved] = blocks.splice(from, 1);
+            blocks.splice(index, 0, moved);
+            return blocks;
+        }
+        const ids = l => l.map(b => b.id).join('');
+        const L = ['a', 'b', 'c', 'd'].map(id => ({ id }));
+
+        // Drop 'a' into the gap after 'c' (index 3) → b c a d
+        expect(ids(move(L, 'a', 3))).toBe('bcad');
+        // Drop 'd' into the gap before 'b' (index 1) → a d b c
+        expect(ids(move(L, 'd', 1))).toBe('adbc');
+        // Dropping into its own gap is a no-op, both sides.
+        expect(ids(move(L, 'b', 1))).toBe('abcd');
+        expect(ids(move(L, 'b', 2))).toBe('abcd');
+        // The ends.
+        expect(ids(move(L, 'a', 0))).toBe('abcd');
+        expect(ids(move(L, 'a', 4))).toBe('bcda');
+        expect(ids(move(L, 'd', 0))).toBe('dabc');
+        // Every move keeps all four blocks.
+        [0, 1, 2, 3, 4].forEach(i => ['a', 'b', 'c', 'd'].forEach(id => {
+            expect(move(L, id, i).length).toBe(4);
+        }));
+    });
+
+    // Open days in the letter must use the same rule the director's screen
+    // does, or the newsletter advertises a seat the app would refuse.
+    test('the open-days block applies the at-ratio rule', () => {
+        const block = src.slice(src.indexOf('out.openDays = rooms.map'));
+        expect(/booked\s*%\s*ratio\s*===\s*0/.test(block)).toBe(true);
+        expect(/booked\s*>\s*0/.test(block)).toBe(true);
+        expect(/!atRatio/.test(block)).toBe(true);
+    });
+
+    // Sending is not built, and must not be faked. The module may write the
+    // draft setting and nothing else.
+    test('the newsletter saves a draft and sends nothing', () => {
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/upsertSetting\('newsletter_draft'/.test(code)).toBe(true);
+        // No mail path and no bulk insert. Matched as CALLS, not as loose
+        // substrings — "send-" alone also matches the class name on the
+        // panel that EXPLAINS there is no send, which is the opposite of
+        // what this is checking for.
+        expect(/functions\s*\.\s*invoke\s*\(/.test(code)).toBe(false);
+        expect(/\bsend[A-Z]\w*\s*\(/.test(code)).toBe(false);
+        expect(/functions\/v1\/send-/.test(code)).toBe(false);
+        expect(/\.\s*insert\s*\(/.test(code)).toBe(false);
+        expect(src.includes("send button isn't built")).toBe(true);
+    });
+});
+
+
 // Settle any async test bodies before counting up. Every test() whose body
 // returned a promise is in _pending, already wrapped so it cannot reject here
 // — so this only ever waits, it never throws.

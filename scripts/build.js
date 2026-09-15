@@ -284,6 +284,10 @@ const ENTRIES = [
                 'js/admin/admin-safety.js',
                 'js/admin/admin-push.js',
                 'js/admin/admin-messages-unified.js',
+                // After admin-messages-unified.js (its tab neighbour) and
+                // admin-calendar.js/admin-cacfp.js, whose fetches its live
+                // blocks read. Writes only settings.newsletter_draft.
+                'js/admin/admin-newsletter.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-mdo-website.js',
                 'js/admin/admin-market.js',

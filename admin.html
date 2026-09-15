@@ -568,6 +568,18 @@
              js/admin/admin-messages-unified.js. Registered in AP_TOOLS as the
              tab's only tool; there is no dashboard/tool split here. -->
         <div class="tab-pane hidden" id="tab-messages">
+            <!-- Newsletter (design handoff: Capacity & Fill, 4e). A
+                 drag-and-drop builder whose point is the four LIVE blocks —
+                 closures, menu week, registration window, open days — which
+                 store only their type and resolve at preview/send time, so
+                 the letter cannot contradict the app. Draft lives in
+                 settings.newsletter_draft. js/admin/admin-newsletter.js. -->
+            <section class="admin-section" id="newsletterSection">
+                <h2>📰 Newsletter</h2>
+                <p class="section-desc">The monthly letter, with the parts that change every month pulled straight out of myMDO rather than retyped.</p>
+                <div id="nlBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <section class="admin-section" id="messagesUnifiedSection">
                 <!-- The notify toggle used to live inside this h2. The shell
                      no longer prints its own duplicate header for any tool

@@ -416,6 +416,14 @@ const AP_TOOLS = [
     // dashboard/tool split on this tab anymore — this IS the landing page.
     { key: 'messages',    pane: 'messages', section: 'messagesUnifiedSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Messages',
       blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email." },
+    // Newsletter (design handoff: Capacity & Fill, 4e). Under Messages
+    // because it IS a message — one that happens to be composed rather than
+    // replied to. Its four live blocks read the calendar, the menu, the
+    // registration window and real availability; see its module header, and
+    // note that SENDING is not built (composing and saving are).
+    { key: 'newsletter', pane: 'messages', section: 'newsletterSection', tab: 'messages',
+      group: 'Inbox', tint: AP_TINT.green, icon: '📰', name: 'Newsletter',
+      blurb: 'The monthly letter, with closures, menus and open days pulled live out of myMDO.' },
 
     // ── Market Analysis ──
     // mktPos/mktPricing/mktCost retired in favor of one directorReport entry
@@ -1078,6 +1086,7 @@ function apOnToolOpened(tool) {
         // opening it directly works without the Planner having been opened.
         if (tool.key === 'leadsTours' && typeof renderLeadsTool === 'function') renderLeadsTool();
         if (tool.key === 'programCalendar' && typeof renderProgramCalendarTool === 'function') renderProgramCalendarTool();
+        if (tool.key === 'newsletter' && typeof renderNewsletterTool === 'function') renderNewsletterTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
