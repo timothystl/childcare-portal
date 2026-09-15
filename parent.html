@@ -277,6 +277,14 @@
                      the one thing they had to scroll past the whole day to reach. -->
                 <div id="ptAnnouncements" class="pt-announcements hidden"></div>
                 <div id="ptWeekCard" class="pt-card pt-week hidden"></div>
+                <!-- Open drop-in days (design handoff: Capacity & Fill, 1c).
+                     Stays hidden unless this child's room actually has an
+                     upcoming day with room on it — js/parent/parent-dropin.js
+                     fills it from the same capacity_counts RPC the enrollment
+                     form uses, so the seat counts here and on the director's
+                     Fill the Rooms screen are the same arithmetic over the
+                     same registrations. -->
+                <div id="ptDropIn" class="pt-card pt-dropin hidden"></div>
               </div>
             </div>
         </div>

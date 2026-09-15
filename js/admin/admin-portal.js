@@ -274,6 +274,17 @@ const AP_TOOLS = [
     // `cacfpClaimsSection` stay in admin.html and `js/admin/admin-cacfp.js`
     // stays in the tree, unreferenced, in case the program is ever revived.
 
+    // ── Planning · Getting In (design handoff: Capacity & Fill, turn 2a) ──
+    // Sits ABOVE the waitlist group on purpose: the handoff's whole point is
+    // that the waitlist only starts once a family fills in the inquiry form,
+    // and everything before that — a phone call, a tour, a family who came
+    // and never applied — had nowhere to live. This is that half of the
+    // funnel. It stores nothing new; see admin-leads.js's header for the
+    // predicate behind each board column.
+    { key: 'leadsTours', pane: 'waitlist', section: 'leadsToursSection', tab: 'planning',
+      group: 'Getting In', tint: AP_TINT.gold, icon: '🤝', name: 'Leads & Tours',
+      blurb: 'Every family who has contacted us and not yet started, from first contact to first paid day.' },
+
     // ── Planning · Waitlist ──
     // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
     // Planning + Market Analysis tools → 6. Retired entries below: `planner`
@@ -300,6 +311,19 @@ const AP_TOOLS = [
     // unreachable without deleting markup anything else might read.
 
     // ── Planning · Enrollment Outlook ──
+    // Fill the Rooms (design handoff: Capacity & Fill, turn 1) — first in the
+    // group on purpose: it is the "what should I do about it" screen, and the
+    // two below it are the "show me the numbers" screens it links into.
+    // It computes nothing capacity-related of its own; see the module header
+    // in admin-fill-rooms.js for which existing call each panel reads
+    // (apStaffing's own seat/at-ratio rule, wlpRunAllocation's queue and
+    // forecast, waitlist_applications' own status/tour_* columns). The
+    // handoff ships two layouts of this screen and asks for a choice between
+    // them — both are built, behind the section's own Dense/Calm toggle,
+    // rather than one being picked on the director's behalf.
+    { key: 'fillRooms', pane: 'waitlist', section: 'fillRoomsSection', tab: 'planning',
+      group: 'Enrollment Outlook', tint: AP_TINT.gold, icon: '🎯', name: 'Fill the Rooms',
+      blurb: 'Every empty seat-day this week, every family who stopped moving, and the one action that clears each.' },
     // `capacityOverview` was retired from here in the Classroom Tab Redesign
     // (its content folded into the FTE/Seat-Day sub-view of Classrooms →
     // Planning → Enrollment & Capacity, `enrollCap`, above) but restored
@@ -719,7 +743,17 @@ function apRender() {
     // and Settings use this for the same reason finance does: each has
     // exactly one tool, so there is no dashboard/tool split to fall into
     // (design handoff design_handoff_messages_settings, 2026-08-26).
-    if (!apState.view) {
+    //
+    // ⚠️ Not on a phone tab that has a screen of its own. The phone's Money
+    // tab borrows AP_TABS.finance for availability and role checks, and this
+    // block then read finance's defaultTool and opened the Finance Hub over
+    // the top of it — Money was unreachable on a phone, landing on the
+    // desktop ledger every time (found on a real phone, 2026-09-14). Today
+    // and Rooms were unaffected only because `director` and `classrooms`
+    // happen to name no defaultTool. Inbox still wants this: its AP_TABS
+    // entry IS the Messages tool, so apmOwnsDashboard() is false there and
+    // the fallback runs as before.
+    if (!apState.view && !(typeof apmOwnsDashboard === 'function' && apmOwnsDashboard())) {
         const defaultKey = AP_TABS[apState.tab]?.defaultTool;
         const defaultTool = defaultKey ? AP_TOOL_BY_KEY[defaultKey] : null;
         if (defaultTool && apToolAvailable(defaultTool)) { apState.view = defaultKey; tool = defaultTool; }
@@ -1026,6 +1060,16 @@ function apOnToolOpened(tool) {
         if (tool.pane === 'market' && typeof initMarketTab === 'function' && !window._apMarketInit) {
             window._apMarketInit = true; initMarketTab();
         }
+        // Fill the Rooms reads the same allocation the Planner does, so it
+        // needs registrations AND the waitlist loaded before it can render.
+        // It awaits both itself (renderFillRoomsTool) rather than being
+        // pre-loaded here, so opening it directly works without the Planner
+        // ever having been opened first — and so the two loads aren't fired
+        // twice by doing half of it in each place.
+        if (tool.key === 'fillRooms' && typeof renderFillRoomsTool === 'function') renderFillRoomsTool();
+        // Same story as fillRooms: it awaits the waitlist load itself, so
+        // opening it directly works without the Planner having been opened.
+        if (tool.key === 'leadsTours' && typeof renderLeadsTool === 'function') renderLeadsTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
@@ -1034,6 +1078,8 @@ function apOnToolOpened(tool) {
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
         if (tool.key === 'settingsHub' && typeof renderSettingsUnifiedTool === 'function') renderSettingsUnifiedTool();
+        // Payroll lands on its overview tab (3a), not the period dropdown.
+        if (tool.key === 'payroll' && typeof apSwitchPayrollTab === 'function') apSwitchPayrollTab('overview');
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'schedule' && typeof apMountStaffRatioStep === 'function') apMountStaffRatioStep();
         // Daily Staffing Requirement is now the schedule's second tab, not a
@@ -2433,9 +2479,16 @@ let _apClockIntegrityLoaded = false;
 function apSwitchPayrollTab(key) {
     document.querySelectorAll('#apPayrollTabs [data-ap-payroll-tab]').forEach(b =>
         b.classList.toggle('is-on', b.dataset.apPayrollTab === key));
+    // Overview (design handoff: Capacity & Fill, 3a) is the landing tab —
+    // what's owed, when it's due, and what's blocking it — in front of the
+    // period report rather than beside it. Rendered on every open rather
+    // than once: its whole content is "as of now", and a stale approval
+    // state or exception count is worse than a moment's load.
+    document.getElementById('apPayrollTabOverview')?.classList.toggle('ap-hidden-tool', key !== 'overview');
     document.getElementById('apPayrollTabPeriod')?.classList.toggle('ap-hidden-tool', key !== 'period');
     document.getElementById('apPayrollTabPto')?.classList.toggle('ap-hidden-tool', key !== 'pto');
     document.getElementById('apPayrollTabClock')?.classList.toggle('ap-hidden-tool', key !== 'clock');
+    if (key === 'overview' && typeof renderPayrollHomeTool === 'function') renderPayrollHomeTool();
 }
 
 function apSwitchTimeClockTab(key) {

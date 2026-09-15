@@ -1848,3 +1848,76 @@ body.pb-modal-open { overflow: hidden; }
     background: var(--white);
     color: var(--navy);
 }
+
+/* ============================================================
+   Drop-in days — Today, side column
+   (design handoff: Capacity & Fill, 1c)
+   ============================================================
+   The one card on the Today feed that is an offer rather than a
+   report, so it is the one card in --sun rather than white. It sits
+   under "This week" in the side column on the wide layout and inline
+   in the single-column flow on a phone, which .pt-cols already
+   handles — nothing here repeats that. */
+
+.pt-dropin{background:var(--sun-pale);border:1.5px solid var(--sun-lt);}
+.pt-dropin .pdi-head{margin-bottom:12px;}
+.pt-dropin .pdi-kicker{font-size:.72em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--mustard-dark);margin-bottom:4px;}
+.pt-dropin .pdi-title{font-size:1.02em;font-weight:700;color:var(--navy);line-height:1.35;}
+.pt-dropin .pdi-sub{font-size:.92em;color:var(--mustard-dark);line-height:1.45;margin:3px 0 0;}
+.pt-dropin .pdi-note{font-size:.88em;color:var(--mustard-dark);line-height:1.45;
+  background:var(--white);border:1px solid var(--sun-lt);border-radius:10px;padding:10px 12px;}
+
+.pt-dropin .pdi-tiles,
+.pt-dropin .pdi-picks{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.pt-dropin .pdi-tile,
+.pt-dropin .pdi-pick{flex:1 1 68px;min-width:68px;background:var(--white);
+  border:1.5px solid var(--sun);border-radius:10px;padding:10px 6px;text-align:center;
+  display:flex;flex-direction:column;gap:1px;font-family:var(--font-body);cursor:default;}
+.pt-dropin .pdi-pick{cursor:pointer;}
+.pt-dropin .pdi-pick.is-on{background:var(--navy);border-color:var(--navy);}
+.pt-dropin .pdi-pick.is-on .pdi-tile-dow{color:rgba(255,255,255,.75);}
+.pt-dropin .pdi-pick.is-on .pdi-tile-num{color:var(--white);}
+.pt-dropin .pdi-pick.is-on .pdi-tile-open{color:var(--sun);}
+.pt-dropin .pdi-tile-more{border-style:dashed;border-color:var(--ap-neutral-bar,#C9C0A8);
+  justify-content:center;}
+.pt-dropin .pdi-tile-plus{font-size:1.15em;color:var(--text-muted);line-height:1;}
+.pt-dropin .pdi-tile-dow{font-size:.68em;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-muted);}
+.pt-dropin .pdi-tile-num{font-family:var(--font-head);font-size:1.25em;font-weight:700;
+  color:var(--navy);line-height:1.2;}
+.pt-dropin .pdi-tile-open{font-size:.7em;font-weight:700;color:var(--green-text);}
+
+.pt-dropin .pdi-label{font-size:.72em;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;}
+.pt-dropin .pdi-lengths{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.pt-dropin .pdi-length{display:flex;align-items:center;gap:12px;background:var(--white);
+  border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;
+  font-family:var(--font-body);text-align:left;cursor:pointer;width:100%;}
+.pt-dropin .pdi-length.is-on{border-color:var(--navy);border-width:2px;background:var(--linen);}
+.pt-dropin .pdi-radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex:none;}
+.pt-dropin .pdi-length.is-on .pdi-radio{border-color:var(--navy);
+  background:radial-gradient(circle,var(--navy) 0 5px,transparent 5px);}
+.pt-dropin .pdi-length-main{flex:1;display:flex;flex-direction:column;}
+.pt-dropin .pdi-length-main strong{font-size:.95em;font-weight:800;color:var(--navy);}
+.pt-dropin .pdi-length-main small{font-size:.8em;color:var(--text-muted);}
+.pt-dropin .pdi-length-rate{font-family:var(--font-head);font-size:1.1em;font-weight:700;color:var(--navy);}
+
+.pt-dropin .pdi-total{display:flex;justify-content:space-between;align-items:baseline;
+  gap:12px;padding:12px 0;border-top:1px solid var(--sun-lt);
+  font-size:.95em;color:var(--text);margin-bottom:12px;}
+.pt-dropin .pdi-total strong{font-family:var(--font-head);font-size:1.2em;color:var(--navy);}
+
+/* The honest stop. Not a disabled submit button dressed up — the card
+   never renders a submit at all, because there is nothing to submit to
+   until the office can release a day. See parent-dropin.js's header. */
+.pt-dropin .pdi-pending{background:var(--white);border:1.5px dashed var(--ap-neutral-bar,#C9C0A8);
+  border-radius:10px;padding:12px 14px;font-size:.88em;color:var(--text-muted);
+  line-height:1.5;margin-bottom:12px;}
+.pt-dropin .pdi-pending strong{display:block;color:var(--navy);margin-bottom:2px;}
+
+.pt-dropin .pdi-cta{display:block;width:100%;background:var(--sun);color:var(--navy);
+  border:0;border-radius:var(--radius-sm,8px);padding:13px;font-size:1em;font-weight:800;
+  font-family:var(--font-body);cursor:pointer;box-shadow:0 2px 8px rgba(245,183,49,.35);}
+.pt-dropin .pdi-cta-ghost{background:transparent;border:1.5px solid var(--navy);
+  box-shadow:none;font-weight:700;}

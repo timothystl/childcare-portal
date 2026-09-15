@@ -230,6 +230,10 @@ function slRenderRoster() {
     wrap.querySelectorAll('.sl-child').forEach(b => {
         b.addEventListener('click', () => slOpenSheet(b.dataset.student));
     });
+    // The ratio bar reads the same slChildren this just rendered, so it is
+    // refreshed here rather than on its own timer — the two can never show
+    // a different headcount for the same room.
+    if (typeof srhRender === 'function') srhRender();
 }
 
 // ── Quick-log sheet ─────────────────────────────────────────
@@ -618,6 +622,9 @@ function slRenderPending() {
     if (!btn) return;
     btn.classList.toggle('hidden', slQueue.length === 0);
     btn.textContent = `Post ${slQueue.length}`;
+    // "Unposted" on the ratio bar is this same queue length — one counter,
+    // two places it shows.
+    if (typeof srhRender === 'function') srhRender();
 }
 
 function slCommit(eventType, detail, btnEl) {

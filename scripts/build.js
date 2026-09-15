@@ -87,6 +87,15 @@ const ENTRIES = [
         },
     },
     {
+        // Public tour booking (design handoff: Capacity & Fill, 2b). Same
+        // shape as inquiry: one standalone page, no app state.
+        outfile: 'dist/tour.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/tour.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         outfile: 'dist/confirm-interest.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/confirm-interest.js'), 'utf8'),
@@ -139,6 +148,9 @@ const ENTRIES = [
                 // After staff-log: reads slStaffId/slPin/slOpenChild/slChildren
                 // and the toast helper from it.
                 'js/staff/staff-incident.js',
+                // After staff-log: reads slChildren/slRoomId/slQueue and
+                // slEsc, and staff-log calls srhRender() when either changes.
+                'js/staff/staff-room-head.js',
                 'js/staff/staff-schedule.js',
                 // Reads slStaffId/slPin/slToast and compressImageToDataUrl;
                 // slOpenAccountTab is called by staff-nav.
@@ -170,6 +182,11 @@ const ENTRIES = [
         'js/parent/parent-account.js',
         'js/parent/parent-schedule.js',
         'js/parent/parent-billing.js',
+                // After parent-schedule.js: the drop-in card reads psSchedule()
+                // for closures and the child's already-booked dates, and
+                // psDayRate() for the rate it quotes. Before parent-today.js,
+                // which calls pdiSetup()/pdiRender() as it builds the feed.
+                'js/parent/parent-dropin.js',
         'js/parent/parent-today.js',
                 // After parent-today: reuses its PT_EVENT label map, ptEsc/ptTime/
                 // ptToday helpers, and ptChildren/ptActiveId.
@@ -223,9 +240,26 @@ const ENTRIES = [
                 'js/admin/admin-finance-hub.js',
                 'js/admin/admin-finance-bookkeeper.js',
                 'js/admin/admin-staffing.js',
+                // After admin-reports.js (reads _buildPayrollPeriodList,
+                // _payrollPeriodLabel and generatePayrollReport) — the
+                // Overview tab reuses the period report's own calendar rather
+                // than deriving a second one. Before admin-portal.js, whose
+                // apSwitchPayrollTab() calls renderPayrollHomeTool().
+                'js/admin/admin-payroll-home.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-settings-unified.js',
                 'js/admin/admin-waitlist.js',
+                // After admin-waitlist.js: Fill the Rooms calls that module's
+                // wlpRunAllocation()/wlpRankedKids()/wlRoomLabel() rather than
+                // recomputing the queue, and reads TREND_DAYS from
+                // admin-reports.js above. Before admin-portal.js, which
+                // registers it as a tool and calls renderFillRoomsTool().
+                'js/admin/admin-fill-rooms.js',
+                // After admin-waitlist.js and admin-fill-rooms.js: the board
+                // reuses wlDeriveRoom/wlRoomLabel/wlDaysLabel, hands a card
+                // off to _openAdminWlModalForEdit(), and reads FR_STALL_DAYS
+                // so "gone quiet" means the same thing on both screens.
+                'js/admin/admin-leads.js',
                 'js/admin/admin-attendance.js',
                 'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',
@@ -307,6 +341,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/lookup.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'tour.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/tour\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/tour.min.js"></script>`,
         ],
     },
     {
