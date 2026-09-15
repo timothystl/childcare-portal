@@ -1893,6 +1893,81 @@ async function saveProgramSettings({ programs, fees }) {
 }
 
 // ============================================================
+// THE DOOR — before/after care check-in from the kiosk
+// ============================================================
+// The tablet in the hallway holds no session. These two calls are the whole
+// of what it may do, and both are deliberately narrow.
+
+/**
+ * Active staff who can actually take a child in, for the kiosk's name picker.
+ *
+ * ⚠️ Reads only the columns anon is allowed to see. The anon grant on `staff`
+ * is column-scoped to (active, has_staff_pin, id, name, role, room_id) by
+ * 20260803000639_phase1_narrow_anon_staff_columns, and the row policy is
+ * USING (active = true) — so a wall tablet cannot see wages, a PIN hash, or
+ * anyone who has left. Widening this select is how that boundary gets lost;
+ * ask for nothing more than a name.
+ *
+ * Filtered to staff who HAVE a PIN, because a teacher without one cannot
+ * complete a check-in and offering their name would be a dead end.
+ *
+ * @returns {Promise<Array<{id: string, name: string, role: string}>>}
+ */
+async function fetchStaffForDoor() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('staff')
+        .select('id, name, role, has_staff_pin')
+        .eq('active', true)
+        .order('name');
+    if (error) { console.error('fetchStaffForDoor failed:', error); return []; }
+    return (data || [])
+        .filter(s => s.has_staff_pin)
+        .map(({ id, name, role }) => ({ id, name, role }));
+}
+
+/**
+ * Records a before/after care session at the door, and the charge that
+ * follows it.
+ *
+ * ⚠️ EVERYTHING that matters happens server-side, in record_door_checkin:
+ * the staff PIN is verified there (throttled, via staff_id_for_pin), the rate
+ * is read there from settings.programs, the family is found or created there,
+ * and the charge is written there. The kiosk supplies typed-in text and
+ * receives a verdict. It cannot set a price, cannot reach the tables, and
+ * cannot decide whether a PIN is right.
+ *
+ * Name THEN pin, matching staff clock-in: a four-digit PIN alone is guessable
+ * against a roster of 28, so the teacher identifies themselves first.
+ *
+ * Never throws for an expected refusal — returns { ok:false, code } so the
+ * caller can say something useful to a teacher holding a child. Codes:
+ * bad_pin, bad_program, missing_name, missing_phone, no_rate, needs_office.
+ *
+ * @returns {Promise<{ok: boolean, code?: string, provisional?: boolean,
+ *                    rate_charged?: number, sessions_used?: number}>}
+ */
+async function recordDoorCheckin({ staffId, pin, programId, childName, guardianName, guardianPhone }) {
+    if (!sbClient) return { ok: false, code: 'offline' };
+    const { data, error } = await sbClient.rpc('record_door_checkin', {
+        p_staff_id:       staffId,
+        p_pin:            Number(pin),
+        p_program_id:     programId,
+        p_child_name:     childName,
+        p_guardian_name:  guardianName,
+        p_guardian_phone: guardianPhone,
+    });
+    if (error) {
+        // ⚠️ Deliberately does not include `error` in what the caller shows.
+        // The arguments to this call contain a PIN, and Supabase error bodies
+        // can echo the failing statement.
+        console.error('record_door_checkin failed');
+        return { ok: false, code: 'offline' };
+    }
+    return (data && typeof data === 'object') ? data : { ok: false, code: 'offline' };
+}
+
+// ============================================================
 // SETTINGS — room rates, weekly rates (stored in `settings` table)
 // ============================================================
 

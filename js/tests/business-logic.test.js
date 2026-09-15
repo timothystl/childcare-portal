@@ -4478,6 +4478,125 @@ describe('The door — kiosk and the signature record', () => {
         expect(/setTimeout\(kReset/.test(kiosk)).toBe(true);
     });
 
+    // ── The before/after care check-in, now that it is wired ────
+    //
+    // ⚠️ This is the ONE thing a hallway tablet can write, and everything
+    // that decides whether it may happen lives server-side. These assertions
+    // are the line between "the kiosk asks" and "the kiosk decides".
+    test('the kiosk asks the server; it never decides or prices', () => {
+        const c = code(kiosk);
+        // One call, and it is the PIN-gated RPC.
+        expect(/recordDoorCheckin\(/.test(c)).toBe(true);
+        // It reaches no table directly — not care_charges, not families,
+        // not students. A direct write would bypass the staff PIN entirely.
+        //
+        // ⚠️ Asserted by what the kiosk CANNOT hold rather than by hunting
+        // for verb names: a `.delete(` regex matches kPicked.delete(id), an
+        // ordinary JavaScript Set, and a test that flags that is a test
+        // people learn to edit around. With no client and no query builder
+        // in the file, a direct table write is not expressible.
+        expect(/sbClient/.test(c)).toBe(false);
+        expect(/\.from\(/.test(c)).toBe(false);
+        expect(/\.rpc\(/.test(c)).toBe(false);
+        // And it never sends a price. The rate is read inside the function
+        // from settings.programs; a kiosk that could name an amount is a
+        // kiosk that could name the wrong one.
+        expect(/rate_charged\s*:/.test(c)).toBe(false);
+        const call = c.slice(c.indexOf('recordDoorCheckin({'), c.indexOf('} catch (_) {', c.indexOf('recordDoorCheckin({')));
+        expect(/rate|amount|price/i.test(call)).toBe(false);
+    });
+
+    test('the teacher is identified by name AND pin, not pin alone', () => {
+        const c = code(kiosk);
+        // A four-digit PIN alone is guessable against the whole roster, so
+        // the teacher picks their name first — the same shape as clock-in.
+        //
+        // ⚠️ Asserted on the CALL, not on the file. An earlier version of
+        // this test only checked that the word `staffId` appeared somewhere,
+        // which a declaration satisfies — deleting it from the arguments and
+        // sending the PIN alone passed cleanly. The identity has to reach
+        // the server or it is not an identity check.
+        const call = c.slice(c.indexOf('recordDoorCheckin({'),
+                             c.indexOf('});', c.indexOf('recordDoorCheckin({')));
+        expect(/\bstaffId\b/.test(call)).toBe(true);
+        expect(/\bpin\b/.test(call)).toBe(true);
+        expect(/kDoorStaff/.test(c)).toBe(true);
+        expect(/kDoorPin/.test(c)).toBe(true);
+        // And the helper hands it to the RPC under the server's own name.
+        const sb2 = read('js/supabase.js');
+        const helper = sb2.slice(sb2.indexOf('async function recordDoorCheckin('));
+        expect(/p_staff_id:\s*staffId/.test(helper.slice(0, helper.indexOf('\n}')))).toBe(true);
+        // It is the TEACHER's pin, not the parent's: a parent PIN authorizing
+        // a charge to that same parent is not a control.
+        expect(/fetchStaffForDoor/.test(c)).toBe(true);
+    });
+
+    test('the door form leaves nothing behind for the next parent', () => {
+        const c = code(kiosk);
+        // kReset clears the child's name, the guardian and the phone.
+        const reset = c.slice(c.indexOf('function kReset()'), c.indexOf('// ── Screens'));
+        expect(/kDoorResult\s*=\s*null/.test(reset)).toBe(true);
+        expect(/kDoorMsg\s*=\s*''/.test(reset)).toBe(true);
+        // A wrong PIN clears only the PIN — one field, not a whole form
+        // typed one-handed — but never leaves it sitting on a wall tablet.
+        expect(/pinEl\.value\s*=\s*''/.test(c)).toBe(true);
+        // Still no storage of any kind, door included.
+        expect(/localStorage|sessionStorage|indexedDB/i.test(c)).toBe(false);
+    });
+
+    test('every refusal the RPC can return has a sentence a teacher can act on', () => {
+        // A bare code, or a generic failure, leaves a teacher standing at a
+        // tablet with a parent waiting. The server's codes and the kiosk's
+        // messages must not drift apart.
+        const codes = ['bad_pin', 'bad_program', 'missing_name', 'missing_phone',
+                       'no_rate', 'needs_office'];
+        const mig = readMigration('record_door_checkin_fix_staff_pin_signature');
+        codes.forEach(cd => {
+            expect(`${cd} returned by server: ${mig.includes(`'${cd}'`)}`).toBe(`${cd} returned by server: true`);
+            expect(`${cd} handled by kiosk: ${new RegExp(cd + '\\s*:').test(kiosk)}`).toBe(`${cd} handled by kiosk: true`);
+        });
+        // no_rate is the one that happens on day one, before Programs &
+        // add-ons is ever saved. It must say what fixes it.
+        expect(/no_rate:[^\n]*Programs/.test(kiosk)).toBe(true);
+    });
+
+    test('a provisional family is called out, not buried under "done"', () => {
+        // It is a real billing record with no email behind it. Saying only
+        // "checked in" is how it gets forgotten until month end.
+        expect(/provisional/.test(kiosk)).toBe(true);
+        expect(/Tell the office today/.test(kiosk)).toBe(true);
+    });
+
+    test('a double tap cannot submit twice', () => {
+        // The server also refuses (ON CONFLICT DO NOTHING), but a teacher
+        // holding a child should not be able to fire two requests either.
+        expect(/kDoorBusy/.test(kiosk)).toBe(true);
+        expect(/if \(kDoorBusy\) return;/.test(kiosk)).toBe(true);
+    });
+
+    test('the staff picker asks for no column anon may not see', () => {
+        // The anon grant on `staff` is column-scoped, and widening this
+        // select is how that boundary gets lost. A name is all it needs.
+        const sb = read('js/supabase.js');
+        const fn = sb.slice(sb.indexOf('async function fetchStaffForDoor()'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+        const sel = /\.select\('([^']+)'\)/.exec(body);
+        expect(sel !== null).toBe(true);
+        const allowed = ['id', 'name', 'role', 'has_staff_pin', 'room_id', 'active'];
+        sel[1].split(',').map(x => x.trim()).forEach(col =>
+            expect(`${col} is anon-readable: ${allowed.includes(col)}`).toBe(`${col} is anon-readable: true`));
+        // Only staff who can actually finish a check-in are offered.
+        expect(/has_staff_pin/.test(body)).toBe(true);
+    });
+
+    test('MDO drop-off still says it cannot save, because it still cannot', () => {
+        // Wiring the care check-in must not blur the other half of the door:
+        // there is still no parent-callable check-in and nowhere to put a
+        // signature. A button that looks like it saves would be a lie.
+        expect(kiosk.includes("can't be saved yet")).toBe(true);
+        expect(/toDataURL/.test(code(kiosk))).toBe(false);
+    });
+
     // first check_in / last check_out, from events ordered ascending.
     test('the record takes the first arrival and the last departure', () => {
         const sandbox = {

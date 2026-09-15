@@ -39,15 +39,30 @@
 // that lives only in one tablet's browser is worse than the paper sheet it
 // would replace, because it looks like a system of record and is not.
 //
-// The after-care walk-in states (5b/5d) are further from data again — a
-// Pre-K child who uses only the care program has no room, no registration
-// and no place in capacity, which is a `program_enrollments` table. Those
-// states render from the real programs document for hours and rates, and
-// say plainly that the roster behind them does not exist yet.
+// ── ⚠️ BEFORE/AFTER CARE IS WIRED, AND MDO DROP-OFF IS NOT ──
+// These two halves of the door are at different stages, on purpose, and the
+// screens say so rather than blurring it.
+//
+// BEFORE/AFTER CARE **WRITES** (this is the part that works). A teacher
+// identifies themselves by name and PIN, and record_door_checkin records the
+// session and the charge. Everything that matters happens inside that
+// SECURITY DEFINER function: the PIN is verified there, the rate is read
+// there from settings.programs, the family is found or created there. The
+// kiosk supplies typed-in text and receives a verdict — it cannot set a
+// price, cannot reach the tables, and cannot decide whether a PIN is right.
+//
+// MDO DROP-OFF STILL CANNOT SAVE, for the two reasons above: no
+// parent-callable check-in, and nowhere to put a signature. That is
+// unchanged, and its screen still says so plainly.
+//
+// Why the teacher and not the parent: a charge is being written against a
+// family's invoice. A parent PIN authorizing a charge to that same parent is
+// not a control. The teacher taking the child in is the one who knows the
+// child is actually here.
 
 const KIOSK_IDLE_MS = 90 * 1000;      // back to the start if a family walks away
 
-let kState = 'start';       // start | family | sign | done | program
+let kState = 'start';       // start | family | sign | done | program | doorDone
 let kFamily = null;         // { family, isParent2 } from family_login
 let kPin = null;            // held in memory only, never stored
 let kRegs = [];             // that family's registrations
@@ -55,6 +70,10 @@ let kPicked = new Set();    // student ids staying today
 let kPrograms = null;
 let kIdleTimer = null;
 let kSigDirty = false;
+let kStaff = [];            // active staff with a PIN, for the door picker
+let kDoorBusy = false;      // one check-in at a time; a double tap must not double-submit
+let kDoorMsg = '';          // the refusal to show, already turned into a sentence
+let kDoorResult = null;     // { childName, programLabel, rate, provisional }
 
 function kEl(id) { return document.getElementById(id); }
 
@@ -91,6 +110,13 @@ function kReset() {
     kRegs = [];
     kPicked = new Set();
     kSigDirty = false;
+    // ⚠️ The door form holds a child's name, a guardian's name and a mobile
+    // number, and the result screen names a child. None of that may still be
+    // on the tablet when the next parent walks up. kStaff is kept: it is the
+    // public roster, not anyone's visit.
+    kDoorBusy = false;
+    kDoorMsg = '';
+    kDoorResult = null;
     kRender();
 }
 
@@ -120,7 +146,7 @@ function kStartHtml() {
             ${inCare ? `
                 <div class="k-program-hint">
                     <strong>${kEsc(inCare.label)} is open right now</strong>
-                    ${kEsc(inCare.window)} · ${kEsc(inCare.rateLabel)}. A child who only uses before or after care is checked in by a teacher — see the note below.
+                    ${kEsc(inCare.window)} · ${kEsc(inCare.rateLabel)}. A child who only uses before or after care is checked in by a teacher — <a href="#" data-k-step="program">check one in</a>.
                 </div>` : ''}
 
             <p class="k-foot">Forgotten your PIN? The office can reset it, or use the link in any email from us.</p>
@@ -264,30 +290,131 @@ function kSignHtml() {
 
 function kProgramHtml() {
     const w = kProgramWindow();
+
+    if (!w) {
+        // Refuse rather than let a teacher record a session at a time the
+        // office has not opened. The rate would still be read server-side,
+        // but a 6pm "after care" charge is a dispute waiting to happen.
+        return `
+        <div class="k-head">
+            <div>
+                <div class="k-kicker">Before &amp; after care</div>
+                <h1 class="k-h1">Not open right now</h1>
+                <p class="k-sub">${kEsc(kDateLabel())} · ${kEsc(kNowLabel())}</p>
+            </div>
+            <button type="button" class="k-btn k-btn-ghost" data-k-reset>Back</button>
+        </div>
+        <div class="k-blocked">
+            <strong>Neither window is open at this hour.</strong>
+            The office sets the hours in Settings → Programs &amp; add-ons, and this screen follows them. If a child genuinely needs care now, the office records it — that way somebody has decided to charge for it.
+        </div>`;
+    }
+
+    const staffOptions = kStaff.length
+        ? kStaff.map(st => `<option value="${kEsc(st.id)}">${kEsc(st.name)}</option>`).join('')
+        : '';
+
     return `
         <div class="k-head">
             <div>
                 <div class="k-kicker">Before &amp; after care</div>
-                <h1 class="k-h1">${w ? kEsc(w.label) + ' walk-in' : 'Not open right now'}</h1>
-                <p class="k-sub">${w ? `${kEsc(w.window)} · ${kEsc(w.rateLabel)} · ${kEsc(kDateLabel())}` : 'Before and after care are closed at this hour.'}</p>
+                <h1 class="k-h1">${kEsc(w.label)} check-in</h1>
+                <p class="k-sub">${kEsc(w.window)} · ${kEsc(w.rateLabel)} · ${kEsc(kDateLabel())}</p>
             </div>
             <button type="button" class="k-btn k-btn-ghost" data-k-reset>Back</button>
         </div>
 
-        <div class="k-blocked">
-            <strong>The walk-in roster isn't built yet.</strong>
-            A child who uses only before or after care — a Pre-K child, say — has no room, no registration and no place in capacity. They need a program enrolment of their own, and that table does not exist. Until it does there is nobody for this screen to search, so it would only ever show an empty list.
+        <form id="kDoorForm" class="k-door" novalidate>
+            <div class="k-door-cols">
+                <div class="k-door-col">
+                    <div class="k-kicker">The child</div>
+                    <label class="k-field">
+                        <span>Child's name</span>
+                        <input type="text" id="kDoorChild" autocomplete="off" placeholder="Mila Kovalenko" required>
+                    </label>
+                    <label class="k-field">
+                        <span>Who is dropping off</span>
+                        <input type="text" id="kDoorGuardian" autocomplete="off" placeholder="Sarah Kovalenko" required>
+                    </label>
+                    <label class="k-field">
+                        <span>A mobile that rings today</span>
+                        <input type="tel" id="kDoorPhone" inputmode="tel" autocomplete="off"
+                               placeholder="(314) 555-0148" required>
+                    </label>
+                    <p class="k-door-hint">The number is how this family is found again tomorrow, and how anyone reaches them if the child is still here at closing time.</p>
+                </div>
+
+                <div class="k-door-col">
+                    <div class="k-kicker">The teacher taking them in</div>
+                    ${kStaff.length ? `
+                    <label class="k-field">
+                        <span>Your name</span>
+                        <select id="kDoorStaff" required>
+                            <option value="">Choose your name…</option>
+                            ${staffOptions}
+                        </select>
+                    </label>
+                    <label class="k-field">
+                        <span>Your PIN</span>
+                        <input type="password" id="kDoorPin" inputmode="numeric" autocomplete="off"
+                               maxlength="8" placeholder="••••" required>
+                    </label>
+                    <p class="k-door-hint">Your name and PIN together, the same as clocking in. This records who took the child in, and it is what allows the charge to be written.</p>
+                    ` : `
+                    <div class="k-blocked">
+                        <strong>No staff list available.</strong>
+                        The tablet could not load the roster, so nobody can be identified and nothing can be recorded. Try again in a moment, or use the desk.
+                    </div>`}
+                </div>
+            </div>
+
+            <p class="k-msg" id="kDoorMsg">${kEsc(kDoorMsg)}</p>
+
+            <button type="submit" class="k-btn k-btn-primary k-wide" id="kDoorBtn"
+                    ${kStaff.length && !kDoorBusy ? '' : 'disabled'}>
+                ${kDoorBusy ? 'Recording…' : `Check in · ${kEsc(w.rateLabel)}`}
+            </button>
+
+            <p class="k-foot">One session per child per day — tapping twice does not charge twice.</p>
+        </form>`;
+}
+
+/**
+ * What the teacher sees after a successful check-in.
+ *
+ * ⚠️ A provisional family is called out here, not buried. It is a real
+ * billing record with no email address behind it, so the office has to finish
+ * it or the invoice reaches nobody. Saying "done" and nothing else is how
+ * that gets forgotten until month end.
+ */
+function kDoorDoneHtml() {
+    const r = kDoorResult || {};
+    return `
+        <div class="k-head">
+            <div>
+                <div class="k-kicker">Before &amp; after care</div>
+                <h1 class="k-h1">${kEsc(r.childName || 'Checked in')} is checked in</h1>
+                <p class="k-sub">${kEsc(r.programLabel || '')} · ${kEsc(kNowLabel())}</p>
+            </div>
+            <button type="button" class="k-btn k-btn-ghost" data-k-reset>Done</button>
         </div>
 
-        <div class="k-plan">
-            <div class="k-kicker">What this screen becomes</div>
-            <ol class="k-plan-list">
-                <li><strong>Search and tap.</strong> The afternoon becomes a line on the month's invoice — the check-in IS the booking, because nothing is reserved ahead.</li>
-                <li><strong>Walk-in headroom.</strong> With nobody booking ahead, "how many more can come in" is the only thing protecting the ratio, so the kiosk refuses a child past it.</li>
-                <li><strong>A name recorded at the door.</strong> Four fields — the child, who is dropping off, a mobile that rings today, and anything that could hurt them at snack — saved as a provisional record that is badged unfinished until the office closes it.</li>
-            </ol>
-            ${w ? `<p class="k-plan-note">The hours and the rate above are already real — they come from Settings → Programs &amp; add-ons, and change here the moment the office changes them there.</p>` : ''}
-        </div>`;
+        <div class="k-door-done">
+            <div class="k-door-stat">
+                <span>Added to this month's invoice</span>
+                <strong>$${kEsc(String(r.rate ?? '—'))}</strong>
+            </div>
+            ${r.provisional ? `
+            <div class="k-blocked">
+                <strong>This is a new family, recorded at the door.</strong>
+                It is deliberately unfinished: no email address, so no invoice can reach them yet, and nobody has asked about allergies. <strong>Tell the office today.</strong> After two sessions this tablet will stop and send them to the desk.
+            </div>` : `
+            <p class="k-note">Added to a family already on file.</p>`}
+        </div>
+
+        <button type="button" class="k-btn k-btn-primary k-wide" data-k-step="program">
+            Check in another child
+        </button>`;
 }
 
 function kDoneHtml() {
@@ -392,24 +519,106 @@ async function kSignIn(ev) {
     }
 }
 
+// ── The door check-in ───────────────────────────────────────
+// Every refusal the RPC can return, turned into something a teacher holding
+// a child can act on. A bare code, or a generic "something went wrong",
+// leaves them standing at a tablet with a parent waiting.
+const K_DOOR_REFUSALS = {
+    bad_pin:      'That name and PIN do not match. Try again, or ask the office.',
+    bad_program:  'That is not a care session this tablet can record.',
+    missing_name: "Both the child's name and yours are needed.",
+    missing_phone:'A mobile number is needed — ten digits, so the office can reach them.',
+    // Fail-closed and correct: the office has not set a price, so nothing is
+    // charged. Say what fixes it rather than blaming the tablet.
+    no_rate:      'No rate is set for this session yet. The office sets it in Settings → Programs & add-ons — until then nothing can be charged, so please use the desk.',
+    needs_office: 'This family has used their two door sessions. The office needs to finish their record before another can be added — please send them to the desk.',
+    offline:      'Could not reach myMDO. Please use the sheet at the desk.',
+};
+
+async function kDoorSubmit(ev) {
+    ev.preventDefault();
+    if (kDoorBusy) return;
+
+    const w = kProgramWindow();
+    if (!w) { kDoorMsg = 'That window has just closed.'; kRender(); return; }
+
+    const childName     = (kEl('kDoorChild')?.value || '').trim();
+    const guardianName  = (kEl('kDoorGuardian')?.value || '').trim();
+    const guardianPhone = (kEl('kDoorPhone')?.value || '').trim();
+    const staffId       = kEl('kDoorStaff')?.value || '';
+    const pin           = (kEl('kDoorPin')?.value || '').trim();
+
+    // Checked here only to save a round trip and give a faster answer. The
+    // server checks all of it again; this is courtesy, never the control.
+    if (!childName || !guardianName)      { kDoorMsg = K_DOOR_REFUSALS.missing_name;  kRender(); return; }
+    if (guardianPhone.replace(/\D/g, '').length < 10)
+                                          { kDoorMsg = K_DOOR_REFUSALS.missing_phone; kRender(); return; }
+    if (!staffId || !pin)                 { kDoorMsg = 'Please choose your name and enter your PIN.'; kRender(); return; }
+
+    kDoorBusy = true;
+    kDoorMsg = '';
+    kRender();
+
+    let res;
+    try {
+        res = await recordDoorCheckin({
+            staffId, pin, programId: w.id, childName, guardianName, guardianPhone,
+        });
+    } catch (_) {
+        res = { ok: false, code: 'offline' };
+    }
+
+    kDoorBusy = false;
+
+    if (!res || !res.ok) {
+        kDoorMsg = K_DOOR_REFUSALS[res?.code] || K_DOOR_REFUSALS.offline;
+        kRender();
+        // ⚠️ The PIN field is cleared on every refusal, the child's details
+        // are not. A wrong PIN should cost one field, not a whole form typed
+        // one-handed; but a PIN left sitting on a hallway tablet is a PIN
+        // anyone walking past can use.
+        const pinEl = kEl('kDoorPin');
+        if (pinEl) { pinEl.value = ''; pinEl.focus(); }
+        return;
+    }
+
+    kDoorResult = {
+        childName,
+        programLabel: w.label,
+        rate: res.rate_charged,
+        provisional: !!res.provisional,
+    };
+    kState = 'doorDone';
+    kRender();
+}
+
 // ── Render ──────────────────────────────────────────────────
 function kRender() {
     const root = kEl('kRoot');
     if (!root) return;
     root.className = 'k-root k-' + kState;
-    root.innerHTML = kState === 'start'   ? kStartHtml()
-                   : kState === 'family'  ? kFamilyHtml()
-                   : kState === 'sign'    ? kSignHtml()
-                   : kState === 'program' ? kProgramHtml()
-                   :                        kDoneHtml();
+    root.innerHTML = kState === 'start'    ? kStartHtml()
+                   : kState === 'family'   ? kFamilyHtml()
+                   : kState === 'sign'     ? kSignHtml()
+                   : kState === 'program'  ? kProgramHtml()
+                   : kState === 'doorDone' ? kDoorDoneHtml()
+                   :                         kDoneHtml();
 
-    if (kState === 'start') kEl('kSignInForm')?.addEventListener('submit', kSignIn);
-    if (kState === 'sign')  kMountPad();
+    if (kState === 'start')   kEl('kSignInForm')?.addEventListener('submit', kSignIn);
+    if (kState === 'sign')    kMountPad();
+    if (kState === 'program') kEl('kDoorForm')?.addEventListener('submit', kDoorSubmit);
     kBumpIdle();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    try { kPrograms = await loadProgramSettings(); } catch (_) { kPrograms = null; }
+    // Both are read-only and public. Settled together so the first render
+    // already knows the hours, the rate and who can take a child in.
+    const [progs, staff] = await Promise.allSettled([
+        loadProgramSettings(),
+        fetchStaffForDoor(),
+    ]);
+    kPrograms = progs.status === 'fulfilled' ? progs.value : null;
+    kStaff    = staff.status === 'fulfilled' ? (staff.value || []) : [];
     kRender();
 
     // One delegated listener for the whole kiosk; every screen rewrites the
@@ -419,7 +628,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (ev.target.closest('[data-k-reset]')) { kReset(); return; }
         if (ev.target.closest('[data-k-clear]')) { kClearPad(); return; }
         const step = ev.target.closest('[data-k-step]');
-        if (step) { kState = step.dataset.kStep; kRender(); return; }
+        if (step) {
+            // Some of these are anchors, so stop the href="#" jumping the
+            // page to the top mid-drop-off.
+            ev.preventDefault();
+            // Arriving at a fresh door form must not carry the last one's
+            // refusal — "that PIN does not match" over an empty form reads
+            // as a failure that just happened.
+            if (step.dataset.kStep === 'program') { kDoorMsg = ''; kDoorResult = null; }
+            kState = step.dataset.kStep;
+            kRender();
+            return;
+        }
         const child = ev.target.closest('[data-k-child]');
         if (child && !child.disabled) {
             const id = child.dataset.kChild;
