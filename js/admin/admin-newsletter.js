@@ -7,13 +7,14 @@
 //
 // ── The "pulled from myMDO" blocks are the point ────────────
 // Anyone can drag a text box around. What this does that a generic email
-// tool cannot is fill four of the blocks from the data the letter is
+// tool cannot is fill three of the blocks from the data the letter is
 // ABOUT, so the newsletter cannot contradict the app:
 //
 //   Closures            `closures`, for the month being written about
-//   Menu week           `cacfp_menus` — the same week on the public page
 //   Registration window the real 1st–15th window, honoured by the server
 //   Open days           the same seat/at-ratio rule Fill the Rooms uses
+//
+// No CACFP/meal-menu block — Timothy MDO does not run that program.
 //
 // A dynamic block stores only its TYPE, never its rendered text. The
 // preview resolves it at render time, and the note under each one says so:
@@ -45,7 +46,6 @@ const NL_BLOCKS = [
     { type: 'button',  icon: '🔘', label: 'Button',    dynamic: false },
     { type: 'divider', icon: '➖', label: 'Divider',   dynamic: false },
     { type: 'closures',  icon: '🚪', label: 'Closures',            dynamic: true, from: 'From the calendar' },
-    { type: 'menu',      icon: '🍽️', label: "This week's menu",    dynamic: true, from: 'CACFP menu page' },
     { type: 'regwindow', icon: '🗓️', label: 'Registration window', dynamic: true, from: 'The real window' },
     { type: 'opendays',  icon: '🎟️', label: 'Open days',           dynamic: true, from: 'Live availability' },
 ];
@@ -86,16 +86,12 @@ async function _nlResolveLive(monthKey) {
     const start = `${monthKey}-01`;
     const end = new Date(y, m, 0).toLocaleDateString('en-CA');
 
-    const out = { monthKey, closures: [], menu: [], openDays: [], regWindow: null };
+    const out = { monthKey, closures: [], openDays: [], regWindow: null };
 
     try {
         const all = typeof fetchClosures === 'function' ? await fetchClosures() : [];
         out.closures = (all || []).filter(c => c.close_date >= start && c.close_date <= end);
     } catch (_) { /* block renders its own empty state */ }
-
-    try {
-        out.menu = typeof fetchCacfpMenus === 'function' ? await fetchCacfpMenus(start, end) : [];
-    } catch (_) { /* as above */ }
 
     // The registration window is the app's real rule: a month's days are
     // chosen between the 1st and the 15th of the month before.
@@ -163,15 +159,6 @@ function _nlBlockPreviewHtml(b) {
                 <div class="nl-p-dyn-note">Updates itself if the calendar changes before this sends.</div>
             </div>`;
         }
-        case 'menu': {
-            const days = (live.menu || []).length;
-            return `<div class="nl-p-dyn">
-                <div class="nl-p-dyn-kicker">On the menu</div>
-                ${days ? `<div class="nl-p-dyn-row"><span>${days} ${days === 1 ? 'day' : 'days'} published</span><span>See the full menu →</span></div>`
-                    : '<div class="nl-p-dyn-none">No menu published for this month yet.</div>'}
-                <div class="nl-p-dyn-note">Links to the same CACFP page families already use.</div>
-            </div>`;
-        }
         case 'regwindow': {
             const w = live.regWindow;
             return `<div class="nl-p-dyn">
@@ -218,7 +205,7 @@ function _nlCanvasHtml() {
                 <div class="nl-drop" data-nl-drop="${i + 1}"></div>`).join('')}
             ${blocks.length ? '' : '<p class="nl-empty">Drag a block in from the left to start.</p>'}
             <div class="nl-paper-foot">
-                Timothy Lutheran Church · 6001 Tesson Ferry Road, St. Louis<br>
+                Timothy Lutheran Church · 6704 Fyler Ave., St. Louis, MO 63139<br>
                 You're getting this because your family is enrolled at MDO.
             </div>
         </div>`;
@@ -373,8 +360,6 @@ function _nlPlainText() {
             lines.push('', 'ROOM FOR MORE');
             (live.openDays || []).forEach(r => lines.push(`  ${r.label} — ${r.open} open seat-days`));
             if (!(live.openDays || []).length) lines.push('  Every room is full this month.');
-        } else if (b.type === 'menu') {
-            lines.push('', `ON THE MENU — ${(live.menu || []).length} days published. See the menu page.`);
         }
     });
     return lines.join('\n').trim();
