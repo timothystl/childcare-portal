@@ -263,6 +263,28 @@
                 <div id="paPreview"><p class="empty-hint">Loading…</p></div>
             </section>
 
+            <!-- Before & After Care (design handoff: Capacity & Fill, 5a).
+                 The pooled afternoon floor is REAL — a full-day booking in
+                 Goose/Turtle/Owl is a child on it, the same rule apStaffing
+                 uses. The Pre-K half has no table and the screen says so.
+                 js/admin/admin-before-after-care.js. -->
+            <section class="admin-section" id="beforeAfterCareSection">
+                <h2>🌆 Before &amp; after care</h2>
+                <p class="section-desc">The program's own floor &mdash; who is on it, and how many more can still walk in before the ratio needs another adult.</p>
+                <div id="bacBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
+            <!-- Sign-in & sign-out record (design handoff: Capacity & Fill,
+                 4b). The licensing artifact, as it actually stands: real
+                 arrivals and departures from child_day_events, and a
+                 signature column that is empty because nothing in this
+                 database stores one. js/admin/admin-signature-record.js. -->
+            <section class="admin-section" id="signatureRecordSection">
+                <h2>✍️ Sign-in &amp; sign-out record</h2>
+                <p class="section-desc">One row per child per day &mdash; when they arrived, when they left, and who signed for them. Anything signed on paper is still the licensed record until the door tablet can write.</p>
+                <div id="srBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <!-- Classroom Roster (most-used — at top) -->
             <section class="admin-section collapsible-section" id="dailyRosterSection">
                 <h2>📋 Classroom Roster</h2>
@@ -568,6 +590,18 @@
              js/admin/admin-messages-unified.js. Registered in AP_TOOLS as the
              tab's only tool; there is no dashboard/tool split here. -->
         <div class="tab-pane hidden" id="tab-messages">
+            <!-- Newsletter (design handoff: Capacity & Fill, 4e). A
+                 drag-and-drop builder whose point is the four LIVE blocks —
+                 closures, menu week, registration window, open days — which
+                 store only their type and resolve at preview/send time, so
+                 the letter cannot contradict the app. Draft lives in
+                 settings.newsletter_draft. js/admin/admin-newsletter.js. -->
+            <section class="admin-section" id="newsletterSection">
+                <h2>📰 Newsletter</h2>
+                <p class="section-desc">The monthly letter, with the parts that change every month pulled straight out of myMDO rather than retyped.</p>
+                <div id="nlBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <section class="admin-section" id="messagesUnifiedSection">
                 <!-- The notify toggle used to live inside this h2. The shell
                      no longer prints its own duplicate header for any tool
@@ -797,6 +831,17 @@
                 </div>
                 <div id="ldBody"><p class="empty-hint">Loading…</p></div>
                 <div id="ldModalHost" class="hidden"></div>
+            </section>
+
+            <!-- Program calendar (design handoff: Capacity & Fill, 4f). A
+                 read-across of every record that already carries a date —
+                 closures, tours, announcements, the CACFP menu week, camp —
+                 in one month grid. Nothing on it is a second copy of a date
+                 held elsewhere. js/admin/admin-program-calendar.js. -->
+            <section class="admin-section" id="programCalendarSection">
+                <h2>🗓️ Program calendar</h2>
+                <p class="section-desc">Everything that already has a date on it, in one place. A closure added here is the same record the parent schedule and the billing run read &mdash; added once, honoured everywhere.</p>
+                <div id="pcBody"><p class="empty-hint">Loading…</p></div>
             </section>
 
             <!-- Fill the Rooms (design handoff: Capacity & Fill, turn 1). The
@@ -1243,6 +1288,23 @@
                                 <span id="roomsStatus" class="rates-status"></span>
                                 <button id="saveRegFeeBtn" class="btn-secondary">💾 Save Fees</button>
                                 <span id="regFeeStatus" class="rates-status"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Programs & add-ons (design handoff: Capacity & Fill,
+                         4d) — the second table the handoff asks for, beside
+                         Rooms & rates rather than inside it. Before/after care
+                         and camps are add-ons to a day, not rooms: children in
+                         one never appear in room capacity, the waitlist or the
+                         fill forecast. Stored in settings.programs, the same
+                         key/value pattern room_rates already uses.
+                         js/admin/admin-programs.js. -->
+                    <div class="ap-panel" id="setProgramsCard">
+                        <div class="ap-panel-head"><h3>Programs &amp; add-ons</h3></div>
+                        <div class="set-card-body">
+                            <div id="programsTableWrap">
+                                <p class="empty-hint">Loading…</p>
                             </div>
                         </div>
                     </div>

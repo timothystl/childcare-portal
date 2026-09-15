@@ -150,6 +150,20 @@ const AP_TOOLS = [
     // (admin-settings.js) — has named this exact tool the whole time via
     // apToolAvailable()'s group==='Daily' gate; without an entry here that
     // label was describing a tool 'staff' accounts could no longer reach.
+    // Sign-in & sign-out record (design handoff: Capacity & Fill, 4b). Next
+    // to Print Attendance on purpose: they are the digital and paper halves
+    // of the same licensing artifact, and today the paper one is still the
+    // record — see the module header for why the signature column is empty
+    // rather than placeholdered.
+    // Before & After Care (design handoff: Capacity & Fill, 5a). In Daily
+    // because it is a today screen — who is on the floor this afternoon and
+    // whether one more child costs an adult. The afternoon is real (the
+    // pooled Goose/Turtle/Owl group); the Pre-K roster is the gap, and the
+    // screen states it rather than drawing invented children.
+    { key: 'beforeAfter', pane: 'daily',    section: 'beforeAfterCareSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.gold, icon: '🌆', name: 'Before & After Care',
+      blurb: 'The combined afternoon floor, its ratio headroom, and what the program still needs to bill Pre-K.' },
+    { key: 'signatures',  pane: 'daily',    section: 'signatureRecordSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '✍️', name: 'Sign-in & Sign-out Record',
+      blurb: 'Who arrived, when they left, and who signed for them — the record licensing asks to see.' },
     { key: 'roster',      pane: 'daily',    section: 'dailyRosterSection',      tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
       blurb: 'Who is in each room today, this week, or this month — Day/Week/Month PDF export and Print All Rooms.' },
 
@@ -284,6 +298,13 @@ const AP_TOOLS = [
     { key: 'leadsTours', pane: 'waitlist', section: 'leadsToursSection', tab: 'planning',
       group: 'Getting In', tint: AP_TINT.gold, icon: '🤝', name: 'Leads & Tours',
       blurb: 'Every family who has contacted us and not yet started, from first contact to first paid day.' },
+    // Program calendar (design handoff: Capacity & Fill, 4f) — in "Getting In"
+    // rather than Classrooms because the dates on it are the ones that decide
+    // whether a family can start: closures a parent plans around, tours, the
+    // camp weeks that fill a break. It stores nothing; see its module header.
+    { key: 'programCalendar', pane: 'waitlist', section: 'programCalendarSection', tab: 'planning',
+      group: 'Getting In', tint: AP_TINT.green, icon: '🗓️', name: 'Program Calendar',
+      blurb: 'Closures, tours, announcements, menu weeks and camp — every dated record on one grid.' },
 
     // ── Planning · Waitlist ──
     // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
@@ -409,6 +430,14 @@ const AP_TOOLS = [
     // dashboard/tool split on this tab anymore — this IS the landing page.
     { key: 'messages',    pane: 'messages', section: 'messagesUnifiedSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Messages',
       blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email." },
+    // Newsletter (design handoff: Capacity & Fill, 4e). Under Messages
+    // because it IS a message — one that happens to be composed rather than
+    // replied to. Its four live blocks read the calendar, the menu, the
+    // registration window and real availability; see its module header, and
+    // note that SENDING is not built (composing and saving are).
+    { key: 'newsletter', pane: 'messages', section: 'newsletterSection', tab: 'messages',
+      group: 'Inbox', tint: AP_TINT.green, icon: '📰', name: 'Newsletter',
+      blurb: 'The monthly letter, with closures, menus and open days pulled live out of myMDO.' },
 
     // ── Market Analysis ──
     // mktPos/mktPricing/mktCost retired in favor of one directorReport entry
@@ -1070,6 +1099,10 @@ function apOnToolOpened(tool) {
         // Same story as fillRooms: it awaits the waitlist load itself, so
         // opening it directly works without the Planner having been opened.
         if (tool.key === 'leadsTours' && typeof renderLeadsTool === 'function') renderLeadsTool();
+        if (tool.key === 'programCalendar' && typeof renderProgramCalendarTool === 'function') renderProgramCalendarTool();
+        if (tool.key === 'newsletter' && typeof renderNewsletterTool === 'function') renderNewsletterTool();
+        if (tool.key === 'signatures' && typeof renderSignatureRecordTool === 'function') renderSignatureRecordTool();
+        if (tool.key === 'beforeAfter' && typeof renderBeforeAfterCareTool === 'function') renderBeforeAfterCareTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

@@ -4249,6 +4249,386 @@ describe('Payroll overview — clock exceptions and the pay calendar', () => {
 });
 
 
+// ============================================================
+// PROGRAMS — an add-on is not a room
+// (design handoff: Capacity & Fill, 4d)
+// ============================================================
+// The invariant worth protecting: before/after care and camps must never
+// leak into room capacity, the ratio math, the waitlist or the fill
+// forecast. If someone ever "simplifies" this by adding a program to ROOMS,
+// six morning children start appearing in the enrollment numbers and
+// double-counting against the room the same child sits in at 9:01.
+describe('Programs & add-ons — never a room', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const sb = read('js/supabase.js');
+
+    test('no program id is also a ROOMS id', () => {
+        const progIds = [...sb.matchAll(/^\s{8}id:\s*'([a-z_]+)',/gm)].map(m => m[1]);
+        const roomsBlock = sb.slice(sb.indexOf('const ROOMS = ['), sb.indexOf('function getSortedRooms'));
+        const roomIds = [...roomsBlock.matchAll(/id:\s*'([a-z_]+)'/g)].map(m => m[1]);
+        ['before_care', 'after_care', 'camp'].forEach(id => {
+            if (roomIds.includes(id)) throw new Error(`${id} is a room; it must not be`);
+        });
+        // And the program list really does declare them.
+        ['before_care', 'after_care', 'after_care_weekly', 'camp']
+            .forEach(id => expect(progIds.includes(id)).toBe(true));
+    });
+
+    // After care's ratio has exactly one definition. A literal here is the
+    // bug: the staffing grid and the attendance board read
+    // PM_COMBINED_RATIO, and a second editable copy lets them disagree.
+    test('after care derives its ratio from PM_COMBINED_RATIO, never a literal', () => {
+        const block = sb.slice(sb.indexOf("id:        'after_care',"), sb.indexOf("id:        'after_care_weekly'"));
+        expect(/ratio:\s*PM_COMBINED_RATIO/.test(block)).toBe(true);
+        expect(/ratio:\s*\d/.test(block)).toBe(false);
+        expect(/pooledRooms:\s*PM_COMBINED_ROOM_IDS/.test(block)).toBe(true);
+
+        // The Settings screen shows it rather than editing it, and force-sets
+        // it back on save so a hand-edited DOM cannot persist a second value.
+        const admin = read('js/admin/admin-programs.js');
+        expect(/ac\.ratio\s*=\s*PM_COMBINED_RATIO/.test(admin)).toBe(true);
+    });
+
+    // Programs are config, not a table — the whole reason this needs no
+    // migration. If someone reaches for a new table, this fails.
+    test('programs live in the settings key/value document, not a new table', () => {
+        expect(/upsert\(\{\s*key:\s*'programs'/.test(sb)).toBe(true);
+        expect(/from\('programs'\)/.test(sb)).toBe(false);
+        expect(/from\('program_enrollments'\)/.test(sb)).toBe(false);
+    });
+
+    // Neither surface may quote a price of its own — the office sets rates
+    // in one place and both screens read it.
+    test('neither the Settings table nor the parent card hardcodes a rate', () => {
+        const parent = read('js/parent/parent-programs.js');
+        const admin  = read('js/admin/admin-programs.js');
+        [['parent card', parent], ['settings table', admin]].forEach(([name, src]) => {
+            const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+            // No dollar literal anywhere in the rendering code.
+            if (/\$\d/.test(code)) throw new Error(`${name} contains a hardcoded price`);
+            expect(/loadProgramSettings/.test(code)).toBe(true);
+        });
+    });
+
+    // Booking is not wired; the parent card must say so rather than render a
+    // dead submit, the same rule the drop-in card follows.
+    test('the parent card writes nothing and says booking is not open', () => {
+        const parent = read('js/parent/parent-programs.js');
+        expect(/sbClient\s*\.\s*from\(/.test(parent)).toBe(false);
+        expect(parent.includes("isn't switched on yet")).toBe(true);
+    });
+});
+
+
+// ============================================================
+// NEWSLETTER — live blocks and drag reordering
+// (design handoff: Capacity & Fill, 4e)
+// ============================================================
+describe('Newsletter — what it stores and how blocks move', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-newsletter.js'), 'utf8');
+
+    // The whole value of the feature: a live block stores its TYPE, never
+    // its rendered text. Freezing the text at drag time is the bug — a
+    // closure changed the day before sending would reach families wrong.
+    test('a live block stores only its type, never resolved text', () => {
+        const drop = src.slice(src.indexOf("if (_nlDrag.kind === 'new')"));
+        const splice = /blocks\.splice\(index, 0, \{([^}]*)\}\)/.exec(drop);
+        if (!splice) throw new Error('could not find the insert');
+        const fields = splice[1];
+        expect(/type:\s*_nlDrag\.type/.test(fields)).toBe(true);
+        // text is an empty string for the typed blocks; nothing resolved.
+        expect(/closures|menu|regWindow|openDays/.test(fields)).toBe(false);
+    });
+
+    // Reordering with splice is the classic off-by-one: removing the block
+    // first shifts every later index down by one. This is that fix, tested
+    // as a pure reimplementation of the same three lines.
+    test('moving a block down accounts for its own removal', () => {
+        function move(list, id, index) {
+            const blocks = list.slice();
+            const from = blocks.findIndex(b => b.id === id);
+            if (from < 0) return blocks;
+            if (from < index) index--;
+            const [moved] = blocks.splice(from, 1);
+            blocks.splice(index, 0, moved);
+            return blocks;
+        }
+        const ids = l => l.map(b => b.id).join('');
+        const L = ['a', 'b', 'c', 'd'].map(id => ({ id }));
+
+        // Drop 'a' into the gap after 'c' (index 3) → b c a d
+        expect(ids(move(L, 'a', 3))).toBe('bcad');
+        // Drop 'd' into the gap before 'b' (index 1) → a d b c
+        expect(ids(move(L, 'd', 1))).toBe('adbc');
+        // Dropping into its own gap is a no-op, both sides.
+        expect(ids(move(L, 'b', 1))).toBe('abcd');
+        expect(ids(move(L, 'b', 2))).toBe('abcd');
+        // The ends.
+        expect(ids(move(L, 'a', 0))).toBe('abcd');
+        expect(ids(move(L, 'a', 4))).toBe('bcda');
+        expect(ids(move(L, 'd', 0))).toBe('dabc');
+        // Every move keeps all four blocks.
+        [0, 1, 2, 3, 4].forEach(i => ['a', 'b', 'c', 'd'].forEach(id => {
+            expect(move(L, id, i).length).toBe(4);
+        }));
+    });
+
+    // Open days in the letter must use the same rule the director's screen
+    // does, or the newsletter advertises a seat the app would refuse.
+    test('the open-days block applies the at-ratio rule', () => {
+        const block = src.slice(src.indexOf('out.openDays = rooms.map'));
+        expect(/booked\s*%\s*ratio\s*===\s*0/.test(block)).toBe(true);
+        expect(/booked\s*>\s*0/.test(block)).toBe(true);
+        expect(/!atRatio/.test(block)).toBe(true);
+    });
+
+    // Sending is not built, and must not be faked. The module may write the
+    // draft setting and nothing else.
+    test('the newsletter saves a draft and sends nothing', () => {
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/upsertSetting\('newsletter_draft'/.test(code)).toBe(true);
+        // No mail path and no bulk insert. Matched as CALLS, not as loose
+        // substrings — "send-" alone also matches the class name on the
+        // panel that EXPLAINS there is no send, which is the opposite of
+        // what this is checking for.
+        expect(/functions\s*\.\s*invoke\s*\(/.test(code)).toBe(false);
+        expect(/\bsend[A-Z]\w*\s*\(/.test(code)).toBe(false);
+        expect(/functions\/v1\/send-/.test(code)).toBe(false);
+        expect(/\.\s*insert\s*\(/.test(code)).toBe(false);
+        expect(src.includes("send button isn't built")).toBe(true);
+    });
+});
+
+
+// ============================================================
+// THE DOOR — kiosk and the signature record
+// (design handoff: Capacity & Fill, 4a · 4b · 5b · 5d)
+// ============================================================
+// These two are the halves of one licensing artifact, and both are honest
+// about a gap rather than filling it. The tests protect the honesty: a
+// signature stored anywhere but a real record is worse than paper, because
+// it looks like a system of record and is not.
+describe('The door — kiosk and the signature record', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const kiosk = read('js/kiosk.js');
+    const rec   = read('js/admin/admin-signature-record.js');
+    const code = src => src.replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+
+    // The kiosk never decides whether a PIN is right, and never keeps one.
+    test('the kiosk authenticates server-side and holds no credential', () => {
+        const c = code(kiosk);
+        expect(/familyLogin\(/.test(c)).toBe(true);
+        // No local PIN comparison, no hashing, no storage of any kind.
+        expect(/localStorage|sessionStorage|indexedDB/i.test(c)).toBe(false);
+        // The PIN is dropped on reset.
+        expect(/kPin\s*=\s*null/.test(c)).toBe(true);
+    });
+
+    // A signature in localStorage would look like a record and not be one.
+    test('the kiosk stores no signature and writes no attendance', () => {
+        const c = code(kiosk);
+        expect(/toDataURL/.test(c)).toBe(false);
+        expect(/\.\s*insert\s*\(/.test(c)).toBe(false);
+        expect(/log_child_event|admin_log_child_event/.test(c)).toBe(false);
+        expect(kiosk.includes("can't be saved yet")).toBe(true);
+    });
+
+    // A shared tablet must not hold a family's session after they leave.
+    test('the kiosk resets itself after an idle period', () => {
+        expect(/KIOSK_IDLE_MS/.test(kiosk)).toBe(true);
+        expect(/setTimeout\(kReset/.test(kiosk)).toBe(true);
+    });
+
+    // first check_in / last check_out, from events ordered ascending.
+    test('the record takes the first arrival and the last departure', () => {
+        const sandbox = {
+            console, escHtml: s => String(s),
+            getSortedRooms: () => [{ id: 'goose', label: 'Goose' }],
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(rec, sandbox);
+
+        const board = { children: [
+            { student_id: 'a', child_name: 'Ada', room_id: 'goose', attendance_status: 'left' },
+            { student_id: 'b', child_name: 'Bo',  room_id: 'goose', attendance_status: 'present' },
+            { student_id: 'c', child_name: 'Cy',  room_id: 'goose', attendance_status: 'not_arrived' },
+        ] };
+        // Ada came, went, came back, went again. Bo is still here.
+        const events = [
+            { student_id: 'a', event_type: 'check_in',  occurred_at: '2026-09-15T08:05:00Z' },
+            { student_id: 'b', event_type: 'check_in',  occurred_at: '2026-09-15T08:40:00Z' },
+            { student_id: 'a', event_type: 'check_out', occurred_at: '2026-09-15T12:00:00Z' },
+            { student_id: 'a', event_type: 'check_in',  occurred_at: '2026-09-15T13:00:00Z' },
+            { student_id: 'a', event_type: 'check_out', occurred_at: '2026-09-15T17:10:00Z' },
+        ];
+        const rows = sandbox._srRows(board, events);
+        const ada = rows.find(r => r.name === 'Ada');
+        const bo  = rows.find(r => r.name === 'Bo');
+        const cy  = rows.find(r => r.name === 'Cy');
+
+        // FIRST in, not the later one; LAST out, not the earlier one.
+        // Compared against the same formatter rather than a literal clock
+        // time, so the assertion means "it picked THAT event" regardless of
+        // the machine's timezone.
+        const fmt = iso => sandbox._srTime(iso);
+        expect(ada.inAt).toBe(fmt('2026-09-15T08:05:00Z'));    // the 8:05 in
+        expect(ada.inAt === fmt('2026-09-15T13:00:00Z')).toBe(false);  // not the 13:00 one
+        expect(ada.outAt).toBe(fmt('2026-09-15T17:10:00Z'));   // the 17:10 out
+        expect(ada.outAt === fmt('2026-09-15T12:00:00Z')).toBe(false); // not the 12:00 one
+        // Bo has an in and no out; Cy has neither.
+        expect(bo.outAt).toBeNull();
+        expect(cy.inAt).toBeNull();
+        expect(cy.outAt).toBeNull();
+    });
+
+    // Zero signatures is the true figure, not a placeholder to be tidied
+    // away. If the column ever fills, this test is the reminder to update
+    // the copy along with it.
+    test('the record reports the signature gap rather than hiding it', () => {
+        expect(rec.includes('no signature')).toBe(true);
+        expect(/With a signature/.test(rec)).toBe(true);
+        // It writes nothing at all.
+        expect(/\.\s*insert\s*\(|\.\s*update\s*\(|\.\s*upsert\s*\(/.test(code(rec))).toBe(false);
+    });
+});
+
+
+// ============================================================
+// BEFORE & AFTER CARE — the pooled afternoon floor
+// (design handoff: Capacity & Fill, 5a)
+// ============================================================
+// The afternoon group is the one part of turn 5 with real data behind it:
+// Goose, Turtle and Owl combine from 1:00p, so a FULL-DAY booking in one of
+// those rooms is a child on that floor. The rule has to match apStaffing()'s
+// pooled After Care row exactly, or the director's staffing grid and this
+// screen disagree about the same afternoon.
+describe('Before & After Care — the combined afternoon', () => {
+    const vm = require('vm');
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const src = fs.readFileSync(path.join(repoRoot, 'js/admin/admin-before-after-care.js'), 'utf8');
+
+    const DATE = '2026-09-15';
+    function load({ registrations = [], closures = [], capacity = 20 } = {}) {
+        const sandbox = {
+            console, escHtml: s => String(s),
+            PM_COMBINED_ROOM_IDS: ['goose', 'turtle', 'owl'],
+            PM_COMBINED_RATIO: 8,
+            ROOMS: [
+                { id: 'goose',  label: 'Goose' }, { id: 'turtle', label: 'Turtle' },
+                { id: 'owl',    label: 'Owl' },   { id: 'bee',    label: 'Bee' },
+            ],
+            allRegistrations: registrations,
+            allClosureDates: new Set(closures),
+            document: { getElementById: () => null },
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(src, sandbox);
+        // ⚠️ The module's `_bacPrograms` is a top-level `let`, which in a vm
+        // script is a LEXICAL binding — it never becomes a property of the
+        // context, so assigning sandbox._bacPrograms would be ignored.
+        // `_bacProgram()` is a function declaration and IS on the context,
+        // so overriding the lookup is what actually injects a program.
+        sandbox._bacProgram = (id) => (id === 'after_care'
+            ? { id, label: 'After care', capacity, ratio: 8, rate: 12,
+                startTime: '15:00', endTime: '17:00' }
+            : null);
+        return sandbox;
+    }
+
+    const reg = (room, n, dayType = 'full') => ({
+        room_id: room,
+        registration_dates: Array.from({ length: n }, (_, i) => ({
+            care_date: DATE, waitlisted: false, day_type: dayType,
+        })),
+        child_name: `Child ${room}`,
+    });
+
+    // The rule that matters: half days have gone home before the rooms
+    // combine, and a room outside the pool is not on this floor at all.
+    test('only full-day children in the three combining rooms are on the floor', () => {
+        const m = load({ registrations: [
+            reg('goose', 3),                 // on the floor
+            reg('turtle', 2),                // on the floor
+            reg('owl', 1, 'half'),           // gone by 1:00p
+            reg('bee', 5),                   // not one of the three
+        ] });
+        const f = m._bacAfternoonFloor(DATE);
+        expect(f.present).toBe(5);
+    });
+
+    // Adults needed must be ceil(present / PM_COMBINED_RATIO) — the same
+    // expression apStaffing's pooled row uses.
+    test('adults needed matches the pooled ratio, and headroom names the next child', () => {
+        const at = n => load({ registrations: [reg('goose', n)] })._bacAfternoonFloor(DATE);
+
+        expect(at(8).adults).toBe(1);
+        expect(at(8).beforeNextAdult).toBe(0);      // the 9th costs an adult
+        expect(at(9).adults).toBe(2);
+        expect(at(9).beforeNextAdult).toBe(7);
+        expect(at(0).adults).toBe(0);               // nobody is not a boundary
+
+        for (let n = 1; n <= 24; n++) expect(at(n).adults).toBe(Math.ceil(n / 8));
+    });
+
+    test('seats left comes from the program capacity, never below zero', () => {
+        const m = load({ registrations: [reg('goose', 12), reg('turtle', 11)], capacity: 20 });
+        const f = m._bacAfternoonFloor(DATE);
+        expect(f.present).toBe(23);
+        expect(f.seatsLeft).toBe(0);                // not −3
+    });
+
+    test('a closed day has no floor at all', () => {
+        const m = load({ registrations: [reg('goose', 6)], closures: [DATE] });
+        const f = m._bacAfternoonFloor(DATE);
+        expect(f.closed).toBe(true);
+        expect(f.present).toBe(0);
+    });
+
+    // The Pre-K half has no table, and the screen must not pretend otherwise
+    // or quietly query something that is not there.
+    test('the screen queries no program table and states the gap', () => {
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/from\('program_enrolments'\)|from\('program_attendance'\)/.test(code)).toBe(false);
+        expect(/\.\s*insert\s*\(|\.\s*upsert\s*\(/.test(code)).toBe(false);
+        expect(src.includes('nowhere to put them')).toBe(true);
+    });
+
+    // The proposed migration must stay a proposal: unprefixed by a
+    // timestamp, loudly marked, and with no anon policy over a table that
+    // names children.
+    test('the proposed migration is marked unapplied and opens no anon door', () => {
+        const mig = fs.readFileSync(path.join(repoRoot,
+            'supabase/migrations/PROPOSED_program_enrolments_and_attendance.sql'), 'utf8');
+        expect(/NOT APPLIED, NOT APPROVED/.test(mig)).toBe(true);
+        // Policies name `authenticated`, never `public`/`anon`. Checked
+        // against the DDL with comments stripped — the file EXPLAINS why
+        // `TO public` is wrong, and a naive search matches that sentence.
+        const ddl = mig.split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+        expect(/TO\s+authenticated/.test(ddl)).toBe(true);
+        expect(/TO\s+(public|anon)\b/.test(ddl)).toBe(false);
+        expect(/CREATE POLICY[^;]*anon/i.test(ddl)).toBe(false);
+        // And nothing in the shipped code DEPENDS on it. The screen names
+        // both tables on purpose — it tells the director exactly what is
+        // missing — so this checks for a query, not for the words.
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+        expect(/from\(\s*['"`]program_/.test(code)).toBe(false);
+        expect(/rpc\(\s*['"`][^'"`]*program_(enrolments|attendance)/.test(code)).toBe(false);
+        // It does still tell the reader what to build.
+        expect(src.includes('program_enrolments')).toBe(true);
+    });
+});
+
+
 // Settle any async test bodies before counting up. Every test() whose body
 // returned a promise is in _pending, already wrapped so it cannot reject here
 // — so this only ever waits, it never throws.

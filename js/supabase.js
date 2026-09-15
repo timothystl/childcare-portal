@@ -1760,6 +1760,131 @@ async function lookupFamilyByEmailAndPin(email, pin) {
 }
 
 // ============================================================
+// PROGRAMS & ADD-ONS  (design handoff: Capacity & Fill, 4d)
+// ============================================================
+// Before care, after care and camps are NOT rooms. A room is a place a
+// child is enrolled in, counted against for capacity, and billed a daily
+// rate for; a program is an add-on to a day that is already happening, or
+// a week that stands outside the school year entirely. Modelling them as
+// rooms would put them into room capacity, the ratio math, the waitlist
+// allocation and the fill forecast, none of which is true of them.
+//
+// They live in the `settings` table under the key `programs`, exactly like
+// room_rates / staff_ratios / room_capacities / geofence already do — one
+// admin-editable JSON document, no migration, no new RLS. PROGRAMS below is
+// the shape and the defaults; loadProgramSettings() merges the saved
+// document over it, the same way loadRateSettings() merges room_rates over
+// the ROOMS defaults.
+//
+// ⚠️ After care already exists in two places this MUST agree with:
+//   * STAFF_ONLY_ROOMS carries `after_care` as a staff duty station, which
+//     is where the combined-afternoon staffing lands on the schedule grid;
+//   * PM_COMBINED_ROOM_IDS / PM_COMBINED_RATIO define the pooled 1:N group
+//     Goose, Turtle and Owl become from 1:00p.
+// The `after_care` program's `ratio` therefore DEFAULTS from
+// PM_COMBINED_RATIO rather than restating a number, and its `pooledRooms`
+// names the same three rooms. A program is a billing and capacity record;
+// it does not re-decide how the afternoon is staffed.
+const PROGRAMS = [
+    {
+        id:        'before_care',
+        label:     '🌅 Before care',
+        kind:      'daily',            // billed per morning/afternoon attended
+        scope:     'All rooms, combined',
+        startTime: '7:30',
+        endTime:   '9:00',
+        rate:      8,
+        capacity:  6,
+        ratio:     6,
+        active:    true,
+        note:      'Breakfast included.',
+    },
+    {
+        id:        'after_care',
+        label:     '🌆 After care',
+        kind:      'daily',
+        scope:     'Goose · Turtle · Owl pooled',
+        startTime: '15:00',
+        endTime:   '17:00',
+        rate:      12,
+        capacity:  20,
+        // Deliberately not a literal: the pooled afternoon ratio has one
+        // definition (PM_COMBINED_RATIO) and every screen reads it.
+        ratio:     PM_COMBINED_RATIO,
+        pooledRooms: PM_COMBINED_ROOM_IDS,
+        active:    true,
+        note:      'The three older rooms combine into one supervised group.',
+    },
+    {
+        id:        'after_care_weekly',
+        label:     '🌆 After care · weekly',
+        kind:      'standing',         // a weekly add-on, billed monthly
+        scope:     'Standing add-on, billed monthly',
+        startTime: '15:00',
+        endTime:   '17:00',
+        rate:      48,                 // per week
+        sharesCapacityWith: 'after_care',
+        active:    true,
+        note:      'Cheaper than five single afternoons.',
+    },
+    {
+        id:        'camp',
+        label:     '🏕️ Camp',
+        kind:      'camp',             // date-bounded, own capacity
+        scope:     'School breaks and summer',
+        startTime: '9:00',
+        endTime:   '15:00',
+        rate:      38,                 // per day
+        capacity:  24,
+        ratio:     10,
+        active:    false,              // switched on for a specific break
+        note:      'Ages 2 and up. Opens for booking per break.',
+    },
+];
+
+// Fees that are not a program but ride alongside them. Same settings
+// document, so a single save covers both.
+const PROGRAM_FEES = {
+    latePickupPer15Min: 5,
+    scheduleChangeAfterWindow: 5,
+    campDeposit: 25,
+};
+
+/**
+ * Merges the saved `programs` settings document over the PROGRAMS defaults.
+ * Returns { programs, fees }. Never throws: an unreadable or absent setting
+ * leaves the defaults in place, the same way loadRateSettings() does — a
+ * program screen that cannot reach the database should show the defaults,
+ * not an empty table.
+ */
+async function loadProgramSettings() {
+    const fallback = { programs: PROGRAMS.map(p => ({ ...p })), fees: { ...PROGRAM_FEES } };
+    if (!sbClient) return fallback;
+    try {
+        const raw = await fetchSetting('programs');
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
+        const saved = Array.isArray(raw.programs) ? raw.programs : [];
+        const byId = new Map(saved.map(p => [p.id, p]));
+        return {
+            programs: PROGRAMS.map(p => ({ ...p, ...(byId.get(p.id) || {}) })),
+            fees: { ...PROGRAM_FEES, ...(raw.fees || {}) },
+        };
+    } catch (_) {
+        return fallback;
+    }
+}
+
+/** Saves the whole programs document. Admin-only by the settings table's own RLS. */
+async function saveProgramSettings({ programs, fees }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'programs', value: { programs: programs || [], fees: fees || {} } },
+                { onConflict: 'key' });
+    if (error) throw error;
+}
+
+// ============================================================
 // SETTINGS — room rates, weekly rates (stored in `settings` table)
 // ============================================================
 
@@ -2618,6 +2743,33 @@ async function fetchChildDay(studentId, careDate) {
         .select('id, event_type, occurred_at, detail, care_date, student_id')
         .eq('student_id', studentId)
         .eq('care_date', careDate)
+        .order('occurred_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Admin: every arrival and departure on one day, across the whole center.
+ *
+ * Used by the Sign-in & Sign-out Record (design handoff: Capacity & Fill,
+ * 4b), which needs a first-in and a last-out per child. `center_headcount_
+ * admin` deliberately carries only `attendance_status` and one
+ * `last_event_at` — it answers "who is in the building right now", not
+ * "what times were recorded" — so this reads the events themselves rather
+ * than making the board's RPC do two jobs.
+ *
+ * One query for the day, not one per child. Scoped by child_day_events'
+ * own "admin any role" policy (phase1_daily_feed_APPLIED.sql): a
+ * non-admin session gets nothing back, and this adds no filter of its own
+ * to imply otherwise.
+ */
+async function fetchAttendanceEventsForDate(careDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('child_day_events')
+        .select('student_id, event_type, occurred_at')
+        .eq('care_date', careDate)
+        .in('event_type', ['check_in', 'check_out'])
         .order('occurred_at', { ascending: true });
     if (error) throw friendlyError(error);
     return data || [];

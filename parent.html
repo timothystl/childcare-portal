@@ -342,6 +342,12 @@
         <section class="pt-tab hidden" data-tab="schedule">
             <div class="pt-page-head"><h1 class="portal-greeting">Schedule</h1></div>
             <div id="ptScheduleBody"></div>
+            <!-- Before care, after care and camps (design handoff: Capacity &
+                 Fill, 4d). Hours and rates are read live from
+                 settings.programs — the same document the office edits in
+                 Settings → Programs & add-ons — so this card never carries
+                 its own copy of a price. js/parent/parent-programs.js. -->
+            <div id="ptPrograms" class="pt-card pt-programs hidden"></div>
         </section>
 
         <!-- ══ BILLING ════════════════════════════════════════ -->

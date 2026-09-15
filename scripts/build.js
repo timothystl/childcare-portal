@@ -87,6 +87,16 @@ const ENTRIES = [
         },
     },
     {
+        // The tablet at the door (design handoff: Capacity & Fill, 4a/5b/5d).
+        // Standalone: it authenticates a family with family_login and holds
+        // no app state of its own.
+        outfile: 'dist/kiosk.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/kiosk.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         // Public tour booking (design handoff: Capacity & Fill, 2b). Same
         // shape as inquiry: one standalone page, no app state.
         outfile: 'dist/tour.min.js',
@@ -187,6 +197,10 @@ const ENTRIES = [
                 // psDayRate() for the rate it quotes. Before parent-today.js,
                 // which calls pdiSetup()/pdiRender() as it builds the feed.
                 'js/parent/parent-dropin.js',
+                // After parent-schedule.js, which calls ppSetup()/ppLoad()
+                // once it knows which child is showing. Reads
+                // loadProgramSettings() from js/supabase.js.
+                'js/parent/parent-programs.js',
         'js/parent/parent-today.js',
                 // After parent-today: reuses its PT_EVENT label map, ptEsc/ptTime/
                 // ptToday helpers, and ptChildren/ptActiveId.
@@ -216,6 +230,14 @@ const ENTRIES = [
                 // load order doesn't gate calls in one concatenated script, but
                 // keeping it after both is the honest place to read it.
                 'js/admin/admin-print-attendance.js',
+                // Next to Print Attendance, which it is the digital half of.
+                // Reads centerHeadcountAdmin() and the day's child_day_events;
+                // writes nothing.
+                'js/admin/admin-signature-record.js',
+                // Reads PM_COMBINED_ROOM_IDS/PM_COMBINED_RATIO and
+                // loadProgramSettings() from js/supabase.js, and the same
+                // registrations every capacity screen reads. Writes nothing.
+                'js/admin/admin-before-after-care.js',
                 // After admin-calendar.js: reuses showDayRosterDetail(),
                 // renderCapacityOverview() and renderRoomSchedule() as the
                 // Enrollment & Capacity tool's Day/Month/Week sub-views.
@@ -238,6 +260,11 @@ const ENTRIES = [
                 'js/admin/admin-who-owes.js',
                 'js/admin/admin-finance-home.js',
                 'js/admin/admin-finance-hub.js',
+                // After admin-finance-hub.js (uses its _fhMonthLabel) and
+                // admin-reports.js (calls _buildFamilyBillingData) — the
+                // drawer's per-child breakdown. It computes nothing of its
+                // own; see its header.
+                'js/admin/admin-family-transactions.js',
                 'js/admin/admin-finance-bookkeeper.js',
                 'js/admin/admin-staffing.js',
                 // After admin-reports.js (reads _buildPayrollPeriodList,
@@ -248,6 +275,11 @@ const ENTRIES = [
                 'js/admin/admin-payroll-home.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-settings-unified.js',
+                // After admin-settings-unified.js, which calls
+                // renderProgramsTable() as it builds the Settings page.
+                // Reads PROGRAMS/loadProgramSettings and PM_COMBINED_RATIO
+                // from js/supabase.js.
+                'js/admin/admin-programs.js',
                 'js/admin/admin-waitlist.js',
                 // After admin-waitlist.js: Fill the Rooms calls that module's
                 // wlpRunAllocation()/wlpRankedKids()/wlRoomLabel() rather than
@@ -260,12 +292,20 @@ const ENTRIES = [
                 // off to _openAdminWlModalForEdit(), and reads FR_STALL_DAYS
                 // so "gone quiet" means the same thing on both screens.
                 'js/admin/admin-leads.js',
+                // After admin-leads.js and admin-calendar.js: reads closures,
+                // the waitlist's tours, announcements, cacfp_menus and the
+                // programs document, and writes none of them.
+                'js/admin/admin-program-calendar.js',
                 'js/admin/admin-attendance.js',
                 'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',
                 'js/admin/admin-safety.js',
                 'js/admin/admin-push.js',
                 'js/admin/admin-messages-unified.js',
+                // After admin-messages-unified.js (its tab neighbour) and
+                // admin-calendar.js/admin-cacfp.js, whose fetches its live
+                // blocks read. Writes only settings.newsletter_draft.
+                'js/admin/admin-newsletter.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-mdo-website.js',
                 'js/admin/admin-market.js',
@@ -341,6 +381,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/lookup.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'kiosk.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/kiosk\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `  <script src="dist/supabase.min.js"></script>`,
+            `  <script src="dist/error-monitor.min.js"></script>`,
+            `  <script src="dist/kiosk.min.js"></script>`,
         ],
     },
     {

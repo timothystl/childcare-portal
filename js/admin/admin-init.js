@@ -53,6 +53,10 @@ async function initDashboard() {
     // Leads & Tours binds one delegated listener on its section; the board
     // itself renders lazily when apOnToolOpened() opens the tool.
     if (typeof setupLeadsTool === 'function') setupLeadsTool();
+    if (typeof setupProgramCalendarTool === 'function') setupProgramCalendarTool();
+    if (typeof setupNewsletterTool === 'function') setupNewsletterTool();
+    if (typeof setupSignatureRecordTool === 'function') setupSignatureRecordTool();
+    if (typeof setupBeforeAfterCareTool === 'function') setupBeforeAfterCareTool();
     // Payroll's Overview tab binds one delegated listener; the tab itself
     // renders on every open (apSwitchPayrollTab), since its whole content
     // is "as of now".

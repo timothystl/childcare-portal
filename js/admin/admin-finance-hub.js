@@ -1185,8 +1185,25 @@ async function _fhLoadDrawerBody(row) {
     const baseAmt = row.ar?.invoiceId ? (row.ar.billed || 0) : row.total;
     const overrideLine = auditLines.find(a => ['add_fee', 'add_credit', 'override_total'].includes(a.action));
 
+    // Family transactions (design handoff: Capacity & Fill, 4c) — the same
+    // month's charges, grouped by child and with every line naming why it
+    // exists, in place of the flat base/adjustment/total block this card used
+    // to print. Computed by _buildFamilyBillingData(), the same call behind
+    // this drawer's own total, so the breakdown and the total cannot
+    // disagree. Best-effort: if it cannot be built, the original flat block
+    // is still rendered below it rather than leaving the card empty.
+    let ftFamily = null;
+    try {
+        if (typeof ftFamilyDetail === 'function') ftFamily = await ftFamilyDetail(_fhMonth, row.email);
+    } catch (e) { console.warn('fh transactions:', e); }
+
+    const transactionsHtml = (typeof ftTransactionsHtml === 'function' && ftFamily)
+        ? ftTransactionsHtml(row, ftFamily, familyPayments, _fhMonth)
+        : '';
+
     body.innerHTML = `
-        <div class="inc-dr-field">
+        ${transactionsHtml}
+        <div class="inc-dr-field"${transactionsHtml ? ' hidden' : ''}>
             <div class="fh-dr-card-title">${escHtml(_fhMonthLabel(_fhMonth))} charges</div>
             <div class="fh-dr-line">
                 <span>Base tuition</span><strong>${_fhMoney((row.ar?.billed && !overrideLine) ? row.ar.billed : row.total)}</strong>
